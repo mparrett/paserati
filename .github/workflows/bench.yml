@@ -1,0 +1,65 @@
+name: Bench
+
+# Anchor-normalized benchmark ratchet. `check` on PRs compares each benchmark's
+# ratio-to-anchor against the committed baseline and fails on a >budget
+# regression; `update` (manual dispatch) re-seeds the baseline on the CI runner
+# and commits it back, so the bar is set on the same machine class that gates it.
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'check (gate against baseline) or update (re-seed baseline and commit)'
+        type: choice
+        options: [check, update]
+        default: check
+
+permissions:
+  contents: write # update mode commits docs/perf/baseline.json back
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: bench-ratchet
+        shell: bash
+        run: |
+          set -o pipefail
+          mode="${{ github.event.inputs.mode || 'check' }}"
+          go run ./cmd/bench-ratchet \
+            -benchtime 1s -count 1 -timeout 15m \
+            -budget 0.15 \
+            -format markdown \
+            "$mode" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit re-seeded baseline
+        if: ${{ github.event.inputs.mode == 'update' }}
+        shell: bash
+        run: |
+          if git diff --quiet -- docs/perf/baseline.json; then
+            echo "baseline unchanged — nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/perf/baseline.json
+          git commit -m "perf: re-seed bench baseline [skip ci]"
+          git push
+
+      - name: Upload raw capture
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-capture
+          path: docs/perf/.runs/*.jsonl
+          if-no-files-found: ignore
