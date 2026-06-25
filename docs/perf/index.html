@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paserati — Are we fast yet?</title>
+<!-- Thin-slice trend page. Plots each benchmark's ratio_to_anchor over time,
+     normalized to its committed baseline (1.0 = at baseline, <1 faster, >1
+     slower). Pure client-side render over docs/perf/baseline.json +
+     timeline/*.json; runs no benchmarks. Chart.js is the only dependency. -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0d1117; color: #c9d1d9;
+         font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #8b949e; font-size: 13px; margin-bottom: 16px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 12px 0;
+          font-family: ui-monospace, monospace; font-size: 12px; color: #8b949e; }
+  .meta b { color: #c9d1d9; font-weight: 600; }
+  .controls { margin: 10px 0; font-size: 12px; }
+  .controls button { background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+                     border-radius: 6px; padding: 4px 10px; cursor: pointer; margin-right: 6px; }
+  .controls button:hover { border-color: #8b949e; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; }
+  .empty { color: #8b949e; padding: 40px; text-align: center; }
+  footer { color: #6e7681; font-size: 11px; margin-top: 20px;
+           font-family: ui-monospace, monospace; }
+  a { color: #58a6ff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Paserati — Are we fast yet?</h1>
+  <div class="sub">Each line is one benchmark's <code>ratio_to_anchor</code> over time,
+    normalized to its committed baseline. <b>1.0 = at baseline</b>, below = faster, above = slower.
+    Anchor-normalized, so the trend holds across varying CI runners.</div>
+
+  <div id="meta" class="meta"></div>
+  <div class="controls">
+    <button id="all">show all</button>
+    <button id="none">hide all</button>
+    <span id="count" style="color:#8b949e"></span>
+  </div>
+  <div class="card"><canvas id="chart" height="120"></canvas></div>
+  <div id="empty" class="empty" hidden>No snapshots yet. Once the Perf Timeline workflow
+    has run on at least one commit, the trend appears here.</div>
+
+  <footer>Source: <code>docs/perf/baseline.json</code> + <code>docs/perf/timeline/*.json</code>.
+    Page renders client-side; it runs no benchmarks.</footer>
+</div>
+
+<script>
+const BASE = "baseline.json";
+const MANIFEST = "timeline/index.json";
+
+async function getJSON(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(url + " → " + r.status);
+  return r.json();
+}
+
+// Deterministic color per benchmark name.
+function colorFor(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return `hsl(${h} 70% 60%)`;
+}
+
+// Short label: prefer the captured_at_sha, else the timestamp.
+function labelFor(snap) {
+  if (snap.captured_at_sha) return snap.captured_at_sha.slice(0, 8);
+  return (snap.captured_at || "").slice(0, 10);
+}
+
+(async function main() {
+  let baseline, files;
+  try { baseline = await getJSON(BASE); } catch { baseline = { benchmarks: {}, machine: {}, anchor: {} }; }
+  try { files = await getJSON(MANIFEST); } catch { files = []; }
+
+  if (!files.length) {
+    document.getElementById("empty").hidden = false;
+    renderMeta(baseline, []);
+    return;
+  }
+
+  // Load snapshots, sorted by capture time ascending.
+  const snaps = (await Promise.all(files.map(f => getJSON("timeline/" + f).catch(() => null))))
+    .filter(Boolean)
+    .sort((a, b) => (a.captured_at || "").localeCompare(b.captured_at || ""));
+
+  renderMeta(baseline, snaps);
+
+  const labels = snaps.map(labelFor);
+
+  // Reference ratio per benchmark: the baseline's, else the first snapshot's.
+  const baseRatio = {};
+  const allNames = new Set();
+  for (const s of snaps) for (const n of Object.keys(s.benchmarks || {})) allNames.add(n);
+  for (const n of allNames) {
+    const b = baseline.benchmarks?.[n]?.ratio_to_anchor;
+    if (b && b > 0) { baseRatio[n] = b; continue; }
+    const first = snaps.find(s => s.benchmarks?.[n]?.ratio_to_anchor > 0);
+    baseRatio[n] = first ? first.benchmarks[n].ratio_to_anchor : 0;
+  }
+
+  const names = [...allNames].sort();
+  const datasets = names.map(n => ({
+    label: n.replace(/^github\.com\/nooga\/paserati\//, ""),
+    data: snaps.map(s => {
+      const r = s.benchmarks?.[n]?.ratio_to_anchor;
+      return (r && baseRatio[n]) ? r / baseRatio[n] : null;
+    }),
+    borderColor: colorFor(n),
+    backgroundColor: colorFor(n),
+    borderWidth: 1.5,
+    pointRadius: 2,
+    spanGaps: true,
+    tension: 0.2,
+  }));
+
+  document.getElementById("count").textContent = `${names.length} benchmarks · ${snaps.length} snapshots`;
+
+  const chart = new Chart(document.getElementById("chart"), {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      interaction: { mode: "nearest", intersect: false },
+      plugins: {
+        legend: { labels: { color: "#8b949e", boxWidth: 12, font: { size: 10 } } },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y?.toFixed(3)}×` } },
+        annotation: undefined,
+      },
+      scales: {
+        x: { ticks: { color: "#8b949e", maxRotation: 60, font: { size: 10 } }, grid: { color: "#21262d" } },
+        y: { title: { display: true, text: "× baseline (1.0 = bar)", color: "#8b949e" },
+             ticks: { color: "#8b949e" }, grid: { color: "#21262d" },
+             suggestedMin: 0.8, suggestedMax: 1.2 },
+      },
+    },
+  });
+
+  document.getElementById("all").onclick = () => {
+    chart.data.datasets.forEach((_, i) => chart.setDatasetVisibility(i, true)); chart.update();
+  };
+  document.getElementById("none").onclick = () => {
+    chart.data.datasets.forEach((_, i) => chart.setDatasetVisibility(i, false)); chart.update();
+  };
+})();
+
+function renderMeta(baseline, snaps) {
+  const m = baseline.machine || {};
+  const latest = snaps[snaps.length - 1];
+  const baseAnchor = baseline.anchor?.ns_per_op;
+  const curAnchor = latest?.anchor?.ns_per_op;
+  const parts = [];
+  if (m.cpu_model) parts.push(`<span>machine <b>${m.cpu_model}</b> · ${m.os}-${m.arch} · ${m.go_version}</span>`);
+  if (baseAnchor) parts.push(`<span>baseline anchor <b>${baseAnchor.toFixed(3)} ns/op</b></span>`);
+  if (curAnchor) parts.push(`<span>latest anchor <b>${curAnchor.toFixed(3)} ns/op</b></span>`);
+  if (baseline.captured_at_sha) parts.push(`<span>baseline @ <b>${baseline.captured_at_sha.slice(0,8)}</b></span>`);
+  document.getElementById("meta").innerHTML = parts.join("");
+}
+</script>
+</body>
+</html>
