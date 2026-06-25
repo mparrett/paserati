@@ -46,13 +46,16 @@ jobs:
         if: ${{ github.event.inputs.mode == 'update' }}
         shell: bash
         run: |
-          if git diff --quiet -- docs/perf/baseline.json; then
+          # Stage first: baseline.json is untracked on the first seed, and
+          # `git diff` (without --cached) never reports untracked files, so the
+          # initial commit would be silently skipped. Check the staged diff.
+          git add docs/perf/baseline.json
+          if git diff --cached --quiet -- docs/perf/baseline.json; then
             echo "baseline unchanged — nothing to commit"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/perf/baseline.json
           git commit -m "perf: re-seed bench baseline [skip ci]"
           git push
 
