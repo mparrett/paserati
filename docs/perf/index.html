@@ -58,15 +58,16 @@
   .chip b { color: var(--ink); font-weight: 700; }
 
   /* ── controls ─────────────────────────────────────────── */
-  .controls { display: flex; align-items: center; gap: 10px; margin: 22px 0 12px; }
-  .controls button {
-    font: 600 12px/1 "Saira Condensed", system-ui, sans-serif; letter-spacing: .08em;
-    text-transform: uppercase; color: var(--ink); background: var(--bg-elev);
-    border: 1px solid var(--line); border-radius: 7px; padding: 8px 13px; cursor: pointer;
-    transition: border-color .15s, color .15s;
-  }
-  .controls button:hover { border-color: var(--amber); color: var(--amber); }
-  .controls button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  .controls { display: flex; align-items: center; gap: 12px; margin: 22px 0 12px; }
+  .toggle { display: inline-flex; background: var(--bg-elev); border: 1px solid var(--line);
+            border-radius: 9px; padding: 3px; gap: 3px; }
+  .seg { font: 600 12px/1 "Saira Condensed", system-ui, sans-serif; letter-spacing: .08em;
+         text-transform: uppercase; color: var(--ink-dim); background: transparent; border: 0;
+         border-radius: 6px; padding: 8px 14px; cursor: pointer;
+         transition: background .15s, color .15s; }
+  .seg:hover { color: var(--ink); }
+  .seg.on { background: var(--amber); color: #1a1206; }
+  .seg:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   .controls .count { margin-left: auto; font: 11px/1 ui-monospace, monospace;
                      color: var(--ink-dim); }
 
@@ -92,8 +93,8 @@
     <div class="hero-copy">
       <p class="eyebrow">Paserati · benchmark trend</p>
       <h1>Are we<br>fast yet?</h1>
-      <p class="tagline">Every line is one benchmark over time, normalized to its
-        committed baseline. <b class="bar">At 1.0×</b> sits the bar —
+      <p class="tagline">Each benchmark's speed over time, normalized to its
+        committed baseline. <b class="bar">1.0× is the bar</b> —
         <b class="up">below is faster</b>, <b class="down">above is slower</b>.
         Anchor-normalized, so the trend holds across CI runners.</p>
       <div id="readout" class="readout"></div>
@@ -101,8 +102,10 @@
   </header>
 
   <div class="controls">
-    <button id="all">Show all</button>
-    <button id="none">Hide all</button>
+    <div class="toggle" role="group" aria-label="View mode">
+      <button id="m-overall" class="seg" aria-pressed="true">Overall</button>
+      <button id="m-all" class="seg" aria-pressed="false">All lines</button>
+    </div>
     <span id="count" class="count"></span>
   </div>
 
@@ -175,22 +178,36 @@ function labelFor(s) {
     pointRadius: 0, pointHoverRadius: 0, fill: false, tension: 0,
   };
 
-  document.getElementById("count").textContent = `${names.length} benchmarks · ${snaps.length} snapshots`;
+  // Overall view: mean across all benchmarks per snapshot, with a ±1σ band.
+  const mean = [], lo = [], hi = [];
+  for (let j = 0; j < snaps.length; j++) {
+    const vals = series.map(d => d.data[j]).filter(v => v != null);
+    if (!vals.length) { mean.push(null); lo.push(null); hi.push(null); continue; }
+    const m = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const sd = Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / vals.length);
+    mean.push(m); lo.push(m - sd); hi.push(m + sd);
+  }
+  const bandLo = { label: "_band", data: lo, borderColor: "transparent", pointRadius: 0, fill: false };
+  const bandHi = { label: "± std dev", data: hi, borderColor: "transparent", pointRadius: 0,
+                   backgroundColor: "rgba(236,224,200,0.10)", fill: "-1" };
+  const meanLine = { label: "mean", data: mean, borderColor: "#ece0c8", backgroundColor: "#ece0c8",
+                     borderWidth: 2.5, pointRadius: 2.5, pointHoverRadius: 4, tension: .25 };
 
   const ink = "#a3906c", grid = "#2a2114";
   const chart = new Chart(document.getElementById("chart"), {
     type: "line",
-    data: { labels, datasets: [baselineLine, ...series] },
+    data: { labels, datasets: [] },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: "nearest", intersect: false },
-      animation: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? false : { duration: 600 },
+      animation: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? false : { duration: 500 },
       plugins: {
-        legend: { position: "bottom", labels: { color: ink, boxWidth: 8, boxHeight: 8,
-                  padding: 8, font: { size: 9.5 }, usePointStyle: true } },
+        legend: { position: "bottom", labels: { color: ink, boxWidth: 8, boxHeight: 8, padding: 8,
+                  font: { size: 9.5 }, usePointStyle: true, filter: it => !it.text.startsWith("_") } },
         tooltip: {
           backgroundColor: "#1f1810", borderColor: "#322817", borderWidth: 1,
           titleColor: "#ece0c8", bodyColor: "#ece0c8",
+          filter: it => !it.dataset.label.startsWith("_"),
           callbacks: { label: c => c.parsed.y == null ? null : `${c.dataset.label}: ${c.parsed.y.toFixed(3)}×` },
         },
       },
@@ -203,9 +220,19 @@ function labelFor(s) {
     },
   });
 
-  const setAll = v => { chart.data.datasets.forEach((_, i) => chart.setDatasetVisibility(i, v)); chart.update(); };
-  document.getElementById("all").onclick = () => setAll(true);
-  document.getElementById("none").onclick = () => { setAll(false); chart.setDatasetVisibility(0, true); chart.update(); };
+  const countEl = document.getElementById("count");
+  const bOverall = document.getElementById("m-overall"), bAll = document.getElementById("m-all");
+  function setMode(mode) {
+    const overall = mode === "overall";
+    chart.data.datasets = overall ? [baselineLine, bandLo, bandHi, meanLine] : [baselineLine, ...series];
+    chart.update();
+    bOverall.setAttribute("aria-pressed", overall); bOverall.classList.toggle("on", overall);
+    bAll.setAttribute("aria-pressed", !overall);     bAll.classList.toggle("on", !overall);
+    countEl.textContent = `${overall ? "mean of " : ""}${names.length} benchmarks · ${snaps.length} snapshots`;
+  }
+  bOverall.onclick = () => setMode("overall");
+  bAll.onclick = () => setMode("all");
+  setMode(new URLSearchParams(location.search).get("mode") === "all" ? "all" : "overall");
 })();
 
 function renderReadout(baseline, snaps) {
