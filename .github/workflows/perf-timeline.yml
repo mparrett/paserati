@@ -67,6 +67,20 @@ jobs:
           echo "name=${name}" >> "$GITHUB_OUTPUT"
           echo "out=${out}" >> "$GITHUB_OUTPUT"
 
+      - name: Render run summary
+        run: |
+          src="${{ steps.snap.outputs.out }}"
+          {
+            echo "## Snapshot ${{ steps.snap.outputs.name }}"
+            echo
+            echo "anchor \`$(jq -r '.anchor.ns_per_op' "$src")\` ns/op · machine \`$(jq -r '.machine.cpu_model' "$src")\` · go \`$(jq -r '.machine.go_version' "$src")\`"
+            echo
+            echo "| Benchmark | Anchor× | Wall (ns/op) | Allocs/op |"
+            echo "|---|---:|---:|---:|"
+            jq -r '.benchmarks | to_entries | sort_by(-.value.ratio_to_anchor)[]
+                   | "| \(.key | sub("github.com/nooga/paserati/";"")) | \((.value.ratio_to_anchor*1000|round)/1000) | \(.value.ns_per_op|round) | \(.value.allocs_per_op) |"' "$src"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Publish to perf-data branch
         run: |
           set -euo pipefail
