@@ -26,6 +26,10 @@ permissions:
 concurrency:
   group: perf-timeline-main
   cancel-in-progress: false
+  # Queue pending runs instead of superseding them, so a burst of backfill
+  # dispatches all run (sequentially) rather than all-but-the-last being
+  # canceled. Valid only with cancel-in-progress: false.
+  queue: max
 
 jobs:
   snapshot:
