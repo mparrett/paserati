@@ -24,7 +24,11 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # Don't cancel an in-progress deploy: during a burst of snapshots the last
+  # trigger's run survives as pending and runs after the final snapshot's push,
+  # so the deployed manifest reflects all of them. Cancelling mid-flight let an
+  # earlier deploy win with stale perf-data (the backfill-burst race).
+  cancel-in-progress: false
 
 jobs:
   build:
