@@ -28,14 +28,17 @@ on:
   workflow_dispatch:
     inputs:
       pr:
-        description: 'PR number to benchmark'
-        required: true
+        description: 'PR number for a real base-vs-head A/B'
+        required: false
+      ref:
+        description: 'Single ref to self-A/B (smoke test: runs the macro twice, expect ~0% — measures wall-time + noise floor)'
+        required: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: perf-test262-${{ github.event.pull_request.number || github.event.inputs.pr }}
+  group: perf-test262-${{ github.event.pull_request.number || github.event.inputs.pr || github.event.inputs.ref }}
   cancel-in-progress: true
 
 env:
@@ -77,31 +80,43 @@ jobs:
           EVENT: ${{ github.event_name }}
           PR_FROM_EVENT: ${{ github.event.pull_request.number }}
           PR_FROM_INPUT: ${{ github.event.inputs.pr }}
+          REF_FROM_INPUT: ${{ github.event.inputs.ref }}
           BASE_FROM_EVENT: ${{ github.event.pull_request.base.ref }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ "$EVENT" = "workflow_dispatch" ]; then
-            pr="$PR_FROM_INPUT"
-            [[ "$pr" =~ ^[0-9]+$ ]] || { echo "pr input must be a number, got: ${pr}" >&2; exit 1; }
-            base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr}" --jq .base.ref)"
+          # Self-A/B smoke test: dispatch with a `ref` and no `pr`. base == head,
+          # so the run measures full-suite wall-time and the run-to-run noise
+          # floor (expected ~0% delta). It also sidesteps the bootstrap problem
+          # that a real A/B can't bench a merge-base predating this tooling.
+          if [ "$EVENT" = "workflow_dispatch" ] && [ -n "$REF_FROM_INPUT" ]; then
+            git fetch --no-tags origin "$REF_FROM_INPUT"
+            sha="$(git rev-parse FETCH_HEAD)"
+            pr=""; base_sha="$sha"; head_sha="$sha"
+            echo "Self-A/B on ${REF_FROM_INPUT} (${sha})"
           else
-            pr="$PR_FROM_EVENT"
-            base_ref="$BASE_FROM_EVENT"
+            if [ "$EVENT" = "workflow_dispatch" ]; then
+              pr="$PR_FROM_INPUT"
+              [[ "$pr" =~ ^[0-9]+$ ]] || { echo "provide pr=<number> or ref=<branch>" >&2; exit 1; }
+              base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr}" --jq .base.ref)"
+            else
+              pr="$PR_FROM_EVENT"
+              base_ref="$BASE_FROM_EVENT"
+            fi
+            # refs/pull/<n>/head lives on the base repo for fork PRs too.
+            git fetch --no-tags origin "$base_ref" "refs/pull/${pr}/head:pr-head"
+            head_sha="$(git rev-parse pr-head)"
+            # Merge-base = the PR's own fork point, so we measure the PR's delta,
+            # not unrelated drift on the base branch since.
+            base_sha="$(git merge-base "origin/${base_ref}" pr-head)"
           fi
-          # refs/pull/<n>/head lives on the base repo for fork PRs too.
-          git fetch --no-tags origin "$base_ref" "refs/pull/${pr}/head:pr-head"
-          head_sha="$(git rev-parse pr-head)"
-          # Merge-base = the PR's own fork point, so we measure the PR's delta, not
-          # unrelated drift on the base branch since.
-          base_sha="$(git merge-base "origin/${base_ref}" pr-head)"
           {
             echo "pr=${pr}"
             echo "head=${head_sha}"
             echo "base=${base_sha}"
           } >> "$GITHUB_OUTPUT"
-          echo "Base (merge-base): ${base_sha}"
-          echo "Head:              ${head_sha}"
+          echo "Base: ${base_sha}"
+          echo "Head: ${head_sha}"
 
       - name: Bench merge-base
         env:
@@ -156,7 +171,8 @@ jobs:
 
   comment:
     needs: bench
-    if: needs.bench.result == 'success'
+    # Skip in self-test mode (no PR to comment on); the job summary still has the report.
+    if: needs.bench.result == 'success' && needs.bench.outputs.pr != ''
     runs-on: ubuntu-latest
     permissions:
       actions: read
