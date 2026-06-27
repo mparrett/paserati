@@ -43,9 +43,11 @@ concurrency:
 
 env:
   # Per-test timeout is a SAFETY BOUND, not part of the metric: timed-out tests
-  # are excluded from the timing sum and counted separately. Generous enough that
-  # slow-but-correct tests still contribute; bounded so infinite loops can't run away.
-  PER_TEST_TIMEOUT: 5s
+  # are excluded from the timing sum and counted separately, so a tight bound just
+  # identifies hangs faster — it doesn't change the speed number, only the wasted
+  # wall-time. 5s made the suite timeout-dominated (40+ min); 0.2s matches the
+  # correctness baselines.
+  PER_TEST_TIMEOUT: 0.2s
 
 jobs:
   bench:
