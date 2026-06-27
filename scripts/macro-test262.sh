@@ -38,10 +38,14 @@ go build -o ./bench-test262 ./cmd/bench-test262
 # Full-suite run; -json carries per-test durations + pass/fail/timeout flags.
 # The runner exits non-zero whenever any test fails (expected — paserati fails
 # plenty of Test262), so ignore its exit code; bench-test262 validates the JSON.
+#
+# Discard stderr: stack-overflow tests make paserati dump the whole VM stack
+# there, which (unbounded, ×many tests) floods the CI log enough to get the job
+# killed. The metric reads only the -json stdout, so stderr is pure noise here.
 if [ -n "$subpath" ]; then
-  ./paserati-test262 -path ./test262 -timeout "$timeout" -subpath "$subpath" -json > "$raw" || true
+  ./paserati-test262 -path ./test262 -timeout "$timeout" -subpath "$subpath" -json > "$raw" 2>/dev/null || true
 else
-  ./paserati-test262 -path ./test262 -timeout "$timeout" -json > "$raw" || true
+  ./paserati-test262 -path ./test262 -timeout "$timeout" -json > "$raw" 2>/dev/null || true
 fi
 
 ./bench-test262 -in "$raw" -out "$records_out"
