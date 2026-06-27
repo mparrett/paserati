@@ -43,11 +43,12 @@ concurrency:
 
 env:
   # Per-test timeout is a SAFETY BOUND, not part of the metric: timed-out tests
-  # are excluded from the timing sum and counted separately, so a tight bound just
-  # identifies hangs faster — it doesn't change the speed number, only the wasted
-  # wall-time. 5s made the suite timeout-dominated (40+ min); 0.2s matches the
-  # correctness baselines.
-  PER_TEST_TIMEOUT: 0.2s
+  # are excluded from the sum (and from the intersection both sides share). 5s made
+  # the suite timeout-dominated (40+ min). 0.2s was too tight — it mislabeled
+  # slow-but-correct tests (e.g. RegExp backtracking) as timeouts and dropped them.
+  # 1.2s: every measured slow-correct test resolves under it; what still times out
+  # is a genuine hang. The intersection compare makes the exact value low-stakes.
+  PER_TEST_TIMEOUT: 1.2s
 
 jobs:
   bench:
@@ -140,9 +141,10 @@ jobs:
           ./setup-test262.sh
           ./scripts/macro-test262.sh "${RUNNER_TEMP}/head.jsonl" "${RUNNER_TEMP}/head.stats.json"
 
-          # Same-runner A/B: diff the raw summed-ns records, base vs head.
+          # Same-runner A/B: intersection compare over the per-test results both
+          # passes produced (the .merged.json macro-test262.sh writes alongside).
           ./scripts/macro-test262-compare.sh \
-            "${RUNNER_TEMP}/base.jsonl" "${RUNNER_TEMP}/head.jsonl" > "${RUNNER_TEMP}/timing.md"
+            "${RUNNER_TEMP}/base.merged.json" "${RUNNER_TEMP}/head.merged.json" > "${RUNNER_TEMP}/timing.md"
 
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           counts() { # $1=stats.json  -> "passed / failed / timeouts (total)"
@@ -151,13 +153,13 @@ jobs:
           report() {
             echo "## Test262 macro — base vs head, same runner"
             echo
-            echo "Base \`${BASE:0:12}\` vs head \`${HEAD:0:12}\`. Anchor-normalized; informational, not a gate."
+            echo "Base \`${BASE:0:12}\` vs head \`${HEAD:0:12}\`. Same runner, raw sums; informational, not a gate."
             echo
             echo "**Correctness (passed / failed / timeouts):**"
             echo "- base: $(counts "${RUNNER_TEMP}/base.stats.json")"
             echo "- head: $(counts "${RUNNER_TEMP}/head.stats.json")"
             echo
-            echo "**Execution time (anchor-normalized sum over passing, non-timed-out tests):**"
+            echo "**Execution time (summed over tests passing on both sides):**"
             echo
             cat "${RUNNER_TEMP}/timing.md"
           }
