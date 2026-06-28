@@ -37,7 +37,7 @@ import (
 
 func main() {
 	var (
-		inPath    = flag.String("in", "", "paserati-test262 -json input (default: stdin)")
+		inPath    = flag.String("in", "", "paserati-test262 -json results file (default: stdin)")
 		outPath   = flag.String("out", "", "append StreamRecord JSONL here (default: stdout)")
 		timestamp = flag.String("timestamp", "", "RFC3339 capture time (default: now, UTC)")
 	)
