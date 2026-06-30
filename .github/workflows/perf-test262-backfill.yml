@@ -43,7 +43,11 @@ jobs:
         run: |
           set -euo pipefail
           main_sha="$(git rev-parse origin/main)"
-          git checkout --force "$TARGET_REF"
+          # Orphan fork-CI commits aren't ref-reachable, so checkout@v4 didn't fetch
+          # them; fetch the target explicitly (it must be pushed to a ref to be
+          # fetchable — see the backfill/* temp branches).
+          git fetch --no-tags origin "$TARGET_REF"
+          git checkout --force FETCH_HEAD
           # Graft just the macro tooling (absent or older on pre-PR#10 commits) so
           # the methodology matches the forward snapshots. Engine stays the target's.
           git checkout "$main_sha" -- cmd/bench-test262 scripts/macro-test262.sh
