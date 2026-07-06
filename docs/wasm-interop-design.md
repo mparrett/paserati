@@ -139,12 +139,18 @@ rest of the work relies on:
   `WriteUint16(0)`, record the position, patch `Code[pos]`/`Code[pos+1]` once the
   target is known — the exact mechanism Phase 3 needs.
 
-**Phase 1 — wasm front end.**
-Parse `.wasm` binary (or `.wat` via an external assembler to `.wasm`, so we
-don't write a text parser). A minimal binary reader for the type/function/
-code/export sections is ~a few hundred lines and dependency-free; alternatively
-pull a parser lib *only* for the spike. Emit a tiny IR: functions, locals,
-typed instruction list.
+**Phase 1 — wasm front end. ✅ DONE.**
+`pkg/wasm/` decodes the `.wasm` binary into a small typed IR — dependency-free,
+no `.wat` text parser (fixtures are assembled with `wat2wasm`). Covers the
+Type/Function/Export/Code sections, LEB128 (signed + unsigned), and the
+numeric + control-flow opcode subset; anything outside it (memory, imports,
+tables, SIMD) decodes as a clear "unsupported opcode" error rather than silent
+misparse. `Decode([]byte) (*Module, error)` returns funcs (with resolved
+signatures, locals, and a flat instruction stream that keeps
+`block`/`loop`/`if`/`end` for the codegen pass) plus exports. Tests in
+`decode_test.go` assert structure against `testdata/{add,fib}.wasm`; the fib
+stream round-trips exactly (verified against the `.wat` source and wasmtime's
+`fib(20)==6765`).
 
 **Phase 2 — straight-line codegen.**
 Translate functions with no branches: consts, `local.get/set`, arithmetic,
