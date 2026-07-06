@@ -105,6 +105,59 @@ func TestCompileAbs(t *testing.T) {
 	}
 }
 
+// compileModuleExport decodes, compiles the whole module (so calls resolve),
+// and returns the named export with a fresh VM.
+func compileModuleExport(t *testing.T, path, name string) (*vm.VM, vm.Value) {
+	t.Helper()
+	m := mustDecode(t, path)
+	exports, err := CompileModule(m)
+	if err != nil {
+		t.Fatalf("compile module %s: %v", path, err)
+	}
+	fn, ok := exports[name]
+	if !ok {
+		t.Fatalf("export %q not found", name)
+	}
+	return vm.NewVM(), fn
+}
+
+func TestCompileRecursiveFib(t *testing.T) {
+	// Recursion through OpCall + result-typed if.
+	m, fn := compileModuleExport(t, "testdata/recfib.wasm", "fib")
+	for _, c := range []struct{ n, want float64 }{{0, 0}, {1, 1}, {10, 55}, {20, 6765}} {
+		if got := callI(t, m, fn, c.n); got != c.want {
+			t.Errorf("fib(%v) = %v, want %v", c.n, got, c.want)
+		}
+	}
+}
+
+func TestCompileMutualRecursion(t *testing.T) {
+	// is_even/is_odd call each other.
+	m := mustDecode(t, "testdata/parity.wasm")
+	exports, err := CompileModule(m)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	vmi := vm.NewVM()
+	for _, c := range []struct {
+		fn   string
+		n    float64
+		want float64
+	}{{"is_even", 10, 1}, {"is_even", 7, 0}, {"is_odd", 7, 1}, {"is_odd", 4, 0}} {
+		if got := callI(t, vmi, exports[c.fn], c.n); got != c.want {
+			t.Errorf("%s(%v) = %v, want %v", c.fn, c.n, got, c.want)
+		}
+	}
+}
+
+func TestCompileFuncRejectsCall(t *testing.T) {
+	// CompileFunc (single-function) can't resolve calls.
+	m := mustDecode(t, "testdata/recfib.wasm")
+	if _, err := CompileFunc(&m.Funcs[0], "fib"); err == nil {
+		t.Error("expected CompileFunc to reject a call, got nil")
+	}
+}
+
 func TestCompileGcd(t *testing.T) {
 	// loop + br_if + i32.eqz + i32.rem_s.
 	m, fn := compileExport(t, "testdata/gcd.wasm", "gcd")

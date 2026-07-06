@@ -50,47 +50,96 @@ var binopOp = map[Opcode]vm.OpCode{
 
 // ctrlFrame tracks one open block/loop/if for branch resolution.
 type ctrlFrame struct {
-	op         Opcode
-	startDepth int   // operand-stack depth at frame entry (after popping an if cond)
-	header     int   // loop: code offset of the branch target
-	brPatches  []int // block/if: jump-operand positions to patch to the frame's end
-	elsePatch  int   // if: operand pos of the cond-false jump; -1 once resolved
-	hasElse    bool
+	op          Opcode
+	startDepth  int   // operand-stack depth at frame entry (after popping an if cond)
+	results     int   // values the frame leaves on the stack at its end
+	branchArity int   // values a branch to this label carries (loop→params=0, block/if→results)
+	header      int   // loop: code offset of the branch target
+	brPatches   []int // block/if: jump-operand positions to patch to the frame's end
+	elsePatch   int   // if: operand pos of the cond-false jump; -1 once resolved
+	hasElse     bool
 }
 
 type funcGen struct {
 	c           *vm.Chunk
 	fn          *Func
-	base        int  // first operand-stack register (== numLocals)
-	depth       int  // current operand-stack depth
-	maxReg      int  // high-water register count
+	mod         *Module    // for resolving call targets; nil when compiling standalone
+	vals        []vm.Value // one callable Value per module function (for call)
+	base        int        // first operand-stack register (== numLocals)
+	depth       int        // current operand-stack depth
+	maxReg      int        // high-water register count
 	ctrl        []*ctrlFrame
 	unreachable bool // in a dead region after an unconditional branch/return
 }
 
-// CompileFunc lowers a single function to a callable paserati Value.
+// CompileFunc lowers a single call-free function to a callable paserati Value.
+// A `call` in the body errors — use CompileModule for functions that call.
 func CompileFunc(fn *Func, name string) (vm.Value, error) {
-	g := &funcGen{c: vm.NewChunk(), fn: fn}
-	g.base = fn.NumLocals()
+	c := vm.NewChunk()
+	val := vm.NewFunction(fn.NumParams(), fn.NumParams(), 0, 0, false, name, c, false, false, false, false)
+	g := &funcGen{c: c, fn: fn}
+	if err := g.compileInto(val); err != nil {
+		return vm.Undefined, fmt.Errorf("%s: %w", name, err)
+	}
+	return val, nil
+}
+
+// CompileModule lowers every function in the module (so calls resolve) and
+// returns the exported functions by name. Two passes: create all callable
+// Values first (empty chunks) so recursion and mutual recursion can reference
+// peers, then fill each chunk in place.
+func CompileModule(m *Module) (map[string]vm.Value, error) {
+	vals := make([]vm.Value, len(m.Funcs))
+	for i := range m.Funcs {
+		fn := &m.Funcs[i]
+		vals[i] = vm.NewFunction(fn.NumParams(), fn.NumParams(), 0, 0, false,
+			funcName(m, i), vm.NewChunk(), false, false, false, false)
+	}
+	for i := range m.Funcs {
+		fn := &m.Funcs[i]
+		g := &funcGen{c: vals[i].AsFunction().Chunk, fn: fn, mod: m, vals: vals}
+		if err := g.compileInto(vals[i]); err != nil {
+			return nil, fmt.Errorf("%s: %w", funcName(m, i), err)
+		}
+	}
+	out := make(map[string]vm.Value)
+	for _, e := range m.Exports {
+		if e.Kind == 0 {
+			out[e.Name] = vals[e.Index]
+		}
+	}
+	return out, nil
+}
+
+// funcName returns an export name for func i if it has one, else func<i>.
+func funcName(m *Module, i int) string {
+	for _, e := range m.Exports {
+		if e.Kind == 0 && int(e.Index) == i {
+			return e.Name
+		}
+	}
+	return fmt.Sprintf("func%d", i)
+}
+
+// compileInto runs codegen and fills val's chunk and register size.
+func (g *funcGen) compileInto(val vm.Value) error {
+	g.base = g.fn.NumLocals()
 	g.maxReg = g.base
 	if g.base > 256 {
-		return vm.Undefined, fmt.Errorf("%s: %d locals exceeds register file", name, g.base)
+		return fmt.Errorf("%d locals exceeds register file", g.base)
 	}
-
-	if len(fn.Locals) > 0 {
+	if len(g.fn.Locals) > 0 {
 		zero := g.c.AddConstant(vm.Number(0))
-		for i := fn.NumParams(); i < fn.NumLocals(); i++ {
+		for i := g.fn.NumParams(); i < g.fn.NumLocals(); i++ {
 			g.loadConst(byte(i), zero)
 		}
 	}
-
 	if err := g.emitBody(); err != nil {
-		return vm.Undefined, fmt.Errorf("%s: %w", name, err)
+		return err
 	}
-
 	g.c.MaxRegs = g.maxReg
-	arity := fn.NumParams()
-	return vm.NewFunction(arity, arity, 0, g.maxReg, false, name, g.c, false, false, false, false), nil
+	val.AsFunction().RegisterSize = g.maxReg
+	return nil
 }
 
 func (g *funcGen) emitBody() error {
@@ -140,21 +189,26 @@ func (g *funcGen) emitBody() error {
 			g.unreachable = true
 
 		case OpBlock, OpLoop:
-			if ins.I64 != BlockTypeEmpty {
-				return fmt.Errorf("%s with non-empty block type unsupported", ins.Op)
+			results, err := blockResults(ins.I64)
+			if err != nil {
+				return err
 			}
-			f := &ctrlFrame{op: ins.Op, startDepth: g.depth, elsePatch: -1}
+			f := &ctrlFrame{op: ins.Op, startDepth: g.depth, results: results, elsePatch: -1}
 			if ins.Op == OpLoop {
-				f.header = g.here()
+				f.header = g.here() // branch target is the header; carries params (0 here)
+			} else {
+				f.branchArity = results
 			}
 			g.ctrl = append(g.ctrl, f)
 
 		case OpIf:
-			if ins.I64 != BlockTypeEmpty {
-				return fmt.Errorf("if with non-empty block type unsupported")
+			results, err := blockResults(ins.I64)
+			if err != nil {
+				return err
 			}
 			cond := g.pop()
-			f := &ctrlFrame{op: OpIf, startDepth: g.depth, elsePatch: g.emitJumpIfFalse(cond)}
+			f := &ctrlFrame{op: OpIf, startDepth: g.depth, results: results,
+				branchArity: results, elsePatch: g.emitJumpIfFalse(cond)}
 			g.ctrl = append(g.ctrl, f)
 
 		case OpElse:
@@ -185,7 +239,7 @@ func (g *funcGen) emitBody() error {
 			for _, p := range f.brPatches {
 				g.patchTo(p, g.here())
 			}
-			g.depth = f.startDepth // empty block type ⇒ no results
+			g.depth = f.startDepth + f.results
 			g.unreachable = false
 
 		case OpBr:
@@ -202,6 +256,11 @@ func (g *funcGen) emitBody() error {
 			}
 			g.patchTo(skip, g.here())
 
+		case OpCall:
+			if err := g.emitCall(ins.U32); err != nil {
+				return err
+			}
+
 		default:
 			op, ok := binopOp[ins.Op]
 			if !ok {
@@ -217,18 +276,83 @@ func (g *funcGen) emitBody() error {
 }
 
 // branchTo emits a jump to the depth-th enclosing control frame (0 = innermost).
+// Any values the label carries are moved into the target's result slot first,
+// so they land where post-branch code expects them.
 func (g *funcGen) branchTo(depth uint32) error {
 	i := len(g.ctrl) - 1 - int(depth)
 	if i < 0 {
 		return fmt.Errorf("branch depth %d exceeds control stack", depth)
 	}
 	f := g.ctrl[i]
+	for k := 0; k < f.branchArity; k++ {
+		src := byte(g.base + g.depth - f.branchArity + k)
+		dst := byte(g.base + f.startDepth + k)
+		if src != dst {
+			g.emit(vm.OpMove, dst, src)
+		}
+	}
 	if f.op == OpLoop {
 		g.emitJumpTo(f.header) // backward target, known
 	} else {
 		f.brPatches = append(f.brPatches, g.emitJump()) // forward, patched at end
 	}
 	return nil
+}
+
+// emitCall lowers `call funcIdx`. Args sit on top of the operand stack; paserati
+// wants [funcReg][arg0..argN-1] contiguous. We stage the callee value and a copy
+// of the args into fresh registers above the stack, then reclaim the arg slots
+// for the result.
+func (g *funcGen) emitCall(funcIdx uint32) error {
+	if g.mod == nil {
+		return fmt.Errorf("call requires module compilation (use CompileModule)")
+	}
+	if int(funcIdx) >= len(g.mod.Funcs) {
+		return fmt.Errorf("call %d out of range", funcIdx)
+	}
+	callee := g.mod.Funcs[funcIdx].Type
+	argCount := len(callee.Params)
+	results := len(callee.Results)
+	if results > 1 {
+		return fmt.Errorf("call to multi-result func unsupported")
+	}
+	if argCount > 255 {
+		return fmt.Errorf("call arity %d exceeds OpCall operand", argCount)
+	}
+
+	staging := g.base + g.depth // funcReg, then args, live above the stack
+	if staging+1+argCount > g.maxReg {
+		g.maxReg = staging + 1 + argCount
+	}
+	g.loadConst(byte(staging), g.c.AddConstant(g.vals[funcIdx]))
+	for k := 0; k < argCount; k++ {
+		src := byte(g.base + g.depth - argCount + k)
+		g.emit(vm.OpMove, byte(staging+1+k), src)
+	}
+
+	g.depth -= argCount
+	dest := byte(g.base + g.depth) // reclaimed first-arg slot
+	g.c.WriteOpCode(vm.OpCall, 1)
+	g.c.EmitByte(dest)
+	g.c.EmitByte(byte(staging))
+	g.c.EmitByte(byte(argCount))
+	if results == 1 {
+		g.push() // result lands in dest
+	}
+	return nil
+}
+
+// blockResults maps a block-type immediate to its result count. Empty → 0, a
+// single valtype → 1; type-index (multi-value) signatures are unsupported.
+func blockResults(bt int64) (int, error) {
+	switch bt {
+	case BlockTypeEmpty:
+		return 0, nil
+	case -1, -2, -3, -4: // i32/i64/f32/f64 as s33 valtypes
+		return 1, nil
+	default:
+		return 0, fmt.Errorf("block type 0x%x (multi-value) unsupported", uint64(bt))
+	}
 }
 
 func (g *funcGen) emitReturn() {

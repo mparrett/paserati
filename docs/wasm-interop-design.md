@@ -177,9 +177,21 @@ Tests run `fib` (`fib(20)==6765` through the real decode→codegen→VM path), `
 `rem_s`) — all cross-checked against wasmtime. Codegen is correct but
 un-peepholed (redundant `OpMove`s from copy-on-`local.get/set`).
 
-**Phase 4 — calls.**
-Intra-module `call`. Each wasm function → its own Chunk/function value; wire
-`OpCall`. Target: recursive `fib`, mutual recursion.
+**Phase 4 — calls. ✅ DONE.**
+`CompileModule(m) (map[string]vm.Value, error)` compiles every function so calls
+resolve, in two passes: create all callable `Value`s first (empty chunks), then
+fill each chunk in place. Because `FunctionObject` is pointer-backed, a callee's
+`Value` can go in the caller's constant pool before its body exists — which is
+what makes recursion and mutual recursion work. `call` lowers to `OpCall` by
+staging `[funcReg, args…]` into fresh registers above the operand stack (paserati
+wants them contiguous), then reclaiming the arg slots for the result. Also
+generalised block types to a result count (`blockResults`) so `if (result i32)`
+works, with branch-carried values repositioned to the label's result slot.
+`CompileFunc` still exists for call-free functions and errors on a `call`.
+Tests: recursive `fib` (`fib(20)==6765`) and mutual-recursion `is_even`/`is_odd`,
+both cross-checked against wasmtime. Caveat: `Chunk.DisassembleChunk` recurses
+into function constants, so it stack-overflows on a self-referential (recursive)
+chunk — a VM-disassembler limitation, not a codegen bug; execution is fine.
 
 **Phase 5 (stretch) — linear memory.**
 `i32.load/store` over an `ArrayBufferObject`. Unlocks anything that touches
@@ -188,11 +200,13 @@ memory (string hashing, etc.). Likely a separate effort.
 **Out of scope for the experiment:** imports/host functions, tables/`call_indirect`,
 SIMD, threads, GC proposal, full trap semantics, >256 registers.
 
-### Success criterion
+### Success criterion — ✅ MET
 
 `translate(fib.wasm)` produces a function value `f` such that `f(20) == 6765`,
 with the whole path — parse → IR → Chunk → VM — running inside paserati and no
-new runtime dependency in the execution path.
+new runtime dependency in the execution path. Met for both the iterative fib
+(Phase 3) and the recursive fib (Phase 4), plus a spread of loop/branch/if/call
+fixtures, all cross-checked against wasmtime.
 
 ### Risks / unknowns
 
