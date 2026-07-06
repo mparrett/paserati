@@ -193,6 +193,33 @@ func TestCompileMemoryOutOfBounds(t *testing.T) {
 	}
 }
 
+func TestCompileGlobalConst(t *testing.T) {
+	m, fn := compileModuleExport(t, "testdata/global_const.wasm", "add_base")
+	if got := callI(t, m, fn, 5); got != 105 {
+		t.Errorf("add_base(5) = %v, want 105", got)
+	}
+}
+
+func TestCompileGlobalMutablePersists(t *testing.T) {
+	// A mutable global must persist across calls within one module instance:
+	// inc starts g=10, so 15 then 20 (wasmtime resets per --invoke; we don't).
+	m := mustDecode(t, "testdata/global_counter.wasm")
+	exports, err := CompileModule(m)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	vmi := vm.NewVM()
+	if got := callI(t, vmi, exports["inc"], 5); got != 15 {
+		t.Errorf("first inc(5) = %v, want 15", got)
+	}
+	if got := callI(t, vmi, exports["inc"], 5); got != 20 {
+		t.Errorf("second inc(5) = %v, want 20", got)
+	}
+	if got := callI(t, vmi, exports["peek"]); got != 20 {
+		t.Errorf("peek() = %v, want 20", got)
+	}
+}
+
 func TestCompileFuncRejectsCall(t *testing.T) {
 	// CompileFunc (single-function) can't resolve calls.
 	m := mustDecode(t, "testdata/recfib.wasm")
