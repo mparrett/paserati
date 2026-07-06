@@ -63,11 +63,26 @@ type Export struct {
 	Index uint32
 }
 
+// MemType is a linear memory's page limits (1 page = 64 KiB).
+type MemType struct {
+	Min    uint32
+	Max    uint32 // 0 when unbounded
+	HasMax bool
+}
+
+// DataSegment is an active data-section entry: Bytes copied to memory at Offset.
+type DataSegment struct {
+	Offset int
+	Bytes  []byte
+}
+
 // Module is the decoded IR.
 type Module struct {
 	Types   []FuncType
 	Funcs   []Func
 	Exports []Export
+	Memory  *MemType // nil when the module declares no memory
+	Data    []DataSegment
 }
 
 // FuncExport returns the export with the given name if it's a function export.

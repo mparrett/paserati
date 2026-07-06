@@ -47,16 +47,24 @@ func Decode(data []byte) (*Module, error) {
 			if err := decodeExportSection(sr, m); err != nil {
 				return nil, err
 			}
+		case 5: // Memory
+			if err := decodeMemorySection(sr, m); err != nil {
+				return nil, err
+			}
 		case 10: // Code
 			if err := decodeCodeSection(sr, m, funcTypeIdx); err != nil {
+				return nil, err
+			}
+		case 11: // Data
+			if err := decodeDataSection(sr, m); err != nil {
 				return nil, err
 			}
 		case 0: // Custom — skip (names, etc.)
 		case 2: // Import
 			return nil, fmt.Errorf("import section unsupported in this subset")
 		default:
-			// Memory(5), Global(6), Table(4), Element(9), Data(11), etc.
-			// Skip silently for now; codegen will fail loudly if a body needs them.
+			// Global(6), Table(4), Element(9), etc. Skip silently; codegen
+			// fails loudly if a body needs them.
 		}
 	}
 
@@ -131,6 +139,85 @@ func decodeExportSection(r *reader, m *Module) error {
 		m.Exports = append(m.Exports, Export{Name: name, Kind: kind, Index: idx})
 	}
 	return nil
+}
+
+func decodeMemorySection(r *reader, m *Module) error {
+	n, err := r.u32()
+	if err != nil {
+		return err
+	}
+	for i := uint32(0); i < n; i++ {
+		flags, err := r.byte()
+		if err != nil {
+			return err
+		}
+		min, err := r.u32()
+		if err != nil {
+			return err
+		}
+		mt := &MemType{Min: min}
+		if flags&1 != 0 {
+			if mt.Max, err = r.u32(); err != nil {
+				return err
+			}
+			mt.HasMax = true
+		}
+		if m.Memory == nil { // only memory 0 is modelled
+			m.Memory = mt
+		}
+	}
+	return nil
+}
+
+func decodeDataSection(r *reader, m *Module) error {
+	n, err := r.u32()
+	if err != nil {
+		return err
+	}
+	for i := uint32(0); i < n; i++ {
+		kind, err := r.u32()
+		if err != nil {
+			return err
+		}
+		if kind != 0 {
+			return fmt.Errorf("data segment kind %d (passive/explicit-memory) unsupported", kind)
+		}
+		// Active segment, memory 0: a constant i32 offset expression.
+		off, err := r.constI32Expr()
+		if err != nil {
+			return err
+		}
+		bytes, err := r.name() // length-prefixed byte vector, reused
+		if err != nil {
+			return err
+		}
+		m.Data = append(m.Data, DataSegment{Offset: off, Bytes: []byte(bytes)})
+	}
+	return nil
+}
+
+// constI32Expr reads a constant offset expression of the form
+// `i32.const N; end` and returns N.
+func (r *reader) constI32Expr() (int, error) {
+	op, err := r.byte()
+	if err != nil {
+		return 0, err
+	}
+	if Opcode(op) != OpI32Const {
+		return 0, fmt.Errorf("data offset expr: expected i32.const, got 0x%02x", op)
+	}
+	v, err := r.s64()
+	if err != nil {
+		return 0, err
+	}
+	end, err := r.byte()
+	if err != nil {
+		return 0, err
+	}
+	if Opcode(end) != OpEnd {
+		return 0, fmt.Errorf("data offset expr: expected end, got 0x%02x", end)
+	}
+	return int(int32(v)), nil
 }
 
 func decodeCodeSection(r *reader, m *Module, funcTypeIdx []uint32) error {
@@ -224,6 +311,17 @@ func decodeFuncBody(r *reader, fn *Func) error {
 				return err
 			}
 			ins.F64 = math.Float64frombits(binary.LittleEndian.Uint64(bs))
+		case immMemarg:
+			if _, err = r.u32(); err != nil { // align (ignored)
+				return err
+			}
+			if ins.U32, err = r.u32(); err != nil { // offset
+				return err
+			}
+		case immMemory:
+			if _, err = r.byte(); err != nil { // memory index (only 0 modelled)
+				return err
+			}
 		}
 		fn.Body = append(fn.Body, ins)
 	}

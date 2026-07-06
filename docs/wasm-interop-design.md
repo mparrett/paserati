@@ -193,12 +193,23 @@ both cross-checked against wasmtime. Caveat: `Chunk.DisassembleChunk` recurses
 into function constants, so it stack-overflows on a self-referential (recursive)
 chunk — a VM-disassembler limitation, not a codegen bug; execution is fine.
 
-**Phase 5 (stretch) — linear memory.**
-`i32.load/store` over an `ArrayBufferObject`. Unlocks anything that touches
-memory (string hashing, etc.). Likely a separate effort.
+**Phase 5 — linear memory. ✅ DONE.**
+`pkg/wasm/memory.go` backs a module's linear memory with a real paserati
+`ArrayBuffer` and a set of native load/store helpers that close over its bytes.
+Each `i32.load/store` (plus the 8/16-bit width variants) lowers to an `OpCall`
+into a helper, with the static memarg offset folded in as a const argument — the
+helpers do byte-addressed, little-endian, unaligned-safe access and bounds-check
+every effective address, so an out-of-range access faults instead of corrupting.
+The decoder gained the Memory and Data sections (active segments with a constant
+i32 offset) and the memarg immediate; `memory.grow` is unsupported, so the buffer
+never reallocates and the closed-over slice stays valid. Tests: `sum4` (load
+from a data segment), `rw`/`bytes` (store→load round-trip incl. `store8`
+truncation), `arrsum` (computed-address load in a loop), and an out-of-bounds
+fault — all cross-checked against wasmtime.
 
 **Out of scope for the experiment:** imports/host functions, tables/`call_indirect`,
-SIMD, threads, GC proposal, full trap semantics, >256 registers.
+SIMD, threads, GC proposal, `memory.grow`, full trap semantics, >256 registers,
+faithful i32 wrap-around (JS number math is used directly).
 
 ### Try it
 

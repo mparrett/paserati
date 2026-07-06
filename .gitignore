@@ -51,6 +51,7 @@ mcp-go-debugger.log
 dome.js
 # Built binaries — anchored so they don't also swallow cmd/paserati-*/ source dirs.
 /paserati-analyze
+/paserati-wasm
 /paserati-v8bench
 /bench-ratchet
 /bench-test262
