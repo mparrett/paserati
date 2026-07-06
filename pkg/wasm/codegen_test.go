@@ -220,6 +220,43 @@ func TestCompileGlobalMutablePersists(t *testing.T) {
 	}
 }
 
+func callI64(t *testing.T, m *vm.VM, fn vm.Value) int64 {
+	t.Helper()
+	res, err := m.Call(fn, vm.Undefined, nil)
+	if err != nil {
+		t.Fatalf("call error: %v", err)
+	}
+	return asI64(res)
+}
+
+func TestCompileI64ExactRoundtrip(t *testing.T) {
+	// Both values exceed float64's 2^53 exact range — they only round-trip if
+	// i64 is carried exactly (BigInt), not as a float64.
+	m := mustDecode(t, "testdata/i64_roundtrip.wasm")
+	exports, err := CompileModule(m)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	vmi := vm.NewVM()
+	if got := callI64(t, vmi, exports["i64rt"]); got != 0x123456789ABCDEF0 {
+		t.Errorf("i64rt() = %d, want %d", got, int64(0x123456789ABCDEF0))
+	}
+	if got := callI64(t, vmi, exports["i64add"]); got != (1<<53)+2 {
+		t.Errorf("i64add() = %d, want %d", got, int64((1<<53)+2))
+	}
+}
+
+func TestCompileFloatRoundtrip(t *testing.T) {
+	m, fn := compileModuleExport(t, "testdata/float_roundtrip.wasm", "f64rt")
+	if got := callI(t, m, fn, 3.14159); got != 3.14159 {
+		t.Errorf("f64rt(3.14159) = %v, want 3.14159", got)
+	}
+	_, f32 := compileModuleExport(t, "testdata/float_roundtrip.wasm", "f32rt")
+	if got := callI(t, m, f32, 1.5); got != 1.5 {
+		t.Errorf("f32rt(1.5) = %v, want 1.5", got)
+	}
+}
+
 func TestCompileFuncRejectsCall(t *testing.T) {
 	// CompileFunc (single-function) can't resolve calls.
 	m := mustDecode(t, "testdata/recfib.wasm")
