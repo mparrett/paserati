@@ -70,19 +70,71 @@ type MemType struct {
 	HasMax bool
 }
 
-// DataSegment is an active data-section entry: Bytes copied to memory at Offset.
+// TableType is a table's element type and size limits. ElemType is a wasm
+// reference type byte (0x70 funcref, 0x6f externref).
+type TableType struct {
+	ElemType byte
+	Min      uint32
+	Max      uint32
+	HasMax   bool
+}
+
+// Global is a module global: its value type, mutability, and (for the subset)
+// a constant i32/i64 initialiser.
+type Global struct {
+	Type    ValType
+	Mutable bool
+	Init    int64
+}
+
+// ImportKind enumerates the four import descriptor kinds.
+type ImportKind byte
+
+const (
+	ImportFunc   ImportKind = 0
+	ImportTable  ImportKind = 1
+	ImportMemory ImportKind = 2
+	ImportGlobal ImportKind = 3
+)
+
+// Import is one entry of the import section. Only the field relevant to Kind is
+// meaningful (TypeIndex for functions).
+type Import struct {
+	Module    string
+	Field     string
+	Kind      ImportKind
+	TypeIndex uint32 // for ImportFunc
+}
+
+// ElemSegment is an active element segment: FuncIndices placed into a table
+// starting at Offset. Passive/declarative segments are out of scope.
+type ElemSegment struct {
+	TableIndex  uint32
+	Offset      int
+	FuncIndices []uint32
+}
+
+// DataSegment is a data-section entry. Active segments copy Bytes to memory at
+// Offset; passive segments (Passive) are staged for memory.init.
 type DataSegment struct {
-	Offset int
-	Bytes  []byte
+	Passive bool
+	Offset  int
+	Bytes   []byte
 }
 
 // Module is the decoded IR.
 type Module struct {
-	Types   []FuncType
-	Funcs   []Func
-	Exports []Export
-	Memory  *MemType // nil when the module declares no memory
-	Data    []DataSegment
+	Types             []FuncType
+	Imports           []Import
+	ImportedFuncCount int // wasm func indices [0,N) are imports; Funcs start at N
+	Funcs             []Func
+	Tables            []TableType
+	Globals           []Global
+	Exports           []Export
+	Elems             []ElemSegment
+	Memory            *MemType // nil when the module declares no memory
+	DataCount         uint32
+	Data              []DataSegment
 }
 
 // FuncExport returns the export with the given name if it's a function export.
@@ -100,10 +152,11 @@ func (m *Module) FuncExport(name string) (*Export, bool) {
 //   - I64: integer const value, or a block type (for block/loop/if)
 //   - F64: float const value (f32 widened to f64)
 type Instr struct {
-	Op  Opcode
-	U32 uint32
-	I64 int64
-	F64 float64
+	Op     Opcode
+	U32    uint32
+	I64    int64
+	F64    float64
+	Labels []uint32 // br_table: the case label vector (default is in U32)
 }
 
 // BlockTypeEmpty is the block-type immediate meaning "no result" (0x40).

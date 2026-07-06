@@ -88,20 +88,56 @@ const (
 	OpI32Rotr Opcode = 0x78
 )
 
+// Additional opcodes seen in real (TinyGo/LLVM) output. Decoding-level support:
+// these parse into the IR; codegen may not lower all of them yet.
+const (
+	OpBrTable      Opcode = 0x0e // vec<labelidx> + default labelidx
+	OpCallIndirect Opcode = 0x11 // typeidx + tableidx
+	OpSelectT      Opcode = 0x1c // select with an explicit result-type vector
+
+	// Wider memory access (memarg immediate). i32 widths are declared above.
+	OpI64Load    Opcode = 0x29
+	OpF32Load    Opcode = 0x2a
+	OpF64Load    Opcode = 0x2b
+	OpI64Load8S  Opcode = 0x30
+	OpI64Load8U  Opcode = 0x31
+	OpI64Load16S Opcode = 0x32
+	OpI64Load16U Opcode = 0x33
+	OpI64Load32S Opcode = 0x34
+	OpI64Load32U Opcode = 0x35
+	OpI64Store   Opcode = 0x37
+	OpF32Store   Opcode = 0x38
+	OpF64Store   Opcode = 0x39
+	OpI64Store8  Opcode = 0x3c
+	OpI64Store16 Opcode = 0x3d
+	OpI64Store32 Opcode = 0x3e
+
+	// Synthetic internal opcodes for the 0xFC-prefixed bulk-memory ops (the wire
+	// encoding is a two-byte 0xFC/subop; we map them into unused single-byte
+	// space so Instr.Op stays a byte).
+	OpMemoryInit Opcode = 0xe0 // dataidx in Instr.U32
+	OpDataDrop   Opcode = 0xe1 // dataidx in Instr.U32
+	OpMemoryCopy Opcode = 0xe2
+	OpMemoryFill Opcode = 0xe3
+)
+
 // immKind describes the immediate operand(s) that follow an opcode in the
 // binary stream. Anything not listed here has no immediate.
 type immKind int
 
 const (
-	immNone      immKind = iota
-	immU32               // one unsigned LEB128 (index / label depth)
-	immBlockType         // block signature (single byte 0x40/valtype, or s33 LEB)
-	immI32Const          // signed LEB128, 32-bit
-	immI64Const          // signed LEB128, 64-bit
-	immF32Const          // 4 raw little-endian bytes
-	immF64Const          // 8 raw little-endian bytes
-	immMemarg            // two u32 LEB128 (align, offset); offset kept in Instr.U32
-	immMemory            // single memory-index byte (memory.size/grow)
+	immNone         immKind = iota
+	immU32                  // one unsigned LEB128 (index / label depth)
+	immBlockType            // block signature (single byte 0x40/valtype, or s33 LEB)
+	immI32Const             // signed LEB128, 32-bit
+	immI64Const             // signed LEB128, 64-bit
+	immF32Const             // 4 raw little-endian bytes
+	immF64Const             // 8 raw little-endian bytes
+	immMemarg               // two u32 LEB128 (align, offset); offset kept in Instr.U32
+	immMemory               // single memory-index byte (memory.size/grow)
+	immBrTable              // vec<labelidx> (Instr.Labels) + default labelidx (Instr.U32)
+	immCallIndirect         // typeidx (Instr.U32) + tableidx (Instr.I64)
+	immSelectT              // vec<valtype> — result types of a typed select (consumed)
 )
 
 // immediateKind returns how to decode an opcode's immediate, and whether the
@@ -119,7 +155,10 @@ func immediateKind(op Opcode) (immKind, bool) {
 	case OpBr, OpBrIf, OpCall, OpLocalGet, OpLocalSet, OpLocalTee, OpGlobalGet, OpGlobalSet:
 		return immU32, true
 	case OpI32Load, OpI32Load8S, OpI32Load8U, OpI32Load16S, OpI32Load16U,
-		OpI32Store, OpI32Store8, OpI32Store16:
+		OpI32Store, OpI32Store8, OpI32Store16,
+		OpI64Load, OpF32Load, OpF64Load,
+		OpI64Load8S, OpI64Load8U, OpI64Load16S, OpI64Load16U, OpI64Load32S, OpI64Load32U,
+		OpI64Store, OpF32Store, OpF64Store, OpI64Store8, OpI64Store16, OpI64Store32:
 		return immMemarg, true
 	case OpMemorySize, OpMemoryGrow:
 		return immMemory, true
@@ -131,7 +170,19 @@ func immediateKind(op Opcode) (immKind, bool) {
 		return immF32Const, true
 	case OpF64Const:
 		return immF64Const, true
+	case OpBrTable:
+		return immBrTable, true
+	case OpCallIndirect:
+		return immCallIndirect, true
+	case OpSelectT:
+		return immSelectT, true
 	default:
+		// The numeric/comparison/conversion range (0x45–0xC4) is entirely
+		// immediate-free in the MVP, so accept it wholesale — that covers i64/f32/
+		// f64 arithmetic and conversions without enumerating every opcode.
+		if op >= 0x45 && op <= 0xc4 {
+			return immNone, true
+		}
 		return immNone, false
 	}
 }
@@ -155,6 +206,11 @@ var opNames = map[Opcode]string{
 	OpI32Load16S: "i32.load16_s", OpI32Load16U: "i32.load16_u",
 	OpI32Store: "i32.store", OpI32Store8: "i32.store8", OpI32Store16: "i32.store16",
 	OpMemorySize: "memory.size", OpMemoryGrow: "memory.grow",
+	OpBrTable: "br_table", OpCallIndirect: "call_indirect", OpSelectT: "select_t",
+	OpI64Load: "i64.load", OpF32Load: "f32.load", OpF64Load: "f64.load",
+	OpI64Store: "i64.store", OpF32Store: "f32.store", OpF64Store: "f64.store",
+	OpMemoryInit: "memory.init", OpDataDrop: "data.drop",
+	OpMemoryCopy: "memory.copy", OpMemoryFill: "memory.fill",
 }
 
 func (op Opcode) String() string {
