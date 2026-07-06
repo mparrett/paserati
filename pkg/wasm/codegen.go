@@ -6,24 +6,28 @@ import (
 	"github.com/nooga/paserati/pkg/vm"
 )
 
-// Codegen translates the wasm IR into paserati bytecode. Phase 2 handles
-// straight-line functions (no branches): consts, local.get/set/tee, numeric
-// binops, drop, return. Control flow (block/loop/if/br/br_if) and call are
-// rejected with a clear error and land in Phases 3–4.
+// Codegen translates the wasm IR into paserati bytecode. Phases 2–3 cover a
+// single function's numeric core plus structured control flow: consts,
+// local.get/set/tee, numeric binops, drop, return, and block/loop/if/br/br_if.
+// call (cross-function) and memory are Phase 4+ and error clearly.
 //
-// Register model — the crux of the stack→register lowering:
-//   - Locals occupy the low register band R0..R(numLocals-1). Params are the
-//     first numParams of those (matching paserati's calling convention: args
-//     arrive in R0..). Declared locals follow and are zero-initialised.
+// Register model — the stack→register lowering:
+//   - Locals occupy the low band R0..R(numLocals-1). Params are the first
+//     numParams (matching paserati's convention: args arrive in R0..). Declared
+//     locals follow and are zero-initialised.
 //   - The wasm operand stack maps *directly* onto registers above the locals:
-//     stack depth d ↔ register (base+d), base = numLocals. Pushing bumps depth,
-//     popping drops it. A binop reads the top two registers and writes the
-//     lower of them in place — no free list, no moves.
+//     depth d ↔ register (base+d), base = numLocals. A binop reads the top two
+//     registers and rewrites the lower in place — no free list, no moves.
+//
+// Control-flow lowering — structured labels to flat jumps:
+//   - block/if are forward labels: a branch to them jumps to just past their
+//     `end`, backpatched once that offset is known.
+//   - loop is a backward label: a branch jumps to the loop header, known on
+//     entry.
+//   - br_if inverts through OpJumpIfFalse (the VM has no jump-if-true).
+//   - Only empty block types are supported (branches carry no values), which
+//     keeps the register mapping consistent across labels.
 
-// binopOp maps a wasm numeric binop to its paserati opcode. Comparisons are
-// included for Phase 3 (br_if consumes them); note they yield a JS boolean,
-// which is correct for branching but not yet for arithmetic use — see the doc's
-// i32-semantics risk.
 var binopOp = map[Opcode]vm.OpCode{
 	OpI32Add:  vm.OpAdd,
 	OpI32Sub:  vm.OpSubtract,
@@ -44,12 +48,24 @@ var binopOp = map[Opcode]vm.OpCode{
 	OpI32GeS:  vm.OpGreaterEqual,
 }
 
+// ctrlFrame tracks one open block/loop/if for branch resolution.
+type ctrlFrame struct {
+	op         Opcode
+	startDepth int   // operand-stack depth at frame entry (after popping an if cond)
+	header     int   // loop: code offset of the branch target
+	brPatches  []int // block/if: jump-operand positions to patch to the frame's end
+	elsePatch  int   // if: operand pos of the cond-false jump; -1 once resolved
+	hasElse    bool
+}
+
 type funcGen struct {
-	c      *vm.Chunk
-	fn     *Func
-	base   int // first operand-stack register (== numLocals)
-	depth  int // current operand-stack depth
-	maxReg int // high-water register count, for MaxRegs
+	c           *vm.Chunk
+	fn          *Func
+	base        int  // first operand-stack register (== numLocals)
+	depth       int  // current operand-stack depth
+	maxReg      int  // high-water register count
+	ctrl        []*ctrlFrame
+	unreachable bool // in a dead region after an unconditional branch/return
 }
 
 // CompileFunc lowers a single function to a callable paserati Value.
@@ -61,7 +77,6 @@ func CompileFunc(fn *Func, name string) (vm.Value, error) {
 		return vm.Undefined, fmt.Errorf("%s: %d locals exceeds register file", name, g.base)
 	}
 
-	// Zero-initialise declared locals (params already hold the incoming args).
 	if len(fn.Locals) > 0 {
 		zero := g.c.AddConstant(vm.Number(0))
 		for i := fn.NumParams(); i < fn.NumLocals(); i++ {
@@ -80,9 +95,14 @@ func CompileFunc(fn *Func, name string) (vm.Value, error) {
 
 func (g *funcGen) emitBody() error {
 	for _, ins := range g.fn.Body {
+		// Dead code after an unconditional branch/return: only structural
+		// delimiters are meaningful until the region closes.
+		if g.unreachable && ins.Op != OpEnd && ins.Op != OpElse {
+			return fmt.Errorf("unreachable code before %s not supported", ins.Op)
+		}
+
 		switch ins.Op {
 		case OpNop:
-			// nothing
 
 		case OpI32Const:
 			dst := g.push()
@@ -93,49 +113,124 @@ func (g *funcGen) emitBody() error {
 				return fmt.Errorf("local.get %d out of range", ins.U32)
 			}
 			dst := g.push()
-			g.emit(vm.OpMove, dst, byte(ins.U32)) // copy local → fresh temp
+			g.emit(vm.OpMove, dst, byte(ins.U32))
 
 		case OpLocalSet:
 			if int(ins.U32) >= g.fn.NumLocals() {
 				return fmt.Errorf("local.set %d out of range", ins.U32)
 			}
-			src := g.pop()
-			g.emit(vm.OpMove, byte(ins.U32), src)
+			g.emit(vm.OpMove, byte(ins.U32), g.pop())
 
 		case OpLocalTee:
 			if int(ins.U32) >= g.fn.NumLocals() {
 				return fmt.Errorf("local.tee %d out of range", ins.U32)
 			}
-			src := g.peek() // leaves the value on the stack
-			g.emit(vm.OpMove, byte(ins.U32), src)
+			g.emit(vm.OpMove, byte(ins.U32), g.peek()) // leaves value on the stack
+
+		case OpI32Eqz:
+			// eqz(x) == (x == 0); logical-not yields the boolean br_if wants.
+			a := g.pop()
+			g.emit(vm.OpNot, g.push(), a)
 
 		case OpDrop:
 			g.pop()
 
 		case OpReturn:
 			g.emitReturn()
+			g.unreachable = true
+
+		case OpBlock, OpLoop:
+			if ins.I64 != BlockTypeEmpty {
+				return fmt.Errorf("%s with non-empty block type unsupported", ins.Op)
+			}
+			f := &ctrlFrame{op: ins.Op, startDepth: g.depth, elsePatch: -1}
+			if ins.Op == OpLoop {
+				f.header = g.here()
+			}
+			g.ctrl = append(g.ctrl, f)
+
+		case OpIf:
+			if ins.I64 != BlockTypeEmpty {
+				return fmt.Errorf("if with non-empty block type unsupported")
+			}
+			cond := g.pop()
+			f := &ctrlFrame{op: OpIf, startDepth: g.depth, elsePatch: g.emitJumpIfFalse(cond)}
+			g.ctrl = append(g.ctrl, f)
+
+		case OpElse:
+			f := g.ctrl[len(g.ctrl)-1]
+			if f.op != OpIf {
+				return fmt.Errorf("else without matching if")
+			}
+			if !g.unreachable {
+				// End of the then-branch: skip over the else to the frame end.
+				f.brPatches = append(f.brPatches, g.emitJump())
+			}
+			g.patchTo(f.elsePatch, g.here()) // cond-false lands at the else body
+			f.elsePatch = -1
+			f.hasElse = true
+			g.depth = f.startDepth
+			g.unreachable = false
 
 		case OpEnd:
-			// At Phase 2 there are no nested blocks, so any `end` is the
-			// function epilogue.
-			g.emitReturn()
-
-		default:
-			if pop, ok := binopOp[ins.Op]; ok {
-				b := g.pop()
-				a := g.pop()
-				dst := g.push() // == a's register (in-place)
-				g.emit3(pop, dst, a, b)
+			if len(g.ctrl) == 0 {
+				g.emitReturn() // function epilogue
 				continue
 			}
-			return fmt.Errorf("opcode %s not supported in phase 2", ins.Op)
+			f := g.ctrl[len(g.ctrl)-1]
+			g.ctrl = g.ctrl[:len(g.ctrl)-1]
+			if f.op == OpIf && f.elsePatch >= 0 {
+				g.patchTo(f.elsePatch, g.here()) // if with no else: cond-false skips to end
+			}
+			for _, p := range f.brPatches {
+				g.patchTo(p, g.here())
+			}
+			g.depth = f.startDepth // empty block type ⇒ no results
+			g.unreachable = false
+
+		case OpBr:
+			if err := g.branchTo(ins.U32); err != nil {
+				return err
+			}
+			g.unreachable = true
+
+		case OpBrIf:
+			cond := g.pop()
+			skip := g.emitJumpIfFalse(cond) // fall through when the branch is not taken
+			if err := g.branchTo(ins.U32); err != nil {
+				return err
+			}
+			g.patchTo(skip, g.here())
+
+		default:
+			op, ok := binopOp[ins.Op]
+			if !ok {
+				return fmt.Errorf("opcode %s not supported yet", ins.Op)
+			}
+			b := g.pop()
+			a := g.pop()
+			dst := g.push() // == a's register (in place)
+			g.emit3(op, dst, a, b)
 		}
 	}
 	return nil
 }
 
-// emitReturn returns the top-of-stack value (single-result functions) or
-// undefined for void functions.
+// branchTo emits a jump to the depth-th enclosing control frame (0 = innermost).
+func (g *funcGen) branchTo(depth uint32) error {
+	i := len(g.ctrl) - 1 - int(depth)
+	if i < 0 {
+		return fmt.Errorf("branch depth %d exceeds control stack", depth)
+	}
+	f := g.ctrl[i]
+	if f.op == OpLoop {
+		g.emitJumpTo(f.header) // backward target, known
+	} else {
+		f.brPatches = append(f.brPatches, g.emitJump()) // forward, patched at end
+	}
+	return nil
+}
+
 func (g *funcGen) emitReturn() {
 	if len(g.fn.Type.Results) == 0 || g.depth == 0 {
 		g.c.WriteOpCode(vm.OpReturnUndefined, 1)
@@ -164,7 +259,9 @@ func (g *funcGen) pop() byte {
 
 func (g *funcGen) peek() byte { return byte(g.base + g.depth - 1) }
 
-// --- emit helpers ---
+// --- emit + jump/backpatch helpers ---
+
+func (g *funcGen) here() int { return len(g.c.Code) }
 
 func (g *funcGen) loadConst(reg byte, idx uint16) {
 	g.c.WriteOpCode(vm.OpLoadConst, 1)
@@ -183,4 +280,35 @@ func (g *funcGen) emit3(op vm.OpCode, a, b, c byte) {
 	g.c.EmitByte(a)
 	g.c.EmitByte(b)
 	g.c.EmitByte(c)
+}
+
+// emitJump writes OpJump with a placeholder offset and returns the operand
+// position to backpatch.
+func (g *funcGen) emitJump() int {
+	g.c.WriteOpCode(vm.OpJump, 1)
+	pos := g.here()
+	g.c.WriteUint16(0)
+	return pos
+}
+
+func (g *funcGen) emitJumpTo(target int) {
+	g.patchTo(g.emitJump(), target)
+}
+
+// emitJumpIfFalse writes OpJumpIfFalse with a placeholder offset and returns the
+// operand position to backpatch.
+func (g *funcGen) emitJumpIfFalse(cond byte) int {
+	g.c.WriteOpCode(vm.OpJumpIfFalse, 1)
+	g.c.EmitByte(cond)
+	pos := g.here()
+	g.c.WriteUint16(0)
+	return pos
+}
+
+// patchTo fills the 2-byte offset at pos so execution lands on target. Offsets
+// are relative to the ip after the offset bytes (pos+2).
+func (g *funcGen) patchTo(pos, target int) {
+	off := int16(target - (pos + 2))
+	g.c.Code[pos] = byte(uint16(off) >> 8)
+	g.c.Code[pos+1] = byte(uint16(off) & 0xff)
 }
