@@ -257,6 +257,56 @@ func TestCompileFloatRoundtrip(t *testing.T) {
 	}
 }
 
+func TestCompileSelect(t *testing.T) {
+	m, fn := compileModuleExport(t, "testdata/select.wasm", "sel")
+	if got := callI(t, m, fn, 10, 20, 1); got != 10 {
+		t.Errorf("sel(10,20,1) = %v, want 10", got)
+	}
+	if got := callI(t, m, fn, 10, 20, 0); got != 20 {
+		t.Errorf("sel(10,20,0) = %v, want 20", got)
+	}
+}
+
+func TestCompileBrTable(t *testing.T) {
+	m, fn := compileModuleExport(t, "testdata/brtable.wasm", "sw")
+	for _, c := range []struct{ i, want float64 }{{0, 100}, {1, 200}, {2, 300}, {5, 999}} {
+		if got := callI(t, m, fn, c.i); got != c.want {
+			t.Errorf("sw(%v) = %v, want %v", c.i, got, c.want)
+		}
+	}
+}
+
+func TestCompileUnsigned(t *testing.T) {
+	m := mustDecode(t, "testdata/unsigned.wasm")
+	exports, err := CompileModule(m)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	vmi := vm.NewVM()
+	// gt_u(-1, 1): 0xFFFFFFFF > 1 unsigned → 1 (signed would be 0).
+	if got := callI(t, vmi, exports["gtu"], -1, 1); got != 1 {
+		t.Errorf("gtu(-1,1) = %v, want 1 (unsigned)", got)
+	}
+	if got := callI(t, vmi, exports["divu"], -1, 2); got != 2147483647 {
+		t.Errorf("divu(-1,2) = %v, want 2147483647", got)
+	}
+}
+
+func TestCompileBulkMemory(t *testing.T) {
+	// fill mem[0..4]=0xAB, copy to mem[8..12], read back → 0xABABABAB (signed).
+	m, fn := compileModuleExport(t, "testdata/bulkmem.wasm", "fillcopy")
+	if got := callI(t, m, fn); got != -1414812757 {
+		t.Errorf("fillcopy() = %v, want -1414812757", got)
+	}
+}
+
+func TestCompileRotate(t *testing.T) {
+	m, fn := compileModuleExport(t, "testdata/rotate.wasm", "rotl")
+	if got := callI(t, m, fn, 1, 4); got != 16 {
+		t.Errorf("rotl(1,4) = %v, want 16", got)
+	}
+}
+
 func TestCompileFuncRejectsCall(t *testing.T) {
 	// CompileFunc (single-function) can't resolve calls.
 	m := mustDecode(t, "testdata/recfib.wasm")
