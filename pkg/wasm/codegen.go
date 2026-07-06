@@ -68,7 +68,7 @@ type funcGen struct {
 	vals        []vm.Value  // one callable Value per module function (for call)
 	mem         *memory     // linear memory + load/store helpers; nil if none
 	glob        *globals    // module globals + get/set helpers; nil if none
-	i64add      vm.Value    // shared native helper for exact i64.add
+	rt          *rtHelpers  // shared stateless helpers (i64.add, unsigned i32 ops)
 	out         []*asmInstr // symbolic instruction list, peepholed then encoded
 	base        int         // first operand-stack register (== numLocals)
 	depth       int         // current operand-stack depth
@@ -105,7 +105,7 @@ func CompileModule(m *Module) (map[string]vm.Value, error) {
 	if len(m.Globals) > 0 {
 		glob = newGlobals(m)
 	}
-	i64add := makeI64Add()
+	rt := newRTHelpers()
 	vals := make([]vm.Value, len(m.Funcs))
 	for i := range m.Funcs {
 		fn := &m.Funcs[i]
@@ -114,7 +114,7 @@ func CompileModule(m *Module) (map[string]vm.Value, error) {
 	}
 	for i := range m.Funcs {
 		fn := &m.Funcs[i]
-		g := &funcGen{c: vals[i].AsFunction().Chunk, fn: fn, mod: m, vals: vals, mem: mem, glob: glob, i64add: i64add}
+		g := &funcGen{c: vals[i].AsFunction().Chunk, fn: fn, mod: m, vals: vals, mem: mem, glob: glob, rt: rt}
 		if err := g.compileInto(vals[i]); err != nil {
 			return nil, fmt.Errorf("%s: %w", funcName(m, i), err)
 		}
@@ -181,7 +181,7 @@ func (g *funcGen) emitBody() error {
 			g.loadConst(dst, g.c.AddConstant(i64Value(ins.I64)))
 
 		case OpI64Add:
-			g.emitHelperBinop(g.i64add)
+			g.emitHelperBinop(g.rt.i64add)
 
 		case OpLocalGet:
 			if int(ins.U32) >= g.fn.NumLocals() {
@@ -209,6 +209,27 @@ func (g *funcGen) emitBody() error {
 
 		case OpDrop:
 			g.pop()
+
+		case OpSelect, OpSelectT:
+			g.emitSelect()
+
+		case OpUnreachable:
+			g.emitUnreachable()
+
+		case OpBrTable:
+			if err := g.emitBrTable(ins.Labels, ins.U32); err != nil {
+				return err
+			}
+
+		case OpMemoryCopy:
+			if err := g.emitMemBulk(g.memBulkCopy()); err != nil {
+				return err
+			}
+
+		case OpMemoryFill:
+			if err := g.emitMemBulk(g.memBulkFill()); err != nil {
+				return err
+			}
 
 		case OpReturn:
 			g.emitReturn()
@@ -317,6 +338,10 @@ func (g *funcGen) emitBody() error {
 			}
 
 		default:
+			if helper, ok := g.rt.unsignedHelper(ins.Op); ok {
+				g.emitHelperBinop(helper) // unsigned compares / div / rem
+				continue
+			}
 			op, ok := binopOp[ins.Op]
 			if !ok {
 				return fmt.Errorf("opcode %s not supported yet", ins.Op)
@@ -362,10 +387,18 @@ func (g *funcGen) emitCall(funcIdx uint32) error {
 	if g.mod == nil {
 		return fmt.Errorf("call requires module compilation (use CompileModule)")
 	}
-	if int(funcIdx) >= len(g.mod.Funcs) {
+	// wasm func indices count imported functions first; our vals/Funcs hold only
+	// the defined functions.
+	imported := g.mod.ImportedFuncCount
+	if int(funcIdx) < imported {
+		im := g.mod.Imports[funcIdx] // imports are recorded in index order
+		return fmt.Errorf("call to imported func %s.%s (WASI host) not supported yet", im.Module, im.Field)
+	}
+	defIdx := int(funcIdx) - imported
+	if defIdx >= len(g.mod.Funcs) {
 		return fmt.Errorf("call %d out of range", funcIdx)
 	}
-	callee := g.mod.Funcs[funcIdx].Type
+	callee := g.mod.Funcs[defIdx].Type
 	argCount := len(callee.Params)
 	results := len(callee.Results)
 	if results > 1 {
@@ -379,7 +412,7 @@ func (g *funcGen) emitCall(funcIdx uint32) error {
 	if staging+1+argCount > g.maxReg {
 		g.maxReg = staging + 1 + argCount
 	}
-	g.loadConst(byte(staging), g.c.AddConstant(g.vals[funcIdx]))
+	g.loadConst(byte(staging), g.c.AddConstant(g.vals[defIdx]))
 	for k := 0; k < argCount; k++ {
 		src := byte(g.base + g.depth - argCount + k)
 		g.emit(vm.OpMove, byte(staging+1+k), src)
@@ -405,6 +438,62 @@ func blockResults(bt int64) (int, error) {
 	default:
 		return 0, fmt.Errorf("block type 0x%x (multi-value) unsupported", uint64(bt))
 	}
+}
+
+// emitSelect lowers `select` (stack: a, b, cond) to result = cond ? a : b.
+// The result reuses a's register, so the true branch needs no move.
+func (g *funcGen) emitSelect() {
+	cond := byte(g.base + g.depth - 1)
+	b := byte(g.base + g.depth - 2)
+	g.depth -= 3
+	result := g.push() // == a's slot; already holds a
+	useB := g.newLabel()
+	end := g.newLabel()
+	g.condJumpTo(cond, useB) // cond false → use b
+	g.jumpTo(end)            // cond true → a already in place
+	g.markLabel(useB)
+	g.emit(vm.OpMove, result, b)
+	g.markLabel(end)
+}
+
+// emitUnreachable traps: throw a wasm-unreachable error. Marks the rest of the
+// block dead.
+func (g *funcGen) emitUnreachable() {
+	t := byte(g.base + g.depth)
+	if g.base+g.depth+1 > g.maxReg {
+		g.maxReg = g.base + g.depth + 1
+	}
+	g.loadConst(t, g.c.AddConstant(vm.NewString("wasm: unreachable executed")))
+	g.emitOp1(vm.OpThrow, t)
+	g.unreachable = true
+}
+
+// emitBrTable lowers `br_table` to a compare chain: for each case i, if the
+// popped index equals i branch to labels[i], else fall through; a final
+// unconditional branch handles the default. (paserati has no computed jump.)
+func (g *funcGen) emitBrTable(labels []uint32, def uint32) error {
+	idx := byte(g.base + g.depth - 1)
+	g.depth-- // pop the index (its register value stays live above the stack)
+	cmp := byte(g.base + g.depth + 1)
+	ic := byte(g.base + g.depth + 2)
+	if int(ic)+1 > g.maxReg {
+		g.maxReg = int(ic) + 1
+	}
+	for i, lbl := range labels {
+		g.loadConst(ic, g.c.AddConstant(vm.Number(float64(i))))
+		g.emit3(vm.OpEqual, cmp, idx, ic)
+		skip := g.newLabel()
+		g.condJumpTo(cmp, skip) // idx != i → skip this case
+		if err := g.branchTo(lbl); err != nil {
+			return err
+		}
+		g.markLabel(skip)
+	}
+	if err := g.branchTo(def); err != nil {
+		return err
+	}
+	g.unreachable = true
+	return nil
 }
 
 func (g *funcGen) emitReturn() {

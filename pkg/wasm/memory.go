@@ -55,6 +55,8 @@ type memory struct {
 	storeI64 vm.Value
 	storeF32 vm.Value
 	storeF64 vm.Value
+	bulkCopy vm.Value
+	bulkFill vm.Value
 	size     vm.Value
 }
 
@@ -190,6 +192,29 @@ func newMemory(m *Module) (*memory, error) {
 		return vm.Undefined, nil
 	}
 
+	bulkCopy := func(args []vm.Value) (vm.Value, error) { // dst, src, n
+		dst := int(int32(args[0].ToFloat()))
+		src := int(int32(args[1].ToFloat()))
+		n := int(int32(args[2].ToFloat()))
+		if n < 0 || dst < 0 || src < 0 || dst+n > len(data) || src+n > len(data) {
+			return vm.Undefined, fmt.Errorf("memory.copy out of bounds")
+		}
+		copy(data[dst:dst+n], data[src:src+n]) // Go's copy is memmove-safe for overlap
+		return vm.Undefined, nil
+	}
+	bulkFill := func(args []vm.Value) (vm.Value, error) { // dst, val, n
+		dst := int(int32(args[0].ToFloat()))
+		val := byte(int32(args[1].ToFloat()))
+		n := int(int32(args[2].ToFloat()))
+		if n < 0 || dst < 0 || dst+n > len(data) {
+			return vm.Undefined, fmt.Errorf("memory.fill out of bounds")
+		}
+		for i := 0; i < n; i++ {
+			data[dst+i] = val
+		}
+		return vm.Undefined, nil
+	}
+
 	nbytes := len(data)
 	return &memory{
 		Buffer:   buf,
@@ -207,6 +232,8 @@ func newMemory(m *Module) (*memory, error) {
 		storeI64: vm.NewNativeFunction(3, false, "mem.store_i64", storeI64),
 		storeF32: vm.NewNativeFunction(3, false, "mem.store_f32", storeF32),
 		storeF64: vm.NewNativeFunction(3, false, "mem.store_f64", storeF64),
+		bulkCopy: vm.NewNativeFunction(3, false, "mem.copy", bulkCopy),
+		bulkFill: vm.NewNativeFunction(3, false, "mem.fill", bulkFill),
 		size: vm.NewNativeFunction(0, false, "mem.size", func([]vm.Value) (vm.Value, error) {
 			return vm.Number(float64(nbytes / wasmPageSize)), nil
 		}),
@@ -295,6 +322,20 @@ func (g *funcGen) loadHelper(op Opcode) vm.Value {
 	}
 }
 
+func (g *funcGen) memBulkCopy() vm.Value {
+	if g.mem == nil {
+		return vm.Undefined
+	}
+	return g.mem.bulkCopy
+}
+
+func (g *funcGen) memBulkFill() vm.Value {
+	if g.mem == nil {
+		return vm.Undefined
+	}
+	return g.mem.bulkFill
+}
+
 func (g *funcGen) storeHelper(op Opcode) vm.Value {
 	if g.mem == nil {
 		return vm.Undefined
@@ -313,6 +354,29 @@ func (g *funcGen) storeHelper(op Opcode) vm.Value {
 	default:
 		return g.mem.storeI32
 	}
+}
+
+// emitMemBulk lowers a 3-operand void bulk-memory op (memory.copy/fill) to a
+// helper call over the top three stack values.
+func (g *funcGen) emitMemBulk(helper vm.Value) error {
+	if g.mem == nil {
+		return fmt.Errorf("bulk memory op without a declared memory")
+	}
+	a := byte(g.base + g.depth - 3)
+	b := byte(g.base + g.depth - 2)
+	c := byte(g.base + g.depth - 1)
+	t := g.base + g.depth
+	if t+4 > g.maxReg {
+		g.maxReg = t + 4
+	}
+	g.loadConst(byte(t), g.c.AddConstant(helper))
+	g.emit(vm.OpMove, byte(t+1), a)
+	g.emit(vm.OpMove, byte(t+2), b)
+	g.emit(vm.OpMove, byte(t+3), c)
+	g.depth -= 3
+	dest := byte(g.base + g.depth)
+	g.emitCallOp(dest, byte(t), 3) // void
+	return nil
 }
 
 // emitHelperBinop lowers a two-operand op to a native helper call: stage
