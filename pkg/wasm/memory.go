@@ -214,8 +214,5 @@ func (g *funcGen) storeHelper(op Opcode) vm.Value {
 }
 
 func (g *funcGen) emitCallOp(dest, funcReg, argCount byte) {
-	g.c.WriteOpCode(vm.OpCall, 1)
-	g.c.EmitByte(dest)
-	g.c.EmitByte(funcReg)
-	g.c.EmitByte(argCount)
+	g.emit3(vm.OpCall, dest, funcReg, argCount)
 }

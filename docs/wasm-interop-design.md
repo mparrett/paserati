@@ -211,6 +211,28 @@ fault — all cross-checked against wasmtime.
 SIMD, threads, GC proposal, `memory.grow`, full trap semantics, >256 registers,
 faithful i32 wrap-around (JS number math is used directly).
 
+### Codegen quality — peephole
+
+Codegen emits into a symbolic instruction list (`asm.go`) with label-referencing
+jumps, so a peephole pass runs before byte offsets are fixed (removing an
+instruction can't invalidate a jump). Two passes, both scoped to basic blocks and
+provably safe:
+
+- **Copy propagation** rewrites a source that's a known copy of another register
+  back to the original — so a binop reads a local directly instead of through a
+  copy-on-`local.get` temp, and `local.get x; local.set y` chains coalesce to a
+  single move.
+- **Dead-store elimination** drops a pure write whose destination is overwritten
+  before it's read within the same block (always safe: the value can't escape the
+  block). Self-moves are dropped too.
+
+Across the fixtures this cut compiled code **~16%** (e.g. `sq` 22→12 bytes, `fib`
+101→71, `max` 35→25). It's intentionally conservative — a store that's dead only
+across a block boundary is kept, since proving that needs global liveness. `OpCall`
+is treated as a barrier (it reads an implicit register range), so memory- and
+call-heavy functions optimize less. Further wins available: global liveness DCE,
+const-load/move coalescing.
+
 ### Try it
 
 `cmd/paserati-wasm` loads a `.wasm`, compiles it, and calls an export:
