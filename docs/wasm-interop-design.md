@@ -200,6 +200,17 @@ memory (string hashing, etc.). Likely a separate effort.
 **Out of scope for the experiment:** imports/host functions, tables/`call_indirect`,
 SIMD, threads, GC proposal, full trap semantics, >256 registers.
 
+### Try it
+
+`cmd/paserati-wasm` loads a `.wasm`, compiles it, and calls an export:
+
+```
+go build -o paserati-wasm ./cmd/paserati-wasm
+./paserati-wasm pkg/wasm/testdata/recfib.wasm            # list exports + sigs
+./paserati-wasm pkg/wasm/testdata/recfib.wasm fib 20     # → 6765
+./paserati-wasm pkg/wasm/testdata/gcd.wasm gcd 1071 462  # → 21
+```
+
 ### Success criterion — ✅ MET
 
 `translate(fib.wasm)` produces a function value `f` such that `f(20) == 6765`,
