@@ -35,11 +35,20 @@ const wasmPageSize = 65536
 // memory backs a module's linear memory with a real paserati ArrayBuffer and a
 // set of native load/store helpers that close over its bytes. Memory ops lower
 // to OpCall into these helpers: byte-addressed, little-endian, unaligned-safe —
-// which sidesteps paserati's element-indexed TypedArray access. memory.grow is
-// unsupported, so the buffer never reallocates and the closed-over slice stays
-// valid.
+// which sidesteps paserati's element-indexed TypedArray access.
+//
+// memory.grow reallocates the backing slice. Because all the helper closures
+// capture the `data` variable (not a copy), reassigning it in the grow helper
+// updates every helper at once. The WASI host reads through getData() for the
+// same reason. The exported Buffer Value goes stale after a grow (it still points
+// at the pre-grow array) — acceptable while nothing re-exports live memory.
 type memory struct {
 	Buffer vm.Value // the ArrayBuffer, for future exposure/exporting
+
+	// getData returns the live backing slice, following memory.grow reallocations.
+	getData func() []byte
+
+	grow vm.Value // memory.grow(delta) -> old page count (or -1)
 
 	loadI32  vm.Value
 	load8U   vm.Value
@@ -215,9 +224,34 @@ func newMemory(m *Module) (*memory, error) {
 		return vm.Undefined, nil
 	}
 
-	nbytes := len(data)
+	// memory.grow(delta): reallocate to old+delta pages (zero-filled), reassigning
+	// the captured `data` so every helper follows. Returns the previous page count
+	// per the wasm spec, or -1 on an (unbounded here) failure. Max is honoured when
+	// declared.
+	maxPages := -1
+	if m.Memory.HasMax {
+		maxPages = int(m.Memory.Max)
+	}
+	grow := func(args []vm.Value) (vm.Value, error) {
+		delta := int(int32(args[0].ToFloat()))
+		old := len(data) / wasmPageSize
+		if delta < 0 {
+			return vm.Number(-1), nil
+		}
+		newPages := old + delta
+		if maxPages >= 0 && newPages > maxPages {
+			return vm.Number(-1), nil
+		}
+		grown := make([]byte, newPages*wasmPageSize)
+		copy(grown, data)
+		data = grown
+		return vm.Number(float64(old)), nil
+	}
+
 	return &memory{
 		Buffer:   buf,
+		getData:  func() []byte { return data },
+		grow:     vm.NewNativeFunction(1, false, "mem.grow", grow),
 		loadI32:  vm.NewNativeFunction(2, false, "mem.load_i32", load(4, true)),
 		load8U:   vm.NewNativeFunction(2, false, "mem.load8_u", load(1, false)),
 		load8S:   vm.NewNativeFunction(2, false, "mem.load8_s", load(1, true)),
@@ -235,7 +269,7 @@ func newMemory(m *Module) (*memory, error) {
 		bulkCopy: vm.NewNativeFunction(3, false, "mem.copy", bulkCopy),
 		bulkFill: vm.NewNativeFunction(3, false, "mem.fill", bulkFill),
 		size: vm.NewNativeFunction(0, false, "mem.size", func([]vm.Value) (vm.Value, error) {
-			return vm.Number(float64(nbytes / wasmPageSize)), nil
+			return vm.Number(float64(len(data) / wasmPageSize)), nil
 		}),
 	}, nil
 }
@@ -292,6 +326,16 @@ func (g *funcGen) emitMemSize() error {
 	g.loadConst(byte(t), g.c.AddConstant(g.mem.size))
 	dest := g.push()
 	g.emitCallOp(dest, byte(t), 0)
+	return nil
+}
+
+// emitMemGrow lowers memory.grow: pop the page delta, call the grow helper, push
+// the previous page count (or -1).
+func (g *funcGen) emitMemGrow() error {
+	if g.mem == nil {
+		return fmt.Errorf("memory.grow without a declared memory")
+	}
+	g.emitHelperUnop(g.mem.grow)
 	return nil
 }
 
@@ -394,6 +438,21 @@ func (g *funcGen) emitHelperBinop(helper vm.Value) {
 	g.depth -= 2
 	dest := g.push()
 	g.emitCallOp(dest, byte(t), 2)
+}
+
+// emitHelperUnop lowers a one-operand op to a native helper call: stage
+// [helper, a] above the stack, call, and push the single result.
+func (g *funcGen) emitHelperUnop(helper vm.Value) {
+	a := byte(g.base + g.depth - 1)
+	t := g.base + g.depth
+	if t+2 > g.maxReg {
+		g.maxReg = t + 2
+	}
+	g.loadConst(byte(t), g.c.AddConstant(helper))
+	g.emit(vm.OpMove, byte(t+1), a)
+	g.depth-- // pop operand
+	dest := g.push()
+	g.emitCallOp(dest, byte(t), 1)
 }
 
 func (g *funcGen) emitCallOp(dest, funcReg, argCount byte) {

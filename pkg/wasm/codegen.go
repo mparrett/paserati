@@ -2,6 +2,7 @@ package wasm
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/nooga/paserati/pkg/vm"
 )
@@ -64,15 +65,17 @@ type ctrlFrame struct {
 type funcGen struct {
 	c           *vm.Chunk
 	fn          *Func
-	mod         *Module     // for resolving call targets; nil when compiling standalone
-	vals        []vm.Value  // one callable Value per module function (for call)
-	mem         *memory     // linear memory + load/store helpers; nil if none
-	glob        *globals    // module globals + get/set helpers; nil if none
-	rt          *rtHelpers  // shared stateless helpers (i64.add, unsigned i32 ops)
-	out         []*asmInstr // symbolic instruction list, peepholed then encoded
-	base        int         // first operand-stack register (== numLocals)
-	depth       int         // current operand-stack depth
-	maxReg      int         // high-water register count
+	mod         *Module         // for resolving call targets; nil when compiling standalone
+	vals        []vm.Value      // one callable Value per module function (for call)
+	mem         *memory         // linear memory + load/store helpers; nil if none
+	glob        *globals        // module globals + get/set helpers; nil if none
+	rt          *rtHelpers      // shared stateless helpers (i64.add, unsigned i32 ops)
+	imports     []importBinding // host bindings, indexed by wasm func-import index
+	table       *funcTable      // function table for call_indirect; nil if none
+	out         []*asmInstr     // symbolic instruction list, peepholed then encoded
+	base        int             // first operand-stack register (== numLocals)
+	depth       int             // current operand-stack depth
+	maxReg      int             // high-water register count
 	ctrl        []*ctrlFrame
 	unreachable bool // in a dead region after an unconditional branch/return
 }
@@ -89,16 +92,26 @@ func CompileFunc(fn *Func, name string) (vm.Value, error) {
 	return val, nil
 }
 
-// CompileModule lowers every function in the module (so calls resolve) and
-// returns the exported functions by name. Two passes: create all callable
-// Values first (empty chunks) so recursion and mutual recursion can reference
-// peers, then fill each chunk in place.
+// CompileModule lowers a module with no host imports (or with imports routed to
+// the process stdio) and returns the exported functions by name. For a WASI
+// module whose exit code and output you want to control, use CompileModuleWasi.
 func CompileModule(m *Module) (map[string]vm.Value, error) {
+	exports, _, err := CompileModuleWasi(m, nil, nil)
+	return exports, err
+}
+
+// CompileModuleWasi lowers every function in the module (so calls resolve),
+// wiring any wasi_snapshot_preview1 imports to a host over the linear memory, and
+// returns the exported functions plus that host (nil when the module imports no
+// functions). Writers default to the process stdio when nil. Two passes: create
+// all callable Values first (empty chunks) so recursion and mutual recursion can
+// reference peers, then fill each chunk in place.
+func CompileModuleWasi(m *Module, stdout, stderr io.Writer) (map[string]vm.Value, *wasiHost, error) {
 	var mem *memory
 	if m.Memory != nil {
 		var err error
 		if mem, err = newMemory(m); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	var glob *globals
@@ -106,32 +119,53 @@ func CompileModule(m *Module) (map[string]vm.Value, error) {
 		glob = newGlobals(m)
 	}
 	rt := newRTHelpers()
+
+	var host *wasiHost
+	var binds []importBinding
+	if m.ImportedFuncCount > 0 {
+		if mem == nil {
+			return nil, nil, fmt.Errorf("module imports host functions but declares no memory")
+		}
+		host = newWASIHost(mem.getData, stdout, stderr)
+		var err error
+		if binds, err = buildImportBindings(m, host); err != nil {
+			return nil, nil, err
+		}
+	}
+
 	vals := make([]vm.Value, len(m.Funcs))
 	for i := range m.Funcs {
 		fn := &m.Funcs[i]
 		vals[i] = vm.NewFunction(fn.NumParams(), fn.NumParams(), 0, 0, false,
 			funcName(m, i), vm.NewChunk(), false, false, false, false)
 	}
+	table := newFuncTable(m, vals, binds)
 	for i := range m.Funcs {
 		fn := &m.Funcs[i]
-		g := &funcGen{c: vals[i].AsFunction().Chunk, fn: fn, mod: m, vals: vals, mem: mem, glob: glob, rt: rt}
+		g := &funcGen{c: vals[i].AsFunction().Chunk, fn: fn, mod: m, vals: vals, mem: mem, glob: glob, rt: rt, imports: binds, table: table}
 		if err := g.compileInto(vals[i]); err != nil {
-			return nil, fmt.Errorf("%s: %w", funcName(m, i), err)
+			return nil, nil, fmt.Errorf("%s: %w", funcName(m, i), err)
 		}
 	}
 	out := make(map[string]vm.Value)
 	for _, e := range m.Exports {
+		// Export indices count imported functions first; vals holds only the
+		// defined functions, so shift past the imports.
 		if e.Kind == 0 {
-			out[e.Name] = vals[e.Index]
+			d := int(e.Index) - m.ImportedFuncCount
+			if d >= 0 && d < len(vals) {
+				out[e.Name] = vals[d]
+			}
 		}
 	}
-	return out, nil
+	return out, host, nil
 }
 
-// funcName returns an export name for func i if it has one, else func<i>.
+// funcName returns an export name for defined func i (0-based over m.Funcs) if it
+// has one, else func<i>. Export indices count imports first, so shift by them.
 func funcName(m *Module, i int) string {
 	for _, e := range m.Exports {
-		if e.Kind == 0 && int(e.Index) == i {
+		if e.Kind == 0 && int(e.Index)-m.ImportedFuncCount == i {
 			return e.Name
 		}
 	}
@@ -310,6 +344,11 @@ func (g *funcGen) emitBody() error {
 				return err
 			}
 
+		case OpCallIndirect:
+			if err := g.emitCallIndirect(ins.U32); err != nil {
+				return err
+			}
+
 		case OpI32Load, OpI32Load8U, OpI32Load8S, OpI32Load16U, OpI32Load16S,
 			OpI64Load, OpF32Load, OpF64Load:
 			if err := g.emitLoad(g.loadHelper(ins.Op), ins.U32); err != nil {
@@ -327,6 +366,11 @@ func (g *funcGen) emitBody() error {
 				return err
 			}
 
+		case OpMemoryGrow:
+			if err := g.emitMemGrow(); err != nil {
+				return err
+			}
+
 		case OpGlobalGet:
 			if err := g.emitGlobalGet(ins.U32); err != nil {
 				return err
@@ -338,8 +382,12 @@ func (g *funcGen) emitBody() error {
 			}
 
 		default:
+			if helper, ok := g.rt.unaryHelper(ins.Op); ok {
+				g.emitHelperUnop(helper) // extend / reinterpret
+				continue
+			}
 			if helper, ok := g.rt.unsignedHelper(ins.Op); ok {
-				g.emitHelperBinop(helper) // unsigned compares / div / rem
+				g.emitHelperBinop(helper) // unsigned compares / div / rem, i64 compares / xor
 				continue
 			}
 			op, ok := binopOp[ins.Op]
@@ -388,19 +436,26 @@ func (g *funcGen) emitCall(funcIdx uint32) error {
 		return fmt.Errorf("call requires module compilation (use CompileModule)")
 	}
 	// wasm func indices count imported functions first; our vals/Funcs hold only
-	// the defined functions.
+	// the defined functions. Imported calls dispatch to the host binding; defined
+	// calls to the peer Value. Both share the staging path below.
 	imported := g.mod.ImportedFuncCount
+	var calleeVal vm.Value
+	var sig *FuncType
 	if int(funcIdx) < imported {
-		im := g.mod.Imports[funcIdx] // imports are recorded in index order
-		return fmt.Errorf("call to imported func %s.%s (WASI host) not supported yet", im.Module, im.Field)
+		if int(funcIdx) >= len(g.imports) {
+			return fmt.Errorf("no host binding for imported func %d", funcIdx)
+		}
+		b := g.imports[funcIdx]
+		calleeVal, sig = b.val, b.sig
+	} else {
+		defIdx := int(funcIdx) - imported
+		if defIdx >= len(g.mod.Funcs) {
+			return fmt.Errorf("call %d out of range", funcIdx)
+		}
+		calleeVal, sig = g.vals[defIdx], g.mod.Funcs[defIdx].Type
 	}
-	defIdx := int(funcIdx) - imported
-	if defIdx >= len(g.mod.Funcs) {
-		return fmt.Errorf("call %d out of range", funcIdx)
-	}
-	callee := g.mod.Funcs[defIdx].Type
-	argCount := len(callee.Params)
-	results := len(callee.Results)
+	argCount := len(sig.Params)
+	results := len(sig.Results)
 	if results > 1 {
 		return fmt.Errorf("call to multi-result func unsupported")
 	}
@@ -412,7 +467,7 @@ func (g *funcGen) emitCall(funcIdx uint32) error {
 	if staging+1+argCount > g.maxReg {
 		g.maxReg = staging + 1 + argCount
 	}
-	g.loadConst(byte(staging), g.c.AddConstant(g.vals[defIdx]))
+	g.loadConst(byte(staging), g.c.AddConstant(calleeVal))
 	for k := 0; k < argCount; k++ {
 		src := byte(g.base + g.depth - argCount + k)
 		g.emit(vm.OpMove, byte(staging+1+k), src)
@@ -423,6 +478,60 @@ func (g *funcGen) emitCall(funcIdx uint32) error {
 	g.emit3(vm.OpCall, dest, byte(staging), byte(argCount))
 	if results == 1 {
 		g.push() // result lands in dest
+	}
+	return nil
+}
+
+// emitCallIndirect lowers `call_indirect typeIdx tableIdx`. Stack: [args..,
+// idx]. It resolves the callee through the table.get helper (which traps on a bad
+// index or signature), then does an ordinary OpCall. The static typeIdx fixes the
+// arity, so no runtime signature is needed to stage the args.
+func (g *funcGen) emitCallIndirect(typeIdx uint32) error {
+	if g.table == nil {
+		return fmt.Errorf("call_indirect without a function table")
+	}
+	if int(typeIdx) >= len(g.mod.Types) {
+		return fmt.Errorf("call_indirect type %d out of range", typeIdx)
+	}
+	sig := &g.mod.Types[typeIdx]
+	argCount := len(sig.Params)
+	results := len(sig.Results)
+	if results > 1 {
+		return fmt.Errorf("call_indirect to multi-result type unsupported")
+	}
+	if argCount > 255 {
+		return fmt.Errorf("call_indirect arity %d exceeds OpCall operand", argCount)
+	}
+
+	// Pop the table index (top of stack); the args stay below it. After the pop,
+	// funcReg == the popped index's register — we read it into the table.get
+	// staging *before* the call overwrites funcReg with the resolved callee.
+	idxReg := byte(g.base + g.depth - 1)
+	g.depth--
+	funcReg := g.base + g.depth
+	need := funcReg + 4 // table.get staging: fn, idx, typeIdx (+ result slot)
+	if funcReg+1+argCount > need {
+		need = funcReg + 1 + argCount
+	}
+	if need > g.maxReg {
+		g.maxReg = need
+	}
+
+	g.loadConst(byte(funcReg+1), g.c.AddConstant(g.table.get))
+	g.emit(vm.OpMove, byte(funcReg+2), idxReg)
+	g.loadConst(byte(funcReg+3), g.c.AddConstant(vm.Number(float64(typeIdx))))
+	g.emit3(vm.OpCall, byte(funcReg), byte(funcReg+1), 2) // callee → funcReg
+
+	// [funcReg][arg0..argN-1]: copy the args up after the resolved callee.
+	for k := 0; k < argCount; k++ {
+		src := byte(g.base + g.depth - argCount + k)
+		g.emit(vm.OpMove, byte(funcReg+1+k), src)
+	}
+	g.depth -= argCount
+	dest := byte(g.base + g.depth)
+	g.emit3(vm.OpCall, dest, byte(funcReg), byte(argCount))
+	if results == 1 {
+		g.push()
 	}
 	return nil
 }

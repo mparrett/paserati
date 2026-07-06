@@ -21,6 +21,7 @@ import (
 
 func main() {
 	list := flag.Bool("list", false, "list exported functions and exit")
+	run := flag.Bool("run", false, "run the WASI _start entry point (exits with its code)")
 	flag.Usage = usage
 	flag.Parse()
 
@@ -39,6 +40,16 @@ func main() {
 	if err != nil {
 		fatalf("decode: %v", err)
 	}
+
+	// -run: WASI command mode — set up the host, call _start, exit with its code.
+	if *run {
+		code, err := wasm.RunStart(mod, os.Stdout, os.Stderr)
+		if err != nil {
+			fatalf("run: %v", err)
+		}
+		os.Exit(code)
+	}
+
 	exports, err := wasm.CompileModule(mod)
 	if err != nil {
 		fatalf("compile: %v", err)
