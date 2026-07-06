@@ -67,6 +67,7 @@ type funcGen struct {
 	mod         *Module     // for resolving call targets; nil when compiling standalone
 	vals        []vm.Value  // one callable Value per module function (for call)
 	mem         *memory     // linear memory + load/store helpers; nil if none
+	glob        *globals    // module globals + get/set helpers; nil if none
 	out         []*asmInstr // symbolic instruction list, peepholed then encoded
 	base        int         // first operand-stack register (== numLocals)
 	depth       int         // current operand-stack depth
@@ -99,6 +100,10 @@ func CompileModule(m *Module) (map[string]vm.Value, error) {
 			return nil, err
 		}
 	}
+	var glob *globals
+	if len(m.Globals) > 0 {
+		glob = newGlobals(m)
+	}
 	vals := make([]vm.Value, len(m.Funcs))
 	for i := range m.Funcs {
 		fn := &m.Funcs[i]
@@ -107,7 +112,7 @@ func CompileModule(m *Module) (map[string]vm.Value, error) {
 	}
 	for i := range m.Funcs {
 		fn := &m.Funcs[i]
-		g := &funcGen{c: vals[i].AsFunction().Chunk, fn: fn, mod: m, vals: vals, mem: mem}
+		g := &funcGen{c: vals[i].AsFunction().Chunk, fn: fn, mod: m, vals: vals, mem: mem, glob: glob}
 		if err := g.compileInto(vals[i]); err != nil {
 			return nil, fmt.Errorf("%s: %w", funcName(m, i), err)
 		}
@@ -286,6 +291,16 @@ func (g *funcGen) emitBody() error {
 
 		case OpMemorySize:
 			if err := g.emitMemSize(); err != nil {
+				return err
+			}
+
+		case OpGlobalGet:
+			if err := g.emitGlobalGet(ins.U32); err != nil {
+				return err
+			}
+
+		case OpGlobalSet:
+			if err := g.emitGlobalSet(ins.U32); err != nil {
 				return err
 			}
 
