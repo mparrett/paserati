@@ -68,6 +68,7 @@ type funcGen struct {
 	vals        []vm.Value  // one callable Value per module function (for call)
 	mem         *memory     // linear memory + load/store helpers; nil if none
 	glob        *globals    // module globals + get/set helpers; nil if none
+	i64add      vm.Value    // shared native helper for exact i64.add
 	out         []*asmInstr // symbolic instruction list, peepholed then encoded
 	base        int         // first operand-stack register (== numLocals)
 	depth       int         // current operand-stack depth
@@ -104,6 +105,7 @@ func CompileModule(m *Module) (map[string]vm.Value, error) {
 	if len(m.Globals) > 0 {
 		glob = newGlobals(m)
 	}
+	i64add := makeI64Add()
 	vals := make([]vm.Value, len(m.Funcs))
 	for i := range m.Funcs {
 		fn := &m.Funcs[i]
@@ -112,7 +114,7 @@ func CompileModule(m *Module) (map[string]vm.Value, error) {
 	}
 	for i := range m.Funcs {
 		fn := &m.Funcs[i]
-		g := &funcGen{c: vals[i].AsFunction().Chunk, fn: fn, mod: m, vals: vals, mem: mem, glob: glob}
+		g := &funcGen{c: vals[i].AsFunction().Chunk, fn: fn, mod: m, vals: vals, mem: mem, glob: glob, i64add: i64add}
 		if err := g.compileInto(vals[i]); err != nil {
 			return nil, fmt.Errorf("%s: %w", funcName(m, i), err)
 		}
@@ -172,6 +174,14 @@ func (g *funcGen) emitBody() error {
 		case OpI32Const:
 			dst := g.push()
 			g.loadConst(dst, g.c.AddConstant(vm.Number(float64(int32(ins.I64)))))
+
+		case OpI64Const:
+			// Carried as BigInt for exact 64-bit fidelity.
+			dst := g.push()
+			g.loadConst(dst, g.c.AddConstant(i64Value(ins.I64)))
+
+		case OpI64Add:
+			g.emitHelperBinop(g.i64add)
 
 		case OpLocalGet:
 			if int(ins.U32) >= g.fn.NumLocals() {
@@ -279,12 +289,14 @@ func (g *funcGen) emitBody() error {
 				return err
 			}
 
-		case OpI32Load, OpI32Load8U, OpI32Load8S, OpI32Load16U, OpI32Load16S:
+		case OpI32Load, OpI32Load8U, OpI32Load8S, OpI32Load16U, OpI32Load16S,
+			OpI64Load, OpF32Load, OpF64Load:
 			if err := g.emitLoad(g.loadHelper(ins.Op), ins.U32); err != nil {
 				return err
 			}
 
-		case OpI32Store, OpI32Store8, OpI32Store16:
+		case OpI32Store, OpI32Store8, OpI32Store16,
+			OpI64Store, OpF32Store, OpF64Store:
 			if err := g.emitStore(g.storeHelper(ins.Op), ins.U32); err != nil {
 				return err
 			}

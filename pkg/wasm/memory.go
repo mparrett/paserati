@@ -3,9 +3,32 @@ package wasm
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
+	"math/big"
 
 	"github.com/nooga/paserati/pkg/vm"
 )
+
+// asI64 extracts an exact 64-bit integer from a wasm value. i64 values are
+// carried as BigInt (paserati has no exact int64 value); anything else falls
+// back through float64.
+func asI64(v vm.Value) int64 {
+	if v.Type() == vm.TypeBigInt {
+		return v.AsBigInt().Int64()
+	}
+	return int64(v.ToFloat())
+}
+
+func i64Value(x int64) vm.Value { return vm.NewBigInt(new(big.Int).SetInt64(x)) }
+
+// makeI64Add is a stateless native helper for i64.add — exact 64-bit add with
+// wraparound (Go int64 overflow wraps mod 2^64). Faithful i64 arithmetic in the
+// VM itself is future work; a helper per site is fine while i64 math is rare.
+func makeI64Add() vm.Value {
+	return vm.NewNativeFunction(2, false, "i64.add", func(args []vm.Value) (vm.Value, error) {
+		return i64Value(asI64(args[0]) + asI64(args[1])), nil
+	})
+}
 
 const wasmPageSize = 65536
 
@@ -23,9 +46,15 @@ type memory struct {
 	load8S   vm.Value
 	load16U  vm.Value
 	load16S  vm.Value
+	loadI64  vm.Value
+	loadF32  vm.Value
+	loadF64  vm.Value
 	storeI32 vm.Value
 	store8   vm.Value
 	store16  vm.Value
+	storeI64 vm.Value
+	storeF32 vm.Value
+	storeF64 vm.Value
 	size     vm.Value
 }
 
@@ -106,6 +135,61 @@ func newMemory(m *Module) (*memory, error) {
 		}
 	}
 
+	// Store effective-address for the wide stores, whose args are (addr, val,
+	// offset) rather than the loads' (addr, offset).
+	storeAddr := func(args []vm.Value, size int) (int, error) {
+		e := int(int32(args[0].ToFloat())) + int(int32(args[2].ToFloat()))
+		if e < 0 || e+size > len(data) {
+			return 0, fmt.Errorf("memory store at %d (size %d) out of bounds [0,%d)", e, size, len(data))
+		}
+		return e, nil
+	}
+	loadI64 := func(args []vm.Value) (vm.Value, error) {
+		e, err := ea(args, 8)
+		if err != nil {
+			return vm.Undefined, err
+		}
+		return i64Value(int64(binary.LittleEndian.Uint64(data[e:]))), nil
+	}
+	loadF64 := func(args []vm.Value) (vm.Value, error) {
+		e, err := ea(args, 8)
+		if err != nil {
+			return vm.Undefined, err
+		}
+		return vm.Number(math.Float64frombits(binary.LittleEndian.Uint64(data[e:]))), nil
+	}
+	loadF32 := func(args []vm.Value) (vm.Value, error) {
+		e, err := ea(args, 4)
+		if err != nil {
+			return vm.Undefined, err
+		}
+		return vm.Number(float64(math.Float32frombits(binary.LittleEndian.Uint32(data[e:])))), nil
+	}
+	storeI64 := func(args []vm.Value) (vm.Value, error) {
+		e, err := storeAddr(args, 8)
+		if err != nil {
+			return vm.Undefined, err
+		}
+		binary.LittleEndian.PutUint64(data[e:], uint64(asI64(args[1])))
+		return vm.Undefined, nil
+	}
+	storeF64 := func(args []vm.Value) (vm.Value, error) {
+		e, err := storeAddr(args, 8)
+		if err != nil {
+			return vm.Undefined, err
+		}
+		binary.LittleEndian.PutUint64(data[e:], math.Float64bits(args[1].ToFloat()))
+		return vm.Undefined, nil
+	}
+	storeF32 := func(args []vm.Value) (vm.Value, error) {
+		e, err := storeAddr(args, 4)
+		if err != nil {
+			return vm.Undefined, err
+		}
+		binary.LittleEndian.PutUint32(data[e:], math.Float32bits(float32(args[1].ToFloat())))
+		return vm.Undefined, nil
+	}
+
 	nbytes := len(data)
 	return &memory{
 		Buffer:   buf,
@@ -114,9 +198,15 @@ func newMemory(m *Module) (*memory, error) {
 		load8S:   vm.NewNativeFunction(2, false, "mem.load8_s", load(1, true)),
 		load16U:  vm.NewNativeFunction(2, false, "mem.load16_u", load(2, false)),
 		load16S:  vm.NewNativeFunction(2, false, "mem.load16_s", load(2, true)),
+		loadI64:  vm.NewNativeFunction(2, false, "mem.load_i64", loadI64),
+		loadF32:  vm.NewNativeFunction(2, false, "mem.load_f32", loadF32),
+		loadF64:  vm.NewNativeFunction(2, false, "mem.load_f64", loadF64),
 		storeI32: vm.NewNativeFunction(3, false, "mem.store_i32", store(4)),
 		store8:   vm.NewNativeFunction(3, false, "mem.store8", store(1)),
 		store16:  vm.NewNativeFunction(3, false, "mem.store16", store(2)),
+		storeI64: vm.NewNativeFunction(3, false, "mem.store_i64", storeI64),
+		storeF32: vm.NewNativeFunction(3, false, "mem.store_f32", storeF32),
+		storeF64: vm.NewNativeFunction(3, false, "mem.store_f64", storeF64),
 		size: vm.NewNativeFunction(0, false, "mem.size", func([]vm.Value) (vm.Value, error) {
 			return vm.Number(float64(nbytes / wasmPageSize)), nil
 		}),
@@ -194,6 +284,12 @@ func (g *funcGen) loadHelper(op Opcode) vm.Value {
 		return g.mem.load16U
 	case OpI32Load16S:
 		return g.mem.load16S
+	case OpI64Load:
+		return g.mem.loadI64
+	case OpF32Load:
+		return g.mem.loadF32
+	case OpF64Load:
+		return g.mem.loadF64
 	default:
 		return g.mem.loadI32
 	}
@@ -208,9 +304,32 @@ func (g *funcGen) storeHelper(op Opcode) vm.Value {
 		return g.mem.store8
 	case OpI32Store16:
 		return g.mem.store16
+	case OpI64Store:
+		return g.mem.storeI64
+	case OpF32Store:
+		return g.mem.storeF32
+	case OpF64Store:
+		return g.mem.storeF64
 	default:
 		return g.mem.storeI32
 	}
+}
+
+// emitHelperBinop lowers a two-operand op to a native helper call: stage
+// [helper, a, b] above the stack, call, and push the single result.
+func (g *funcGen) emitHelperBinop(helper vm.Value) {
+	b := byte(g.base + g.depth - 1)
+	a := byte(g.base + g.depth - 2)
+	t := g.base + g.depth
+	if t+3 > g.maxReg {
+		g.maxReg = t + 3
+	}
+	g.loadConst(byte(t), g.c.AddConstant(helper))
+	g.emit(vm.OpMove, byte(t+1), a)
+	g.emit(vm.OpMove, byte(t+2), b)
+	g.depth -= 2
+	dest := g.push()
+	g.emitCallOp(dest, byte(t), 2)
 }
 
 func (g *funcGen) emitCallOp(dest, funcReg, argCount byte) {

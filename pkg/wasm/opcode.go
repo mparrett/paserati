@@ -95,6 +95,8 @@ const (
 	OpCallIndirect Opcode = 0x11 // typeidx + tableidx
 	OpSelectT      Opcode = 0x1c // select with an explicit result-type vector
 
+	OpI64Add Opcode = 0x7c // named for codegen; decodes via the numeric range
+
 	// Wider memory access (memarg immediate). i32 widths are declared above.
 	OpI64Load    Opcode = 0x29
 	OpF32Load    Opcode = 0x2a
