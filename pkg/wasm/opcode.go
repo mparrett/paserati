@@ -96,6 +96,17 @@ const (
 	OpSelectT      Opcode = 0x1c // select with an explicit result-type vector
 
 	OpI64Add Opcode = 0x7c // named for codegen; decodes via the numeric range
+	OpI64Xor Opcode = 0x85
+
+	// i64 signed comparisons (named for codegen; decode via the numeric range).
+	OpI64LtS Opcode = 0x53
+	OpI64GtS Opcode = 0x55
+
+	// Conversions (named for codegen; decode via the numeric range).
+	OpI64ExtendI32S     Opcode = 0xac
+	OpI64ExtendI32U     Opcode = 0xad
+	OpI32ReinterpretF32 Opcode = 0xbc
+	OpI64ReinterpretF64 Opcode = 0xbd
 
 	// Wider memory access (memarg immediate). i32 widths are declared above.
 	OpI64Load    Opcode = 0x29
@@ -213,6 +224,9 @@ var opNames = map[Opcode]string{
 	OpI64Store: "i64.store", OpF32Store: "f32.store", OpF64Store: "f64.store",
 	OpMemoryInit: "memory.init", OpDataDrop: "data.drop",
 	OpMemoryCopy: "memory.copy", OpMemoryFill: "memory.fill",
+	OpI64Add: "i64.add", OpI64Xor: "i64.xor", OpI64LtS: "i64.lt_s", OpI64GtS: "i64.gt_s",
+	OpI64ExtendI32S: "i64.extend_i32_s", OpI64ExtendI32U: "i64.extend_i32_u",
+	OpI32ReinterpretF32: "i32.reinterpret_f32", OpI64ReinterpretF64: "i64.reinterpret_f64",
 }
 
 func (op Opcode) String() string {
