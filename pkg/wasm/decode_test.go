@@ -121,3 +121,29 @@ func TestDecodeRejectsGarbage(t *testing.T) {
 		t.Error("expected error on bad magic, got nil")
 	}
 }
+
+// TestDecodeTinyGoWASI proves the decoder parses a real TinyGo WASI binary end to
+// end — imports, tables, globals, elems, bulk memory, i64/float widths — even
+// though codegen can't lower it yet. This is the "decoder gate" regression.
+func TestDecodeTinyGoWASI(t *testing.T) {
+	m := mustDecode(t, "testdata/tinygo_wasi_hello.wasm")
+
+	if m.ImportedFuncCount != 3 {
+		t.Errorf("imported funcs: got %d, want 3", m.ImportedFuncCount)
+	}
+	wantImports := []string{"fd_write", "proc_exit", "random_get"}
+	for i, name := range wantImports {
+		if i >= len(m.Imports) || m.Imports[i].Field != name || m.Imports[i].Module != "wasi_snapshot_preview1" {
+			t.Errorf("import %d: got %+v, want wasi_snapshot_preview1.%s", i, m.Imports, name)
+		}
+	}
+	if len(m.Funcs) != 43 {
+		t.Errorf("defined funcs: got %d, want 43", len(m.Funcs))
+	}
+	if len(m.Tables) != 1 || len(m.Globals) != 3 || len(m.Elems) != 1 {
+		t.Errorf("tables/globals/elems: got %d/%d/%d, want 1/3/1", len(m.Tables), len(m.Globals), len(m.Elems))
+	}
+	if m.Memory == nil {
+		t.Error("expected a memory")
+	}
+}

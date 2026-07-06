@@ -37,18 +37,34 @@ func Decode(data []byte) (*Module, error) {
 			if err := decodeTypeSection(sr, m); err != nil {
 				return nil, err
 			}
+		case 2: // Import
+			if err := decodeImportSection(sr, m); err != nil {
+				return nil, err
+			}
 		case 3: // Function
 			idxs, err := decodeFunctionSection(sr)
 			if err != nil {
 				return nil, err
 			}
 			funcTypeIdx = idxs
-		case 7: // Export
-			if err := decodeExportSection(sr, m); err != nil {
+		case 4: // Table
+			if err := decodeTableSection(sr, m); err != nil {
 				return nil, err
 			}
 		case 5: // Memory
 			if err := decodeMemorySection(sr, m); err != nil {
+				return nil, err
+			}
+		case 6: // Global
+			if err := decodeGlobalSection(sr, m); err != nil {
+				return nil, err
+			}
+		case 7: // Export
+			if err := decodeExportSection(sr, m); err != nil {
+				return nil, err
+			}
+		case 9: // Element
+			if err := decodeElemSection(sr, m); err != nil {
 				return nil, err
 			}
 		case 10: // Code
@@ -59,12 +75,14 @@ func Decode(data []byte) (*Module, error) {
 			if err := decodeDataSection(sr, m); err != nil {
 				return nil, err
 			}
-		case 0: // Custom — skip (names, etc.)
-		case 2: // Import
-			return nil, fmt.Errorf("import section unsupported in this subset")
+		case 12: // DataCount
+			if m.DataCount, err = sr.u32(); err != nil {
+				return nil, err
+			}
+		case 0: // Custom (name, producers, …) — skip
 		default:
-			// Global(6), Table(4), Element(9), etc. Skip silently; codegen
-			// fails loudly if a body needs them.
+			// Start(8) and reference/extension sections. Skip; codegen fails
+			// loudly if a body needs something we didn't model.
 		}
 	}
 
@@ -179,21 +197,93 @@ func decodeDataSection(r *reader, m *Module) error {
 		if err != nil {
 			return err
 		}
-		if kind != 0 {
-			return fmt.Errorf("data segment kind %d (passive/explicit-memory) unsupported", kind)
+		seg := DataSegment{}
+		switch kind {
+		case 0: // active, memory 0, constant i32 offset
+			if seg.Offset, err = r.constI32Expr(); err != nil {
+				return err
+			}
+		case 1: // passive — staged for memory.init
+			seg.Passive = true
+		case 2: // active, explicit memory index, then offset expr
+			if _, err = r.u32(); err != nil { // memory index
+				return err
+			}
+			if seg.Offset, err = r.constI32Expr(); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("data segment kind %d unsupported", kind)
 		}
-		// Active segment, memory 0: a constant i32 offset expression.
-		off, err := r.constI32Expr()
+		bytes, err := r.name() // length-prefixed byte vector
 		if err != nil {
 			return err
 		}
-		bytes, err := r.name() // length-prefixed byte vector, reused
-		if err != nil {
-			return err
-		}
-		m.Data = append(m.Data, DataSegment{Offset: off, Bytes: []byte(bytes)})
+		seg.Bytes = []byte(bytes)
+		m.Data = append(m.Data, seg)
 	}
 	return nil
+}
+
+// limits reads a limits descriptor (flag byte, min, optional max).
+func (r *reader) limits() (min, max uint32, hasMax bool, err error) {
+	flags, err := r.byte()
+	if err != nil {
+		return 0, 0, false, err
+	}
+	if min, err = r.u32(); err != nil {
+		return 0, 0, false, err
+	}
+	if flags&1 != 0 {
+		if max, err = r.u32(); err != nil {
+			return 0, 0, false, err
+		}
+		hasMax = true
+	}
+	return min, max, hasMax, nil
+}
+
+func (r *reader) skipLimits() error {
+	_, _, _, err := r.limits()
+	return err
+}
+
+// constExprValue reads a global/segment init const-expression, returning the
+// integer value for i32/i64.const forms (0 for others), and consuming the end.
+func (r *reader) constExprValue() (int64, error) {
+	op, err := r.byte()
+	if err != nil {
+		return 0, err
+	}
+	var v int64
+	switch Opcode(op) {
+	case OpI32Const, OpI64Const:
+		if v, err = r.s64(); err != nil {
+			return 0, err
+		}
+	case OpGlobalGet:
+		if _, err = r.u32(); err != nil { // references another global; value unknown here
+			return 0, err
+		}
+	case OpF32Const:
+		if _, err = r.take(4); err != nil {
+			return 0, err
+		}
+	case OpF64Const:
+		if _, err = r.take(8); err != nil {
+			return 0, err
+		}
+	default:
+		return 0, fmt.Errorf("const expr: unexpected opcode 0x%02x", op)
+	}
+	end, err := r.byte()
+	if err != nil {
+		return 0, err
+	}
+	if Opcode(end) != OpEnd {
+		return 0, fmt.Errorf("const expr: expected end, got 0x%02x", end)
+	}
+	return v, nil
 }
 
 // constI32Expr reads a constant offset expression of the form
@@ -218,6 +308,133 @@ func (r *reader) constI32Expr() (int, error) {
 		return 0, fmt.Errorf("data offset expr: expected end, got 0x%02x", end)
 	}
 	return int(int32(v)), nil
+}
+
+func decodeImportSection(r *reader, m *Module) error {
+	n, err := r.u32()
+	if err != nil {
+		return err
+	}
+	for i := uint32(0); i < n; i++ {
+		mod, err := r.name()
+		if err != nil {
+			return err
+		}
+		field, err := r.name()
+		if err != nil {
+			return err
+		}
+		kindByte, err := r.byte()
+		if err != nil {
+			return err
+		}
+		imp := Import{Module: mod, Field: field, Kind: ImportKind(kindByte)}
+		switch ImportKind(kindByte) {
+		case ImportFunc:
+			if imp.TypeIndex, err = r.u32(); err != nil {
+				return err
+			}
+			m.ImportedFuncCount++
+		case ImportTable:
+			if _, err = r.byte(); err != nil { // elem type
+				return err
+			}
+			if err = r.skipLimits(); err != nil {
+				return err
+			}
+		case ImportMemory:
+			if err = r.skipLimits(); err != nil {
+				return err
+			}
+		case ImportGlobal:
+			if _, err = r.byte(); err != nil { // valtype
+				return err
+			}
+			if _, err = r.byte(); err != nil { // mutability
+				return err
+			}
+		default:
+			return fmt.Errorf("import %q.%q: unknown kind %d", mod, field, kindByte)
+		}
+		m.Imports = append(m.Imports, imp)
+	}
+	return nil
+}
+
+func decodeTableSection(r *reader, m *Module) error {
+	n, err := r.u32()
+	if err != nil {
+		return err
+	}
+	for i := uint32(0); i < n; i++ {
+		elem, err := r.byte()
+		if err != nil {
+			return err
+		}
+		min, max, hasMax, err := r.limits()
+		if err != nil {
+			return err
+		}
+		m.Tables = append(m.Tables, TableType{ElemType: elem, Min: min, Max: max, HasMax: hasMax})
+	}
+	return nil
+}
+
+func decodeGlobalSection(r *reader, m *Module) error {
+	n, err := r.u32()
+	if err != nil {
+		return err
+	}
+	for i := uint32(0); i < n; i++ {
+		vt, err := r.byte()
+		if err != nil {
+			return err
+		}
+		mut, err := r.byte()
+		if err != nil {
+			return err
+		}
+		init, err := r.constExprValue()
+		if err != nil {
+			return err
+		}
+		m.Globals = append(m.Globals, Global{Type: ValType(vt), Mutable: mut == 1, Init: init})
+	}
+	return nil
+}
+
+func decodeElemSection(r *reader, m *Module) error {
+	n, err := r.u32()
+	if err != nil {
+		return err
+	}
+	for i := uint32(0); i < n; i++ {
+		flags, err := r.u32()
+		if err != nil {
+			return err
+		}
+		// Only the common "active, table 0, funcref, offset expr, vec funcidx"
+		// form (flags 0) is modelled; TinyGo emits this.
+		if flags != 0 {
+			return fmt.Errorf("elem segment flags %d unsupported (only active table-0 handled)", flags)
+		}
+		off, err := r.constI32Expr()
+		if err != nil {
+			return err
+		}
+		count, err := r.u32()
+		if err != nil {
+			return err
+		}
+		funcs := make([]uint32, count)
+		for j := range funcs {
+			if funcs[j], err = r.u32(); err != nil {
+				return err
+			}
+		}
+		m.Elems = append(m.Elems, ElemSegment{TableIndex: 0, Offset: off, FuncIndices: funcs})
+	}
+	return nil
 }
 
 func decodeCodeSection(r *reader, m *Module, funcTypeIdx []uint32) error {
@@ -273,6 +490,14 @@ func decodeFuncBody(r *reader, fn *Func) error {
 		if err != nil {
 			return err
 		}
+		if b == 0xfc { // bulk-memory / saturating-truncation prefix
+			ins, err := decodePrefixedFC(r)
+			if err != nil {
+				return err
+			}
+			fn.Body = append(fn.Body, ins)
+			continue
+		}
 		op := Opcode(b)
 		kind, ok := immediateKind(op)
 		if !ok {
@@ -322,10 +547,79 @@ func decodeFuncBody(r *reader, fn *Func) error {
 			if _, err = r.byte(); err != nil { // memory index (only 0 modelled)
 				return err
 			}
+		case immBrTable:
+			count, err := r.u32()
+			if err != nil {
+				return err
+			}
+			ins.Labels = make([]uint32, count)
+			for j := range ins.Labels {
+				if ins.Labels[j], err = r.u32(); err != nil {
+					return err
+				}
+			}
+			if ins.U32, err = r.u32(); err != nil { // default label
+				return err
+			}
+		case immCallIndirect:
+			if ins.U32, err = r.u32(); err != nil { // type index
+				return err
+			}
+			tableIdx, err := r.u32() // table index (0 in MVP)
+			if err != nil {
+				return err
+			}
+			ins.I64 = int64(tableIdx)
+		case immSelectT:
+			n, err := r.u32() // result-type vector; consumed, not used
+			if err != nil {
+				return err
+			}
+			if _, err = r.take(int(n)); err != nil {
+				return err
+			}
 		}
 		fn.Body = append(fn.Body, ins)
 	}
 	return nil
+}
+
+// decodePrefixedFC decodes a 0xFC-prefixed instruction (bulk memory). The
+// saturating-truncation ops (sub 0–7) and table ops (12+) are out of scope.
+func decodePrefixedFC(r *reader) (Instr, error) {
+	sub, err := r.u32()
+	if err != nil {
+		return Instr{}, err
+	}
+	switch sub {
+	case 8: // memory.init dataidx, memidx(0x00)
+		idx, err := r.u32()
+		if err != nil {
+			return Instr{}, err
+		}
+		if _, err := r.byte(); err != nil {
+			return Instr{}, err
+		}
+		return Instr{Op: OpMemoryInit, U32: idx}, nil
+	case 9: // data.drop dataidx
+		idx, err := r.u32()
+		if err != nil {
+			return Instr{}, err
+		}
+		return Instr{Op: OpDataDrop, U32: idx}, nil
+	case 10: // memory.copy memidx memidx (both 0x00)
+		if _, err := r.take(2); err != nil {
+			return Instr{}, err
+		}
+		return Instr{Op: OpMemoryCopy}, nil
+	case 11: // memory.fill memidx(0x00)
+		if _, err := r.byte(); err != nil {
+			return Instr{}, err
+		}
+		return Instr{Op: OpMemoryFill}, nil
+	default:
+		return Instr{}, fmt.Errorf("unsupported 0xfc opcode %d", sub)
+	}
 }
 
 // --- low-level cursor ---
