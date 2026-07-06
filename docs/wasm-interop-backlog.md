@@ -96,3 +96,11 @@ Hard parts that gate everything: **i64 fidelity**, **`memory.grow`**,
 a lot of work — networking/threads/CGO need host support that may never exist.
 First real milestone past today's subset: a no-import pure-compute module using
 i64 + floats + `call_indirect`.
+
+## References
+
+- **WasmEdge** — https://github.com/WasmEdge/WasmEdge — production CNCF wasm
+  runtime (WASI + extensions). Reference for host-interface surface, WASI
+  implementation, and engine semantics when we build our own host layer.
+- Deeper i64 / TinyGo / target notes:
+  `~/projects-new/project-docs/paserati/wasm-transpile-i64-and-targets.md`.
