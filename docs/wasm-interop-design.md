@@ -152,10 +152,17 @@ signatures, locals, and a flat instruction stream that keeps
 stream round-trips exactly (verified against the `.wat` source and wasmtime's
 `fib(20)==6765`).
 
-**Phase 2 — straight-line codegen.**
-Translate functions with no branches: consts, `local.get/set`, arithmetic,
-`return`. Use the virtual-operand-stack → register scheme. Validate each
-function by `DisassembleChunk` + execution. Target: `add`, `mul`, polynomial.
+**Phase 2 — straight-line codegen. ✅ DONE.**
+`pkg/wasm/codegen.go` — `CompileFunc(fn, name) (vm.Value, error)` lowers a
+branch-free function to a callable. The stack→register scheme: locals hold the
+low register band (params in R0.. by convention, declared locals zero-init'd);
+the operand stack maps *directly* onto registers above them (depth `d` ↔
+register `base+d`), so a binop reads the top two registers and rewrites the
+lower in place — no free list, no moves. Handles const, `local.get/set/tee`,
+`drop`, `return`, and the numeric binop table; control-flow/`call` opcodes error
+as "not supported in phase 2". Tests compile+run `add`, `poly` (`2x²+3x+1`), and
+`sq` (declared local), all cross-checked against wasmtime; the `poly`
+disassembly confirms tight register reuse.
 
 **Phase 3 — control flow.**
 Add `block`/`loop`/`if`/`br`/`br_if` with the control-stack + backpatch
