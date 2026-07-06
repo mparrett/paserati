@@ -55,6 +55,20 @@ const (
 	OpI32GeU Opcode = 0x4f
 )
 
+// Memory access (subset). memarg immediate = (align, offset).
+const (
+	OpI32Load    Opcode = 0x28
+	OpI32Load8S  Opcode = 0x2c
+	OpI32Load8U  Opcode = 0x2d
+	OpI32Load16S Opcode = 0x2e
+	OpI32Load16U Opcode = 0x2f
+	OpI32Store   Opcode = 0x36
+	OpI32Store8  Opcode = 0x3a
+	OpI32Store16 Opcode = 0x3b
+	OpMemorySize Opcode = 0x3f
+	OpMemoryGrow Opcode = 0x40
+)
+
 // i32 arithmetic / bitwise.
 const (
 	OpI32Add  Opcode = 0x6a
@@ -86,6 +100,8 @@ const (
 	immI64Const          // signed LEB128, 64-bit
 	immF32Const          // 4 raw little-endian bytes
 	immF64Const          // 8 raw little-endian bytes
+	immMemarg            // two u32 LEB128 (align, offset); offset kept in Instr.U32
+	immMemory            // single memory-index byte (memory.size/grow)
 )
 
 // immediateKind returns how to decode an opcode's immediate, and whether the
@@ -102,6 +118,11 @@ func immediateKind(op Opcode) (immKind, bool) {
 		return immBlockType, true
 	case OpBr, OpBrIf, OpCall, OpLocalGet, OpLocalSet, OpLocalTee, OpGlobalGet, OpGlobalSet:
 		return immU32, true
+	case OpI32Load, OpI32Load8S, OpI32Load8U, OpI32Load16S, OpI32Load16U,
+		OpI32Store, OpI32Store8, OpI32Store16:
+		return immMemarg, true
+	case OpMemorySize, OpMemoryGrow:
+		return immMemory, true
 	case OpI32Const:
 		return immI32Const, true
 	case OpI64Const:
@@ -130,6 +151,10 @@ var opNames = map[Opcode]string{
 	OpI32And: "i32.and", OpI32Or: "i32.or", OpI32Xor: "i32.xor",
 	OpI32Shl: "i32.shl", OpI32ShrS: "i32.shr_s", OpI32ShrU: "i32.shr_u",
 	OpI32Rotl: "i32.rotl", OpI32Rotr: "i32.rotr",
+	OpI32Load: "i32.load", OpI32Load8S: "i32.load8_s", OpI32Load8U: "i32.load8_u",
+	OpI32Load16S: "i32.load16_s", OpI32Load16U: "i32.load16_u",
+	OpI32Store: "i32.store", OpI32Store8: "i32.store8", OpI32Store16: "i32.store16",
+	OpMemorySize: "memory.size", OpMemoryGrow: "memory.grow",
 }
 
 func (op Opcode) String() string {

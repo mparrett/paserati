@@ -65,6 +65,7 @@ type funcGen struct {
 	fn          *Func
 	mod         *Module    // for resolving call targets; nil when compiling standalone
 	vals        []vm.Value // one callable Value per module function (for call)
+	mem         *memory    // linear memory + load/store helpers; nil if none
 	base        int        // first operand-stack register (== numLocals)
 	depth       int        // current operand-stack depth
 	maxReg      int        // high-water register count
@@ -89,6 +90,13 @@ func CompileFunc(fn *Func, name string) (vm.Value, error) {
 // Values first (empty chunks) so recursion and mutual recursion can reference
 // peers, then fill each chunk in place.
 func CompileModule(m *Module) (map[string]vm.Value, error) {
+	var mem *memory
+	if m.Memory != nil {
+		var err error
+		if mem, err = newMemory(m); err != nil {
+			return nil, err
+		}
+	}
 	vals := make([]vm.Value, len(m.Funcs))
 	for i := range m.Funcs {
 		fn := &m.Funcs[i]
@@ -97,7 +105,7 @@ func CompileModule(m *Module) (map[string]vm.Value, error) {
 	}
 	for i := range m.Funcs {
 		fn := &m.Funcs[i]
-		g := &funcGen{c: vals[i].AsFunction().Chunk, fn: fn, mod: m, vals: vals}
+		g := &funcGen{c: vals[i].AsFunction().Chunk, fn: fn, mod: m, vals: vals, mem: mem}
 		if err := g.compileInto(vals[i]); err != nil {
 			return nil, fmt.Errorf("%s: %w", funcName(m, i), err)
 		}
@@ -258,6 +266,21 @@ func (g *funcGen) emitBody() error {
 
 		case OpCall:
 			if err := g.emitCall(ins.U32); err != nil {
+				return err
+			}
+
+		case OpI32Load, OpI32Load8U, OpI32Load8S, OpI32Load16U, OpI32Load16S:
+			if err := g.emitLoad(g.loadHelper(ins.Op), ins.U32); err != nil {
+				return err
+			}
+
+		case OpI32Store, OpI32Store8, OpI32Store16:
+			if err := g.emitStore(g.storeHelper(ins.Op), ins.U32); err != nil {
+				return err
+			}
+
+		case OpMemorySize:
+			if err := g.emitMemSize(); err != nil {
 				return err
 			}
 

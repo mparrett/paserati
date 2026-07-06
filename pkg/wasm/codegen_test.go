@@ -150,6 +150,49 @@ func TestCompileMutualRecursion(t *testing.T) {
 	}
 }
 
+func TestCompileMemoryLoad(t *testing.T) {
+	// i32.load over a data segment (offset immediate on the second load).
+	m, fn := compileModuleExport(t, "testdata/memsum4.wasm", "sum4")
+	if got := callI(t, m, fn); got != 10 {
+		t.Errorf("sum4() = %v, want 10", got)
+	}
+}
+
+func TestCompileMemoryStoreLoad(t *testing.T) {
+	m := mustDecode(t, "testdata/memrw.wasm")
+	exports, err := CompileModule(m)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	vmi := vm.NewVM()
+	if got := callI(t, vmi, exports["rw"], 42); got != 42 {
+		t.Errorf("rw(42) = %v, want 42", got)
+	}
+	// store8 truncates to the low byte.
+	if got := callI(t, vmi, exports["bytes"], 511); got != 255 {
+		t.Errorf("bytes(511) = %v, want 255", got)
+	}
+}
+
+func TestCompileMemoryLoop(t *testing.T) {
+	// i32.load with a computed address inside a loop.
+	m, fn := compileModuleExport(t, "testdata/memarrsum.wasm", "arrsum")
+	for _, c := range []struct{ n, want float64 }{{5, 15}, {3, 6}, {0, 0}} {
+		if got := callI(t, m, fn, c.n); got != c.want {
+			t.Errorf("arrsum(%v) = %v, want %v", c.n, got, c.want)
+		}
+	}
+}
+
+func TestCompileMemoryOutOfBounds(t *testing.T) {
+	// A load past the end of memory must fault at runtime, not corrupt.
+	machine, fn := compileModuleExport(t, "testdata/memarrsum.wasm", "arrsum")
+	// arrsum walks i*4; a huge n runs off the single 64 KiB page.
+	if _, err := machine.Call(fn, vm.Undefined, []vm.Value{vm.Number(100000)}); err == nil {
+		t.Error("expected out-of-bounds memory access to error, got nil")
+	}
+}
+
 func TestCompileFuncRejectsCall(t *testing.T) {
 	// CompileFunc (single-function) can't resolve calls.
 	m := mustDecode(t, "testdata/recfib.wasm")
