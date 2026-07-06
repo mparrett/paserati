@@ -48,27 +48,29 @@ var binopOp = map[Opcode]vm.OpCode{
 	OpI32GeS:  vm.OpGreaterEqual,
 }
 
-// ctrlFrame tracks one open block/loop/if for branch resolution.
+// ctrlFrame tracks one open block/loop/if for branch resolution. Branch targets
+// are symbolic labels (see asm.go), resolved to byte offsets during finish().
 type ctrlFrame struct {
 	op          Opcode
-	startDepth  int   // operand-stack depth at frame entry (after popping an if cond)
-	results     int   // values the frame leaves on the stack at its end
-	branchArity int   // values a branch to this label carries (loop→params=0, block/if→results)
-	header      int   // loop: code offset of the branch target
-	brPatches   []int // block/if: jump-operand positions to patch to the frame's end
-	elsePatch   int   // if: operand pos of the cond-false jump; -1 once resolved
+	startDepth  int       // operand-stack depth at frame entry (after popping an if cond)
+	results     int       // values the frame leaves on the stack at its end
+	branchArity int       // values a branch to this label carries (loop→params=0, block/if→results)
+	headLabel   *asmInstr // loop: the branch target (header)
+	endLabel    *asmInstr // block/if: branch target + end marker
+	elseLabel   *asmInstr // if: cond-false target
 	hasElse     bool
 }
 
 type funcGen struct {
 	c           *vm.Chunk
 	fn          *Func
-	mod         *Module    // for resolving call targets; nil when compiling standalone
-	vals        []vm.Value // one callable Value per module function (for call)
-	mem         *memory    // linear memory + load/store helpers; nil if none
-	base        int        // first operand-stack register (== numLocals)
-	depth       int        // current operand-stack depth
-	maxReg      int        // high-water register count
+	mod         *Module     // for resolving call targets; nil when compiling standalone
+	vals        []vm.Value  // one callable Value per module function (for call)
+	mem         *memory     // linear memory + load/store helpers; nil if none
+	out         []*asmInstr // symbolic instruction list, peepholed then encoded
+	base        int         // first operand-stack register (== numLocals)
+	depth       int         // current operand-stack depth
+	maxReg      int         // high-water register count
 	ctrl        []*ctrlFrame
 	unreachable bool // in a dead region after an unconditional branch/return
 }
@@ -145,6 +147,7 @@ func (g *funcGen) compileInto(val vm.Value) error {
 	if err := g.emitBody(); err != nil {
 		return err
 	}
+	g.finish() // peephole + encode into g.c
 	g.c.MaxRegs = g.maxReg
 	val.AsFunction().RegisterSize = g.maxReg
 	return nil
@@ -201,11 +204,13 @@ func (g *funcGen) emitBody() error {
 			if err != nil {
 				return err
 			}
-			f := &ctrlFrame{op: ins.Op, startDepth: g.depth, results: results, elsePatch: -1}
+			f := &ctrlFrame{op: ins.Op, startDepth: g.depth, results: results}
 			if ins.Op == OpLoop {
-				f.header = g.here() // branch target is the header; carries params (0 here)
+				f.headLabel = g.newLabel() // branch target is the header
+				g.markLabel(f.headLabel)
 			} else {
 				f.branchArity = results
+				f.endLabel = g.newLabel()
 			}
 			g.ctrl = append(g.ctrl, f)
 
@@ -216,7 +221,8 @@ func (g *funcGen) emitBody() error {
 			}
 			cond := g.pop()
 			f := &ctrlFrame{op: OpIf, startDepth: g.depth, results: results,
-				branchArity: results, elsePatch: g.emitJumpIfFalse(cond)}
+				branchArity: results, elseLabel: g.newLabel(), endLabel: g.newLabel()}
+			g.condJumpTo(cond, f.elseLabel)
 			g.ctrl = append(g.ctrl, f)
 
 		case OpElse:
@@ -225,11 +231,9 @@ func (g *funcGen) emitBody() error {
 				return fmt.Errorf("else without matching if")
 			}
 			if !g.unreachable {
-				// End of the then-branch: skip over the else to the frame end.
-				f.brPatches = append(f.brPatches, g.emitJump())
+				g.jumpTo(f.endLabel) // end of then-branch: skip the else
 			}
-			g.patchTo(f.elsePatch, g.here()) // cond-false lands at the else body
-			f.elsePatch = -1
+			g.markLabel(f.elseLabel) // cond-false lands at the else body
 			f.hasElse = true
 			g.depth = f.startDepth
 			g.unreachable = false
@@ -241,11 +245,11 @@ func (g *funcGen) emitBody() error {
 			}
 			f := g.ctrl[len(g.ctrl)-1]
 			g.ctrl = g.ctrl[:len(g.ctrl)-1]
-			if f.op == OpIf && f.elsePatch >= 0 {
-				g.patchTo(f.elsePatch, g.here()) // if with no else: cond-false skips to end
+			if f.op == OpIf && !f.hasElse {
+				g.markLabel(f.elseLabel) // no else: cond-false skips to end
 			}
-			for _, p := range f.brPatches {
-				g.patchTo(p, g.here())
+			if f.endLabel != nil {
+				g.markLabel(f.endLabel)
 			}
 			g.depth = f.startDepth + f.results
 			g.unreachable = false
@@ -258,11 +262,12 @@ func (g *funcGen) emitBody() error {
 
 		case OpBrIf:
 			cond := g.pop()
-			skip := g.emitJumpIfFalse(cond) // fall through when the branch is not taken
+			skip := g.newLabel()
+			g.condJumpTo(cond, skip) // fall through (to skip) when not taken
 			if err := g.branchTo(ins.U32); err != nil {
 				return err
 			}
-			g.patchTo(skip, g.here())
+			g.markLabel(skip)
 
 		case OpCall:
 			if err := g.emitCall(ins.U32); err != nil {
@@ -315,9 +320,9 @@ func (g *funcGen) branchTo(depth uint32) error {
 		}
 	}
 	if f.op == OpLoop {
-		g.emitJumpTo(f.header) // backward target, known
+		g.jumpTo(f.headLabel) // backward target
 	} else {
-		f.brPatches = append(f.brPatches, g.emitJump()) // forward, patched at end
+		g.jumpTo(f.endLabel) // forward target
 	}
 	return nil
 }
@@ -355,10 +360,7 @@ func (g *funcGen) emitCall(funcIdx uint32) error {
 
 	g.depth -= argCount
 	dest := byte(g.base + g.depth) // reclaimed first-arg slot
-	g.c.WriteOpCode(vm.OpCall, 1)
-	g.c.EmitByte(dest)
-	g.c.EmitByte(byte(staging))
-	g.c.EmitByte(byte(argCount))
+	g.emit3(vm.OpCall, dest, byte(staging), byte(argCount))
 	if results == 1 {
 		g.push() // result lands in dest
 	}
@@ -380,12 +382,10 @@ func blockResults(bt int64) (int, error) {
 
 func (g *funcGen) emitReturn() {
 	if len(g.fn.Type.Results) == 0 || g.depth == 0 {
-		g.c.WriteOpCode(vm.OpReturnUndefined, 1)
+		g.emitOp0(vm.OpReturnUndefined)
 		return
 	}
-	src := g.pop()
-	g.c.WriteOpCode(vm.OpReturn, 1)
-	g.c.EmitByte(src)
+	g.emitOp1(vm.OpReturn, g.pop())
 }
 
 // --- operand-stack ↔ register mapping ---
@@ -405,57 +405,3 @@ func (g *funcGen) pop() byte {
 }
 
 func (g *funcGen) peek() byte { return byte(g.base + g.depth - 1) }
-
-// --- emit + jump/backpatch helpers ---
-
-func (g *funcGen) here() int { return len(g.c.Code) }
-
-func (g *funcGen) loadConst(reg byte, idx uint16) {
-	g.c.WriteOpCode(vm.OpLoadConst, 1)
-	g.c.EmitByte(reg)
-	g.c.WriteUint16(idx)
-}
-
-func (g *funcGen) emit(op vm.OpCode, a, b byte) {
-	g.c.WriteOpCode(op, 1)
-	g.c.EmitByte(a)
-	g.c.EmitByte(b)
-}
-
-func (g *funcGen) emit3(op vm.OpCode, a, b, c byte) {
-	g.c.WriteOpCode(op, 1)
-	g.c.EmitByte(a)
-	g.c.EmitByte(b)
-	g.c.EmitByte(c)
-}
-
-// emitJump writes OpJump with a placeholder offset and returns the operand
-// position to backpatch.
-func (g *funcGen) emitJump() int {
-	g.c.WriteOpCode(vm.OpJump, 1)
-	pos := g.here()
-	g.c.WriteUint16(0)
-	return pos
-}
-
-func (g *funcGen) emitJumpTo(target int) {
-	g.patchTo(g.emitJump(), target)
-}
-
-// emitJumpIfFalse writes OpJumpIfFalse with a placeholder offset and returns the
-// operand position to backpatch.
-func (g *funcGen) emitJumpIfFalse(cond byte) int {
-	g.c.WriteOpCode(vm.OpJumpIfFalse, 1)
-	g.c.EmitByte(cond)
-	pos := g.here()
-	g.c.WriteUint16(0)
-	return pos
-}
-
-// patchTo fills the 2-byte offset at pos so execution lands on target. Offsets
-// are relative to the ip after the offset bytes (pos+2).
-func (g *funcGen) patchTo(pos, target int) {
-	off := int16(target - (pos + 2))
-	g.c.Code[pos] = byte(uint16(off) >> 8)
-	g.c.Code[pos+1] = byte(uint16(off) & 0xff)
-}

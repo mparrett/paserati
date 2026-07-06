@@ -57,6 +57,9 @@ Anything outside the subset fails with a clear error rather than misparsing.
   makes recursion work); `call` lowers to `OpCall`.
 - **Memory.** A real paserati `ArrayBuffer` plus native load/store helpers that
   close over its bytes; each access is an `OpCall` into a helper.
+- **Peephole.** Codegen builds a symbolic instruction list with label jumps, then
+  runs copy propagation + dead-store elimination (basic-block scoped, provably
+  safe) before encoding — ~16% smaller code across the fixtures.
 
 ## Files
 
@@ -65,7 +68,8 @@ Anything outside the subset fails with a clear error rather than misparsing.
 | `decode.go` | wasm binary → IR (sections, LEB128) |
 | `opcode.go` | opcode constants + immediate kinds |
 | `module.go` | IR types |
-| `codegen.go` | IR → `*vm.Chunk` (stack→register, control flow, calls) |
+| `codegen.go` | IR → symbolic instructions (stack→register, control flow, calls) |
+| `asm.go` | symbolic instruction list, peephole, byte encoding |
 | `memory.go` | linear memory + load/store helpers |
 | `testdata/` | `.wat` sources and their assembled `.wasm` fixtures |
 
