@@ -164,10 +164,18 @@ as "not supported in phase 2". Tests compile+run `add`, `poly` (`2x²+3x+1`), an
 `sq` (declared local), all cross-checked against wasmtime; the `poly`
 disassembly confirms tight register reuse.
 
-**Phase 3 — control flow.**
-Add `block`/`loop`/`if`/`br`/`br_if` with the control-stack + backpatch
-machinery. Target: iterative `fib`, a loop sum, `gcd`. This is the real test of
-the design.
+**Phase 3 — control flow. ✅ DONE.**
+`codegen.go` grows a control-frame stack that lowers `block`/`loop`/`if`/`else`/
+`br`/`br_if` to flat jumps. block/if are forward labels (branches backpatched to
+their `end`); loop is a backward label (branch to the header, known on entry);
+`br_if` inverts through `OpJumpIfFalse` since the VM has no jump-if-true. Only
+empty block types (branches carry no values, so the depth↔register mapping stays
+consistent); non-empty errors. Dead code after an unconditional `br`/`return`
+allows only `end`/`else` until the region closes. Added `i32.eqz` (→ `OpNot`).
+Tests run `fib` (`fib(20)==6765` through the real decode→codegen→VM path), `sum`
+(loop), `max` (if, no else), `abs` (if/else), and `gcd` (loop + `br_if` + `eqz` +
+`rem_s`) — all cross-checked against wasmtime. Codegen is correct but
+un-peepholed (redundant `OpMove`s from copy-on-`local.get/set`).
 
 **Phase 4 — calls.**
 Intra-module `call`. Each wasm function → its own Chunk/function value; wire

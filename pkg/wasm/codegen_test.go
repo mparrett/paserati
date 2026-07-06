@@ -64,10 +64,53 @@ func TestCompileSq(t *testing.T) {
 	}
 }
 
-func TestCompileRejectsControlFlow(t *testing.T) {
-	// fib uses block/loop/br_if — must be rejected until Phase 3.
-	m := mustDecode(t, "testdata/fib.wasm")
-	if _, err := CompileFunc(&m.Funcs[0], "fib"); err == nil {
-		t.Error("expected phase-2 rejection of control flow, got nil")
+func TestCompileFib(t *testing.T) {
+	// The whole point: iterative fib through decode → codegen → VM, matching
+	// wasmtime's fib(20) == 6765. Exercises block/loop/br_if/br.
+	m, fn := compileExport(t, "testdata/fib.wasm", "fib")
+	cases := []struct{ n, want float64 }{{0, 0}, {1, 1}, {10, 55}, {20, 6765}}
+	for _, c := range cases {
+		if got := callI(t, m, fn, c.n); got != c.want {
+			t.Errorf("fib(%v) = %v, want %v", c.n, got, c.want)
+		}
+	}
+}
+
+func TestCompileSum(t *testing.T) {
+	m, fn := compileExport(t, "testdata/sum.wasm", "sum")
+	for _, c := range []struct{ n, want float64 }{{5, 15}, {10, 55}, {0, 0}} {
+		if got := callI(t, m, fn, c.n); got != c.want {
+			t.Errorf("sum(%v) = %v, want %v", c.n, got, c.want)
+		}
+	}
+}
+
+func TestCompileMax(t *testing.T) {
+	// if without else.
+	m, fn := compileExport(t, "testdata/max.wasm", "max")
+	for _, c := range []struct{ a, b, want float64 }{{3, 7, 7}, {9, 2, 9}, {5, 5, 5}} {
+		if got := callI(t, m, fn, c.a, c.b); got != c.want {
+			t.Errorf("max(%v,%v) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}
+
+func TestCompileAbs(t *testing.T) {
+	// if/else.
+	m, fn := compileExport(t, "testdata/abs.wasm", "abs")
+	for _, c := range []struct{ x, want float64 }{{-5, 5}, {7, 7}, {0, 0}} {
+		if got := callI(t, m, fn, c.x); got != c.want {
+			t.Errorf("abs(%v) = %v, want %v", c.x, got, c.want)
+		}
+	}
+}
+
+func TestCompileGcd(t *testing.T) {
+	// loop + br_if + i32.eqz + i32.rem_s.
+	m, fn := compileExport(t, "testdata/gcd.wasm", "gcd")
+	for _, c := range []struct{ a, b, want float64 }{{48, 36, 12}, {1071, 462, 21}, {17, 5, 1}} {
+		if got := callI(t, m, fn, c.a, c.b); got != c.want {
+			t.Errorf("gcd(%v,%v) = %v, want %v", c.a, c.b, got, c.want)
+		}
 	}
 }
