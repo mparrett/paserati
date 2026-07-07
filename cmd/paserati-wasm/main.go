@@ -53,8 +53,9 @@ func main() {
 	}
 
 	// -run: WASI command mode — set up the host, call _start, exit with its code.
+	// Any args after the module path become the guest's argv (e.g. "-" for stdin).
 	if *run {
-		code, err := wasm.RunStart(mod, os.Stdout, os.Stderr)
+		code, err := wasm.RunStart(mod, os.Stdout, os.Stderr, args[1:]...)
 		if err != nil {
 			fatalf("run: %v", err)
 		}

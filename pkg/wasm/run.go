@@ -11,11 +11,15 @@ import (
 // returning the process exit code. proc_exit(code) ends the run with that code
 // (the sentinel error it throws to unwind the VM is expected, not a failure); a
 // normal return from _start is exit 0. Writers default to the process stdio when
-// nil.
-func RunStart(m *Module, stdout, stderr io.Writer) (int, error) {
+// nil. argv is exposed to the guest via args_get (the program name is prepended
+// if argv is empty).
+func RunStart(m *Module, stdout, stderr io.Writer, argv ...string) (int, error) {
 	exports, host, err := CompileModuleWasi(m, stdout, stderr)
 	if err != nil {
 		return 0, err
+	}
+	if host != nil && len(argv) > 0 {
+		host.args = append([]string{"lg"}, argv...)
 	}
 	start, ok := exports["_start"]
 	if !ok {
