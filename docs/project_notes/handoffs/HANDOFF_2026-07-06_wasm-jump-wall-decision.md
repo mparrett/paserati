@@ -3,7 +3,9 @@
 **Created:** 2026-07-06 (late). **Updated:** 2026-07-06 (later) — long jumps
 done, let-go runs end to end; then a cross-repo round with the let-go team on a
 goroutine-free build (see "Cross-repo" below — four builds run, stock paserati
-ruled out, stop-here call made). This supersedes the "decision waiting" framing.
+ruled out, stop-here call made), and a codified coordination protocol for the two
+sessions (see "How the two sessions coordinate"). This supersedes the "decision
+waiting" framing.
 **Working dir:** work is in the **`paserati-wasm` worktree** on `feat/wasm-transpile`
 (the `../paserati` checkout is a different branch — don't confuse them).
 
@@ -91,6 +93,31 @@ runtime. Full exchange in the shared dir (see Artifacts): `NOTE-nogoroutine*.md`
 resumes it: `-opt=1` / `-opt=s` might sit between opt2 and optz — not worth
 gating on. Whether goroutine-free graduates from spike to a real build tag is
 the let-go team's roadmap call.
+
+## How the two sessions coordinate (protocol)
+
+The paserati session and the let-go session run as **separate Claudes in
+sibling repos, no shared VCS**. We codified a reusable protocol on both sides —
+neutral shared copy at `…/letgo-wasi-targets/PROTOCOL.md`; paserati's copy is in
+project memory (`cross_claude_coordination_protocol.md`). The rules:
+
+1. **Shared drop dir** — one durable dir both read/write, holds binaries +
+   `NOTE-*.md`. This workstream: `…/letgo-wasi-targets/`.
+2. **`NOTE-<sender>-<topic>.md` is the message bus** — open with "Reply to
+   `<prior>`", **lead with the measured result** (numbers, not assertions), a
+   **specific ask**, a **repro command**, sign the side. Artifacts cite
+   **branch@commit + build cmd + size + verification** so they're regenerable.
+3. **tmux `send-keys` is the doorbell, not the letter** — durable content goes in
+   the NOTE; the ping just says "go look." `capture-pane` first to find the right
+   pane (the let-go build session is the `joint-xsofy` Claude in the
+   **`let-go-tinygo-main`** worktree — was `joint-xsofy-5324` this session, but
+   re-identify by worktree, not name), send literal (`-l`), Enter **twice**,
+   `capture-pane` to confirm.
+4. **Each side builds from its OWN tree** — never build across repos. Branch/flag
+   owner produces the artifact; the other profiles/consumes. Residue is carried by
+   whoever's machinery owns it (long jumps + spiller are ours).
+5. **The human orchestrates** — routine drops + pings inside an active exchange
+   are send-then-report; net-new outreach or anything ambiguous → loop the human.
 
 ## Repro quick-ref
 
