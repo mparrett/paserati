@@ -33,10 +33,7 @@ type ModuleProfile struct {
 	NumErr     int
 }
 
-const (
-	regLimit  = 256
-	jumpLimit = 32767
-)
+const regLimit = 256
 
 // Profile compiles every function (mirroring CompileModuleWasi's setup and its
 // direct→spill→stub fallback) but records stats instead of encoding, reporting
@@ -104,7 +101,9 @@ func profileFunc(m *Module, i int, vals []vm.Value, mem *memory, glob *globals,
 			return 0, 0, false, err // unsupported opcode etc.
 		}
 		mj := g.layoutMaxJump()
-		return g.maxReg, mj, g.maxReg > regLimit || mj > jumpLimit, nil
+		// Jumps past int16 are promoted to 32-bit long jumps at encode time, so
+		// jump distance no longer forces a stub — only the register file can.
+		return g.maxReg, mj, g.maxReg > regLimit, nil
 	}
 
 	maxReg, maxJump, overflow, err := emit(false)
@@ -127,12 +126,10 @@ func profileFunc(m *Module, i int, vals []vm.Value, mem *memory, glob *globals,
 		fp.Mode = "spilled"
 		return fp
 	}
+	// Long jumps cover any distance, so the register file is the only remaining
+	// limit that can force a stub.
 	fp.Mode = "stubbed"
-	if maxReg > regLimit {
-		fp.Limit = "registers"
-	} else {
-		fp.Limit = "jumps"
-	}
+	fp.Limit = "registers"
 	return fp
 }
 
@@ -140,7 +137,7 @@ func profileFunc(m *Module, i int, vals []vm.Value, mem *memory, glob *globals,
 // decision: the biggest functions and anything that doesn't fit.
 func (mp *ModuleProfile) String() string {
 	var b strings.Builder
-	verdict := "RUNS — every function fits (256 regs, ±32 KB jumps)"
+	verdict := "RUNS — every function fits (256 regs; jumps use 32-bit long form as needed)"
 	if mp.NumStubbed > 0 || mp.NumErr > 0 {
 		verdict = "DOES NOT RUN — see below"
 	}

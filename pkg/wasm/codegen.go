@@ -236,14 +236,9 @@ func (g *funcGen) compileInto(val vm.Value) error {
 	if g.maxReg > 256 {
 		return fmt.Errorf("%d registers: %w", g.maxReg, errRegOverflow)
 	}
-	// paserati encodes jump targets as int16 relative offsets. A function large
-	// enough to need jumps beyond ±32 KB can't be represented; finish reports it
-	// and we treat it like register overflow so the caller stubs the function
-	// rather than run misaligned bytecode. (Spilling inflates code ~3×, so a huge
-	// asyncify goroutine wrapper can trip this even when its registers fit.)
-	if g.finish() {
-		return fmt.Errorf("jump exceeds int16 offset: %w", errRegOverflow)
-	}
+	// finish emits short jumps by default and promotes over-range ones to the
+	// 32-bit long variants, so any function whose registers fit is representable.
+	g.finish()
 	g.c.MaxRegs = g.maxReg
 	val.AsFunction().RegisterSize = g.maxReg
 	return nil
@@ -350,10 +345,7 @@ func (g *funcGen) spillIdx(reg byte, i uint32) {
 // resetChunk clears a chunk so codegen can retry into it from scratch (finish
 // appends, and AddConstant accumulates, so a fresh attempt must start empty).
 func resetChunk(val vm.Value) {
-	c := val.AsFunction().Chunk
-	c.Code = c.Code[:0]
-	c.Constants = c.Constants[:0]
-	c.Lines = c.Lines[:0]
+	val.AsFunction().Chunk.Reset()
 }
 
 // compileStub replaces a function's body with one that throws — used for
