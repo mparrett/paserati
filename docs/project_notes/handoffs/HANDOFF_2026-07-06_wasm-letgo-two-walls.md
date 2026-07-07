@@ -5,6 +5,32 @@
 **Working Directory:** /Users/matt/projects-new/3p/paserati (main checkout) — but
 **all the work is in the `paserati-wasm` worktree** on `feat/wasm-transpile`.
 
+## LATEST (appended — read this first)
+
+Two things happened after the body of this handoff was written:
+
+1. **The dominant wall is JUMPS, not registers.** Added a `-profile` mode
+   (`./paserati-wasm -profile x.wasm`) that reports every function's lowering
+   (direct/spilled/stubbed) and which limit it hits. On the full let-go wasi
+   binary: **11 of 3268 funcs stubbed, and 10 fail on the 16-bit jump limit
+   alone** (their locals fit in registers; bodies are just >32 KB of jumps).
+   Only func285 hits the register limit — and it overflows jumps too. So the
+   **register spiller unblocks only 1 of 11**; widening **jump offsets (16→32-bit)
+   is the higher-leverage fork.** The 10 jump-only functions look like *compiler*
+   code (parser/bytecode-sized bodies). Committed `5b72315`.
+
+2. **The let-go team revived their compiler-free `runtime_only` build and got it
+   working on wasi** (a no-compiler module runs a precompiled `.lgb` under
+   wasmtime: `6*7*2 = 84`). They're sending the artifact. **The bet:** runtime-only
+   drops the compiler, so those 10 jump-heavy compiler functions may vanish —
+   possibly clearing the walls with zero VM-fork work. **The moment the artifact
+   arrives, run `-profile` on it** — RUNS vs which functions still stub. Also ask/
+   check how it ingests the `.lgb` (embedded = ready; stdin = `fd_read` ready;
+   file = need the ENOSYS-stubbed `path_open`/`fd_read` filesystem imports).
+
+Proposal doc updated with all of this:
+`~/projects-new/project-docs/paserati/wasi-letgo-proposal-and-transpiler-gaps.md`.
+
 ## What to read first
 
 The wasm→paserati transpiler now runs **faithful float/int WASI programs
