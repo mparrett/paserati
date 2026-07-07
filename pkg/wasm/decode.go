@@ -584,14 +584,24 @@ func decodeFuncBody(r *reader, fn *Func) error {
 	return nil
 }
 
-// decodePrefixedFC decodes a 0xFC-prefixed instruction (bulk memory). The
-// saturating-truncation ops (sub 0–7) and table ops (12+) are out of scope.
+// decodePrefixedFC decodes a 0xFC-prefixed instruction: bulk memory (sub 8–11)
+// and the immediate-free saturating truncations (sub 0–7). f32/f64 sources map to
+// the same synthetic op since we carry f32 as float64. Table ops (12+) are out of
+// scope.
 func decodePrefixedFC(r *reader) (Instr, error) {
 	sub, err := r.u32()
 	if err != nil {
 		return Instr{}, err
 	}
 	switch sub {
+	case 0, 2: // i32.trunc_sat_f{32,64}_s
+		return Instr{Op: OpI32TruncSatS}, nil
+	case 1, 3: // i32.trunc_sat_f{32,64}_u
+		return Instr{Op: OpI32TruncSatU}, nil
+	case 4, 6: // i64.trunc_sat_f{32,64}_s
+		return Instr{Op: OpI64TruncSatS}, nil
+	case 5, 7: // i64.trunc_sat_f{32,64}_u
+		return Instr{Op: OpI64TruncSatU}, nil
 	case 8: // memory.init dataidx, memidx(0x00)
 		idx, err := r.u32()
 		if err != nil {

@@ -95,18 +95,82 @@ const (
 	OpCallIndirect Opcode = 0x11 // typeidx + tableidx
 	OpSelectT      Opcode = 0x1c // select with an explicit result-type vector
 
-	OpI64Add Opcode = 0x7c // named for codegen; decodes via the numeric range
-	OpI64Xor Opcode = 0x85
+	// i64 arithmetic / bitwise (named for codegen; decode via the numeric range).
+	// Carried as BigInt for exact 64-bit fidelity, so each is a native helper.
+	OpI64Add    Opcode = 0x7c
+	OpI64Sub    Opcode = 0x7d
+	OpI64Mul    Opcode = 0x7e
+	OpI64DivS   Opcode = 0x7f
+	OpI64DivU   Opcode = 0x80
+	OpI64RemS   Opcode = 0x81
+	OpI64RemU   Opcode = 0x82
+	OpI64And    Opcode = 0x83
+	OpI64Or     Opcode = 0x84
+	OpI64Xor    Opcode = 0x85
+	OpI64Shl    Opcode = 0x86
+	OpI64ShrS   Opcode = 0x87
+	OpI64ShrU   Opcode = 0x88
+	OpI64Rotl   Opcode = 0x89
+	OpI64Rotr   Opcode = 0x8a
+	OpI64Clz    Opcode = 0x79
+	OpI64Ctz    Opcode = 0x7a
+	OpI64Popcnt Opcode = 0x7b
 
-	// i64 signed comparisons (named for codegen; decode via the numeric range).
+	// i64 comparisons (named for codegen; decode via the numeric range).
+	OpI64Eqz Opcode = 0x50
+	OpI64Eq  Opcode = 0x51
+	OpI64Ne  Opcode = 0x52
 	OpI64LtS Opcode = 0x53
+	OpI64LtU Opcode = 0x54
 	OpI64GtS Opcode = 0x55
+	OpI64GtU Opcode = 0x56
+	OpI64LeS Opcode = 0x57
+	OpI64LeU Opcode = 0x58
+	OpI64GeS Opcode = 0x59
+	OpI64GeU Opcode = 0x5a
+
+	// i32 bit-count ops (named for codegen; decode via the numeric range).
+	OpI32Clz    Opcode = 0x67
+	OpI32Ctz    Opcode = 0x68
+	OpI32Popcnt Opcode = 0x69
+
+	// f64 arithmetic and comparisons (named for codegen; decode via the numeric
+	// range). f64 maps onto paserati's number opcodes directly.
+	OpF64Eq   Opcode = 0x61
+	OpF64Ne   Opcode = 0x62
+	OpF64Lt   Opcode = 0x63
+	OpF64Gt   Opcode = 0x64
+	OpF64Le   Opcode = 0x65
+	OpF64Ge   Opcode = 0x66
+	OpF64Abs  Opcode = 0x99
+	OpF64Neg  Opcode = 0x9a
+	OpF64Sqrt Opcode = 0x9f
+	OpF64Add  Opcode = 0xa0
+	OpF64Sub  Opcode = 0xa1
+	OpF64Mul  Opcode = 0xa2
+	OpF64Div  Opcode = 0xa3
 
 	// Conversions (named for codegen; decode via the numeric range).
 	OpI64ExtendI32S     Opcode = 0xac
 	OpI64ExtendI32U     Opcode = 0xad
 	OpI32ReinterpretF32 Opcode = 0xbc
 	OpI64ReinterpretF64 Opcode = 0xbd
+	OpF32ReinterpretI32 Opcode = 0xbe
+	OpF64ReinterpretI64 Opcode = 0xbf
+	OpI32WrapI64        Opcode = 0xa7
+	OpF32DemoteF64      Opcode = 0xb6
+	OpF64ConvertI32S    Opcode = 0xb7
+	OpF64ConvertI32U    Opcode = 0xb8
+	OpF64ConvertI64S    Opcode = 0xb9
+	OpF64ConvertI64U    Opcode = 0xba
+	OpF64PromoteF32     Opcode = 0xbb
+
+	// Sign-extension ops (named for codegen; decode via the numeric range).
+	OpI32Extend8S  Opcode = 0xc0
+	OpI32Extend16S Opcode = 0xc1
+	OpI64Extend8S  Opcode = 0xc2
+	OpI64Extend16S Opcode = 0xc3
+	OpI64Extend32S Opcode = 0xc4
 
 	// Wider memory access (memarg immediate). i32 widths are declared above.
 	OpI64Load    Opcode = 0x29
@@ -132,6 +196,14 @@ const (
 	OpDataDrop   Opcode = 0xe1 // dataidx in Instr.U32
 	OpMemoryCopy Opcode = 0xe2
 	OpMemoryFill Opcode = 0xe3
+
+	// Saturating float→int truncation (0xFC subops 0–7). f32 and f64 sources
+	// collapse to the same behaviour because we carry f32 as float64, so the eight
+	// wire ops map onto four synthetic opcodes.
+	OpI32TruncSatS Opcode = 0xe4 // i32.trunc_sat_f{32,64}_s
+	OpI32TruncSatU Opcode = 0xe5 // i32.trunc_sat_f{32,64}_u
+	OpI64TruncSatS Opcode = 0xe6 // i64.trunc_sat_f{32,64}_s
+	OpI64TruncSatU Opcode = 0xe7 // i64.trunc_sat_f{32,64}_u
 )
 
 // immKind describes the immediate operand(s) that follow an opcode in the
@@ -224,9 +296,30 @@ var opNames = map[Opcode]string{
 	OpI64Store: "i64.store", OpF32Store: "f32.store", OpF64Store: "f64.store",
 	OpMemoryInit: "memory.init", OpDataDrop: "data.drop",
 	OpMemoryCopy: "memory.copy", OpMemoryFill: "memory.fill",
-	OpI64Add: "i64.add", OpI64Xor: "i64.xor", OpI64LtS: "i64.lt_s", OpI64GtS: "i64.gt_s",
+	OpI32TruncSatS: "i32.trunc_sat_s", OpI32TruncSatU: "i32.trunc_sat_u",
+	OpI64TruncSatS: "i64.trunc_sat_s", OpI64TruncSatU: "i64.trunc_sat_u",
+	OpI64Add: "i64.add", OpI64Sub: "i64.sub", OpI64Mul: "i64.mul",
+	OpI64DivS: "i64.div_s", OpI64DivU: "i64.div_u", OpI64RemS: "i64.rem_s", OpI64RemU: "i64.rem_u",
+	OpI64And: "i64.and", OpI64Or: "i64.or", OpI64Xor: "i64.xor",
+	OpI64Shl: "i64.shl", OpI64ShrS: "i64.shr_s", OpI64ShrU: "i64.shr_u",
+	OpI64Rotl: "i64.rotl", OpI64Rotr: "i64.rotr",
+	OpI64Clz: "i64.clz", OpI64Ctz: "i64.ctz", OpI64Popcnt: "i64.popcnt",
+	OpI64Eqz: "i64.eqz", OpI64Eq: "i64.eq", OpI64Ne: "i64.ne",
+	OpI64LtS: "i64.lt_s", OpI64LtU: "i64.lt_u", OpI64GtS: "i64.gt_s", OpI64GtU: "i64.gt_u",
+	OpI64LeS: "i64.le_s", OpI64LeU: "i64.le_u", OpI64GeS: "i64.ge_s", OpI64GeU: "i64.ge_u",
+	OpI32Clz: "i32.clz", OpI32Ctz: "i32.ctz", OpI32Popcnt: "i32.popcnt",
 	OpI64ExtendI32S: "i64.extend_i32_s", OpI64ExtendI32U: "i64.extend_i32_u",
 	OpI32ReinterpretF32: "i32.reinterpret_f32", OpI64ReinterpretF64: "i64.reinterpret_f64",
+	OpF32ReinterpretI32: "f32.reinterpret_i32", OpF64ReinterpretI64: "f64.reinterpret_i64",
+	OpF64Eq: "f64.eq", OpF64Ne: "f64.ne", OpF64Lt: "f64.lt", OpF64Gt: "f64.gt",
+	OpF64Le: "f64.le", OpF64Ge: "f64.ge",
+	OpF64Abs: "f64.abs", OpF64Neg: "f64.neg", OpF64Sqrt: "f64.sqrt",
+	OpF64Add: "f64.add", OpF64Sub: "f64.sub", OpF64Mul: "f64.mul", OpF64Div: "f64.div",
+	OpI32WrapI64: "i32.wrap_i64", OpF32DemoteF64: "f32.demote_f64", OpF64PromoteF32: "f64.promote_f32",
+	OpF64ConvertI32S: "f64.convert_i32_s", OpF64ConvertI32U: "f64.convert_i32_u",
+	OpF64ConvertI64S: "f64.convert_i64_s", OpF64ConvertI64U: "f64.convert_i64_u",
+	OpI32Extend8S: "i32.extend8_s", OpI32Extend16S: "i32.extend16_s",
+	OpI64Extend8S: "i64.extend8_s", OpI64Extend16S: "i64.extend16_s", OpI64Extend32S: "i64.extend32_s",
 }
 
 func (op Opcode) String() string {
