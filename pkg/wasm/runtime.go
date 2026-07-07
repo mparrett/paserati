@@ -28,6 +28,11 @@ type rtHelpers struct {
 	// binaryOps collects the two-operand i64 arithmetic/bitwise/compare helpers
 	// (i64 is BigInt, so none map onto paserati's number opcodes) keyed by opcode.
 	binaryOps map[Opcode]vm.Value
+
+	// mkLocals(n) returns a fresh n-element array of zeros, used as the spill store
+	// for functions whose locals exceed the register file (see the spiller in
+	// codegen.go). One array per call keeps recursion/reentrancy correct.
+	mkLocals vm.Value
 }
 
 // satI32S/satI32U/satI64S/satI64U implement saturating float→int truncation:
@@ -166,16 +171,25 @@ func newRTHelpers() *rtHelpers {
 			return vm.BooleanValue(f(uint64(asI64(args[0])), uint64(asI64(args[1])))), nil
 		})
 	}
+	mkLocals := vm.NewNativeFunction(1, false, "wasm.mklocals", func(args []vm.Value) (vm.Value, error) {
+		n := int(args[0].ToFloat())
+		zeros := make([]vm.Value, n)
+		for i := range zeros {
+			zeros[i] = vm.Number(0) // wasm locals are zero-initialised; asI64(0)==0 too
+		}
+		return vm.NewArrayWithArgs(zeros), nil
+	})
 	return &rtHelpers{
-		i64add: makeI64Add(),
-		gtU:    cmp("i32.gt_u", func(a, b uint32) bool { return a > b }),
-		geU:    cmp("i32.ge_u", func(a, b uint32) bool { return a >= b }),
-		ltU:    cmp("i32.lt_u", func(a, b uint32) bool { return a < b }),
-		leU:    cmp("i32.le_u", func(a, b uint32) bool { return a <= b }),
-		divU:   div("i32.div_u", func(a, b uint32) uint32 { return a / b }),
-		remU:   div("i32.rem_u", func(a, b uint32) uint32 { return a % b }),
-		rotl:   rot("i32.rotl", func(a uint32, n int) uint32 { return bits.RotateLeft32(a, n) }),
-		rotr:   rot("i32.rotr", func(a uint32, n int) uint32 { return bits.RotateLeft32(a, -n) }),
+		i64add:   makeI64Add(),
+		mkLocals: mkLocals,
+		gtU:      cmp("i32.gt_u", func(a, b uint32) bool { return a > b }),
+		geU:      cmp("i32.ge_u", func(a, b uint32) bool { return a >= b }),
+		ltU:      cmp("i32.lt_u", func(a, b uint32) bool { return a < b }),
+		leU:      cmp("i32.le_u", func(a, b uint32) bool { return a <= b }),
+		divU:     div("i32.div_u", func(a, b uint32) uint32 { return a / b }),
+		remU:     div("i32.rem_u", func(a, b uint32) uint32 { return a % b }),
+		rotl:     rot("i32.rotl", func(a uint32, n int) uint32 { return bits.RotateLeft32(a, n) }),
+		rotr:     rot("i32.rotr", func(a uint32, n int) uint32 { return bits.RotateLeft32(a, -n) }),
 
 		i64gtS: i64cmp("i64.gt_s", func(a, b int64) bool { return a > b }),
 		i64ltS: i64cmp("i64.lt_s", func(a, b int64) bool { return a < b }),

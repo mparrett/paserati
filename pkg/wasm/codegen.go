@@ -100,6 +100,7 @@ type funcGen struct {
 	maxReg      int             // high-water register count
 	ctrl        []*ctrlFrame
 	unreachable bool // in a dead region after an unconditional branch/return
+	spill       bool // locals live in an array at R0 (function exceeds register file)
 }
 
 // CompileFunc lowers a single call-free function to a callable paserati Value.
@@ -162,16 +163,25 @@ func CompileModuleWasi(m *Module, stdout, stderr io.Writer) (map[string]vm.Value
 			funcName(m, i), vm.NewChunk(), false, false, false, false)
 	}
 	table := newFuncTable(m, vals, binds)
+	newGen := func(i int, spill bool) *funcGen {
+		return &funcGen{c: vals[i].AsFunction().Chunk, fn: &m.Funcs[i], mod: m, vals: vals,
+			mem: mem, glob: glob, rt: rt, imports: binds, table: table, spill: spill}
+	}
 	for i := range m.Funcs {
-		fn := &m.Funcs[i]
-		g := &funcGen{c: vals[i].AsFunction().Chunk, fn: fn, mod: m, vals: vals, mem: mem, glob: glob, rt: rt, imports: binds, table: table}
-		if err := g.compileInto(vals[i]); err != nil {
-			// A function too big for the register file is stubbed, not fatal: it
-			// traps only if actually called (like an unimplemented import).
-			if errors.Is(err, errRegOverflow) {
-				compileStub(vals[i], fn, fmt.Sprintf("wasm: %s too large for register file (%v)", funcName(m, i), err))
-				continue
-			}
+		err := newGen(i, forceSpillAll).compileInto(vals[i])
+		// Too many registers for the direct mapping: retry with locals spilled to
+		// an array. If even that overflows (huge param count — never in practice),
+		// stub it so it traps only if called.
+		if errors.Is(err, errRegOverflow) {
+			resetChunk(vals[i])
+			err = newGen(i, true).compileInto(vals[i])
+		}
+		if errors.Is(err, errRegOverflow) {
+			resetChunk(vals[i])
+			compileStub(vals[i], &m.Funcs[i], fmt.Sprintf("wasm: %s too large for register file", funcName(m, i)))
+			continue
+		}
+		if err != nil {
 			return nil, nil, fmt.Errorf("%s: %w", funcName(m, i), err)
 		}
 	}
@@ -205,17 +215,31 @@ func funcName(m *Module, i int) string {
 // the module compiler stubs them rather than failing the whole compile.
 var errRegOverflow = errors.New("register file overflow")
 
-// compileInto runs codegen and fills val's chunk and register size.
+// forceSpillAll routes every function through the spill lowering — a debug knob
+// for exercising the spiller on small functions. Off in normal builds.
+var forceSpillAll = false
+
+// compileInto runs codegen and fills val's chunk and register size. Two lowerings
+// share the tail: the normal one maps each local to its own register (fast, but
+// bounded by the 256-register file); the spill one (g.spill) parks all locals in
+// an array at R0 so only the operand stack needs registers — used when a function
+// has too many locals for the direct mapping.
 func (g *funcGen) compileInto(val vm.Value) error {
-	g.base = g.fn.NumLocals()
-	g.maxReg = g.base
-	if g.base > 256 {
-		return fmt.Errorf("%d locals: %w", g.base, errRegOverflow)
-	}
-	if len(g.fn.Locals) > 0 {
-		zero := g.c.AddConstant(vm.Number(0))
-		for i := g.fn.NumParams(); i < g.fn.NumLocals(); i++ {
-			g.loadConst(byte(i), zero)
+	if g.spill {
+		if err := g.spilledEntry(); err != nil {
+			return err
+		}
+	} else {
+		g.base = g.fn.NumLocals()
+		g.maxReg = g.base
+		if g.base > 256 {
+			return fmt.Errorf("%d locals: %w", g.base, errRegOverflow)
+		}
+		if len(g.fn.Locals) > 0 {
+			zero := g.c.AddConstant(vm.Number(0))
+			for i := g.fn.NumParams(); i < g.fn.NumLocals(); i++ {
+				g.loadConst(byte(i), zero)
+			}
 		}
 	}
 	if err := g.emitBody(); err != nil {
@@ -227,10 +251,64 @@ func (g *funcGen) compileInto(val vm.Value) error {
 	if g.maxReg > 256 {
 		return fmt.Errorf("%d registers: %w", g.maxReg, errRegOverflow)
 	}
-	g.finish() // peephole + encode into g.c
+	// paserati encodes jump targets as int16 relative offsets. A function large
+	// enough to need jumps beyond ±32 KB can't be represented; finish reports it
+	// and we treat it like register overflow so the caller stubs the function
+	// rather than run misaligned bytecode. (Spilling inflates code ~3×, so a huge
+	// asyncify goroutine wrapper can trip this even when its registers fit.)
+	if g.finish() {
+		return fmt.Errorf("jump exceeds int16 offset: %w", errRegOverflow)
+	}
 	g.c.MaxRegs = g.maxReg
 	val.AsFunction().RegisterSize = g.maxReg
 	return nil
+}
+
+// spilledEntry lowers the prologue of a spilled function: R0 holds a fresh
+// locals array (mkLocals) with the params copied in; the operand stack then runs
+// from R1. Incoming params occupy R0..R(np-1) on entry, so the array is built in
+// scratch above them, populated, then moved down to R0.
+func (g *funcGen) spilledEntry() error {
+	np := g.fn.NumParams()
+	nl := g.fn.NumLocals()
+	scratch := np // above the incoming params
+	g.base = 1    // R0 reserved for the locals array
+	g.maxReg = scratch + 2
+	if g.maxReg > 256 {
+		// Even params + 2 scratch overflow — nothing we can do (never happens for
+		// real TinyGo output, whose param counts are small).
+		return fmt.Errorf("%d params: %w", np, errRegOverflow)
+	}
+
+	// arr = mkLocals(nl), landing in R_scratch.
+	g.loadConst(byte(scratch), g.c.AddConstant(g.rt.mkLocals))
+	g.loadConst(byte(scratch+1), g.c.AddConstant(vm.Number(float64(nl))))
+	g.emit3(vm.OpCall, byte(scratch), byte(scratch), 1)
+
+	// arr[i] = param_i (params still live in R0..R(np-1)).
+	for i := 0; i < np; i++ {
+		g.loadConst(byte(scratch+1), g.c.AddConstant(vm.Number(float64(i))))
+		g.emit3(vm.OpSetIndex, byte(scratch), byte(scratch+1), byte(i))
+	}
+	if scratch != 0 {
+		g.emit(vm.OpMove, 0, byte(scratch)) // R0 = the array
+	}
+	return nil
+}
+
+// spillIdx loads local index i into a scratch register and returns it. Index
+// constants are cached so a hot local doesn't bloat the constant pool.
+func (g *funcGen) spillIdx(reg byte, i uint32) {
+	g.loadConst(reg, g.c.AddConstant(vm.Number(float64(i))))
+}
+
+// resetChunk clears a chunk so codegen can retry into it from scratch (finish
+// appends, and AddConstant accumulates, so a fresh attempt must start empty).
+func resetChunk(val vm.Value) {
+	c := val.AsFunction().Chunk
+	c.Code = c.Code[:0]
+	c.Constants = c.Constants[:0]
+	c.Lines = c.Lines[:0]
 }
 
 // compileStub replaces a function's body with one that throws — used for
@@ -286,20 +364,44 @@ func (g *funcGen) emitBody() error {
 			if int(ins.U32) >= g.fn.NumLocals() {
 				return fmt.Errorf("local.get %d out of range", ins.U32)
 			}
-			dst := g.push()
-			g.emit(vm.OpMove, dst, byte(ins.U32))
+			if g.spill {
+				dst := g.push()
+				idx := byte(g.base + g.depth) // scratch just above the pushed value
+				g.growReg(int(idx) + 1)
+				g.spillIdx(idx, ins.U32)
+				g.emit3(vm.OpGetIndex, dst, 0, idx) // dst = locals[idx]
+			} else {
+				dst := g.push()
+				g.emit(vm.OpMove, dst, byte(ins.U32))
+			}
 
 		case OpLocalSet:
 			if int(ins.U32) >= g.fn.NumLocals() {
 				return fmt.Errorf("local.set %d out of range", ins.U32)
 			}
-			g.emit(vm.OpMove, byte(ins.U32), g.pop())
+			if g.spill {
+				val := g.pop()
+				idx := byte(g.base + g.depth + 1) // scratch above the popped value
+				g.growReg(int(idx) + 1)
+				g.spillIdx(idx, ins.U32)
+				g.emit3(vm.OpSetIndex, 0, idx, val) // locals[idx] = val
+			} else {
+				g.emit(vm.OpMove, byte(ins.U32), g.pop())
+			}
 
 		case OpLocalTee:
 			if int(ins.U32) >= g.fn.NumLocals() {
 				return fmt.Errorf("local.tee %d out of range", ins.U32)
 			}
-			g.emit(vm.OpMove, byte(ins.U32), g.peek()) // leaves value on the stack
+			if g.spill {
+				val := g.peek() // stays on the stack
+				idx := byte(g.base + g.depth)
+				g.growReg(int(idx) + 1)
+				g.spillIdx(idx, ins.U32)
+				g.emit3(vm.OpSetIndex, 0, idx, val)
+			} else {
+				g.emit(vm.OpMove, byte(ins.U32), g.peek()) // leaves value on the stack
+			}
 
 		case OpI32Eqz:
 			// eqz(x) == (x == 0); logical-not yields the boolean br_if wants.
@@ -701,3 +803,10 @@ func (g *funcGen) pop() byte {
 }
 
 func (g *funcGen) peek() byte { return byte(g.base + g.depth - 1) }
+
+// growReg raises the high-water register count to at least n.
+func (g *funcGen) growReg(n int) {
+	if n > g.maxReg {
+		g.maxReg = n
+	}
+}
