@@ -68,7 +68,10 @@ func instrSize(in *asmInstr) int {
 }
 
 // finish runs the peephole, assigns offsets, and encodes into g.c.
-func (g *funcGen) finish() {
+// finish peepholes, lays out offsets, and encodes into g.c. It returns true if a
+// jump's relative distance exceeds paserati's int16 encoding — in which case it
+// stops before emitting misaligned bytecode and the caller stubs the function.
+func (g *funcGen) finish() bool {
 	peephole(g.out)
 
 	off := 0
@@ -78,6 +81,24 @@ func (g *funcGen) finish() {
 		}
 		in.off = off
 		off += instrSize(in)
+	}
+
+	for _, in := range g.out {
+		if in.dead {
+			continue
+		}
+		var d int
+		switch in.kind {
+		case akJump:
+			d = in.target.off - (in.off + 3)
+		case akCondJump:
+			d = in.target.off - (in.off + 4)
+		default:
+			continue
+		}
+		if d > 32767 || d < -32768 {
+			return true
+		}
 	}
 
 	for _, in := range g.out {
@@ -101,6 +122,7 @@ func (g *funcGen) finish() {
 			}
 		}
 	}
+	return false
 }
 
 // --- peephole ---
