@@ -165,6 +165,12 @@ done
 
 ## Artifacts (durable locations)
 
+- **Joint dev report (co-authored retrospective):** committed here at
+  `docs/archived/dev-report-let-go-on-paserati.{md,html}` — the markdown source of
+  record and the shareable visual version (dual-trace theme, two-walls
+  infographic). Co-owned live source is `DEV-REPORT.md` in the shared dir; live
+  artifact URL (default-private):
+  `https://claude.ai/code/artifact/1a072175-a395-4454-b2eb-38a37f39dfb8`.
 - **Team's runtime-only artifacts + the cross-repo note exchange (durable):**
   `~/projects-new/3p/paserati/scratch/letgo-wasi-targets/runtime-only-tinygo/`
   — four builds (`lg-runtime-only-tinygo-{opt2,optz}.wasm` = asyncify;
