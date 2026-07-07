@@ -30,11 +30,11 @@ import (
 //     keeps the register mapping consistent across labels.
 
 var binopOp = map[Opcode]vm.OpCode{
-	OpI32Add:  vm.OpAdd,
-	OpI32Sub:  vm.OpSubtract,
-	OpI32Mul:  vm.OpMultiply,
-	OpI32DivS: vm.OpDivide, // NOTE: not truncated-int-div yet
-	OpI32RemS: vm.OpRemainder,
+	OpI32Add: vm.OpAdd,
+	OpI32Sub: vm.OpSubtract,
+	OpI32Mul: vm.OpMultiply,
+	// div_s/rem_s are NOT here: paserati's OpDivide is float division (9/10 → 0.9),
+	// but wasm i32.div_s truncates toward zero. They lower to integer helpers.
 	OpI32And:  vm.OpBitwiseAnd,
 	OpI32Or:   vm.OpBitwiseOr,
 	OpI32Xor:  vm.OpBitwiseXor,
@@ -47,6 +47,19 @@ var binopOp = map[Opcode]vm.OpCode{
 	OpI32GtS:  vm.OpGreater,
 	OpI32LeS:  vm.OpLessEqual,
 	OpI32GeS:  vm.OpGreaterEqual,
+
+	// f64 maps onto paserati's number ops directly (values are float64). NaN and
+	// -0 semantics match: NaN compares unequal/false, -0 == 0.
+	OpF64Add: vm.OpAdd,
+	OpF64Sub: vm.OpSubtract,
+	OpF64Mul: vm.OpMultiply,
+	OpF64Div: vm.OpDivide,
+	OpF64Eq:  vm.OpEqual,
+	OpF64Ne:  vm.OpNotEqual,
+	OpF64Lt:  vm.OpLess,
+	OpF64Gt:  vm.OpGreater,
+	OpF64Le:  vm.OpLessEqual,
+	OpF64Ge:  vm.OpGreaterEqual,
 }
 
 // ctrlFrame tracks one open block/loop/if for branch resolution. Branch targets
@@ -85,7 +98,7 @@ type funcGen struct {
 func CompileFunc(fn *Func, name string) (vm.Value, error) {
 	c := vm.NewChunk()
 	val := vm.NewFunction(fn.NumParams(), fn.NumParams(), 0, 0, false, name, c, false, false, false, false)
-	g := &funcGen{c: c, fn: fn}
+	g := &funcGen{c: c, fn: fn, rt: newRTHelpers()}
 	if err := g.compileInto(val); err != nil {
 		return vm.Undefined, fmt.Errorf("%s: %w", name, err)
 	}
@@ -213,6 +226,11 @@ func (g *funcGen) emitBody() error {
 			// Carried as BigInt for exact 64-bit fidelity.
 			dst := g.push()
 			g.loadConst(dst, g.c.AddConstant(i64Value(ins.I64)))
+
+		case OpF32Const, OpF64Const:
+			// f32 is widened to f64 by the decoder; both carry as a Number.
+			dst := g.push()
+			g.loadConst(dst, g.c.AddConstant(vm.Number(ins.F64)))
 
 		case OpI64Add:
 			g.emitHelperBinop(g.rt.i64add)
@@ -387,7 +405,11 @@ func (g *funcGen) emitBody() error {
 				continue
 			}
 			if helper, ok := g.rt.unsignedHelper(ins.Op); ok {
-				g.emitHelperBinop(helper) // unsigned compares / div / rem, i64 compares / xor
+				g.emitHelperBinop(helper) // unsigned i32 compares / div / rem, i64 gt_s/lt_s/xor
+				continue
+			}
+			if helper, ok := g.rt.binaryHelper(ins.Op); ok {
+				g.emitHelperBinop(helper) // i64 arithmetic / bitwise / compares
 				continue
 			}
 			op, ok := binopOp[ins.Op]
