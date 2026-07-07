@@ -135,20 +135,66 @@ const (
 	OpI32Popcnt Opcode = 0x69
 
 	// f64 arithmetic and comparisons (named for codegen; decode via the numeric
-	// range). f64 maps onto paserati's number opcodes directly.
-	OpF64Eq   Opcode = 0x61
-	OpF64Ne   Opcode = 0x62
-	OpF64Lt   Opcode = 0x63
-	OpF64Gt   Opcode = 0x64
-	OpF64Le   Opcode = 0x65
-	OpF64Ge   Opcode = 0x66
-	OpF64Abs  Opcode = 0x99
-	OpF64Neg  Opcode = 0x9a
-	OpF64Sqrt Opcode = 0x9f
-	OpF64Add  Opcode = 0xa0
-	OpF64Sub  Opcode = 0xa1
-	OpF64Mul  Opcode = 0xa2
-	OpF64Div  Opcode = 0xa3
+	// range). add/sub/mul/div and compares map onto paserati's number opcodes;
+	// the rest lower as helpers.
+	OpF64Eq       Opcode = 0x61
+	OpF64Ne       Opcode = 0x62
+	OpF64Lt       Opcode = 0x63
+	OpF64Gt       Opcode = 0x64
+	OpF64Le       Opcode = 0x65
+	OpF64Ge       Opcode = 0x66
+	OpF64Abs      Opcode = 0x99
+	OpF64Neg      Opcode = 0x9a
+	OpF64Ceil     Opcode = 0x9b
+	OpF64Floor    Opcode = 0x9c
+	OpF64Trunc    Opcode = 0x9d
+	OpF64Nearest  Opcode = 0x9e
+	OpF64Sqrt     Opcode = 0x9f
+	OpF64Add      Opcode = 0xa0
+	OpF64Sub      Opcode = 0xa1
+	OpF64Mul      Opcode = 0xa2
+	OpF64Div      Opcode = 0xa3
+	OpF64Min      Opcode = 0xa4
+	OpF64Max      Opcode = 0xa5
+	OpF64Copysign Opcode = 0xa6
+
+	// f32 arithmetic and comparisons. f32 is carried as float64, so results are
+	// rounded back to float32 precision in the helpers; compares are exact on the
+	// carried value and map onto the number opcodes.
+	OpF32Eq       Opcode = 0x5b
+	OpF32Ne       Opcode = 0x5c
+	OpF32Lt       Opcode = 0x5d
+	OpF32Gt       Opcode = 0x5e
+	OpF32Le       Opcode = 0x5f
+	OpF32Ge       Opcode = 0x60
+	OpF32Abs      Opcode = 0x8b
+	OpF32Neg      Opcode = 0x8c
+	OpF32Ceil     Opcode = 0x8d
+	OpF32Floor    Opcode = 0x8e
+	OpF32Trunc    Opcode = 0x8f
+	OpF32Nearest  Opcode = 0x90
+	OpF32Sqrt     Opcode = 0x91
+	OpF32Add      Opcode = 0x92
+	OpF32Sub      Opcode = 0x93
+	OpF32Mul      Opcode = 0x94
+	OpF32Div      Opcode = 0x95
+	OpF32Min      Opcode = 0x96
+	OpF32Max      Opcode = 0x97
+	OpF32Copysign Opcode = 0x98
+
+	// Trapping float→int truncation (non-saturating) and int→f32 conversion.
+	OpI32TruncF32S   Opcode = 0xa8
+	OpI32TruncF32U   Opcode = 0xa9
+	OpI32TruncF64S   Opcode = 0xaa
+	OpI32TruncF64U   Opcode = 0xab
+	OpI64TruncF32S   Opcode = 0xae
+	OpI64TruncF32U   Opcode = 0xaf
+	OpI64TruncF64S   Opcode = 0xb0
+	OpI64TruncF64U   Opcode = 0xb1
+	OpF32ConvertI32S Opcode = 0xb2
+	OpF32ConvertI32U Opcode = 0xb3
+	OpF32ConvertI64S Opcode = 0xb4
+	OpF32ConvertI64U Opcode = 0xb5
 
 	// Conversions (named for codegen; decode via the numeric range).
 	OpI64ExtendI32S     Opcode = 0xac
@@ -314,7 +360,21 @@ var opNames = map[Opcode]string{
 	OpF64Eq: "f64.eq", OpF64Ne: "f64.ne", OpF64Lt: "f64.lt", OpF64Gt: "f64.gt",
 	OpF64Le: "f64.le", OpF64Ge: "f64.ge",
 	OpF64Abs: "f64.abs", OpF64Neg: "f64.neg", OpF64Sqrt: "f64.sqrt",
+	OpF64Ceil: "f64.ceil", OpF64Floor: "f64.floor", OpF64Trunc: "f64.trunc", OpF64Nearest: "f64.nearest",
 	OpF64Add: "f64.add", OpF64Sub: "f64.sub", OpF64Mul: "f64.mul", OpF64Div: "f64.div",
+	OpF64Min: "f64.min", OpF64Max: "f64.max", OpF64Copysign: "f64.copysign",
+	OpF32Eq: "f32.eq", OpF32Ne: "f32.ne", OpF32Lt: "f32.lt", OpF32Gt: "f32.gt",
+	OpF32Le: "f32.le", OpF32Ge: "f32.ge",
+	OpF32Abs: "f32.abs", OpF32Neg: "f32.neg", OpF32Sqrt: "f32.sqrt",
+	OpF32Ceil: "f32.ceil", OpF32Floor: "f32.floor", OpF32Trunc: "f32.trunc", OpF32Nearest: "f32.nearest",
+	OpF32Add: "f32.add", OpF32Sub: "f32.sub", OpF32Mul: "f32.mul", OpF32Div: "f32.div",
+	OpF32Min: "f32.min", OpF32Max: "f32.max", OpF32Copysign: "f32.copysign",
+	OpI32TruncF32S: "i32.trunc_f32_s", OpI32TruncF32U: "i32.trunc_f32_u",
+	OpI32TruncF64S: "i32.trunc_f64_s", OpI32TruncF64U: "i32.trunc_f64_u",
+	OpI64TruncF32S: "i64.trunc_f32_s", OpI64TruncF32U: "i64.trunc_f32_u",
+	OpI64TruncF64S: "i64.trunc_f64_s", OpI64TruncF64U: "i64.trunc_f64_u",
+	OpF32ConvertI32S: "f32.convert_i32_s", OpF32ConvertI32U: "f32.convert_i32_u",
+	OpF32ConvertI64S: "f32.convert_i64_s", OpF32ConvertI64U: "f32.convert_i64_u",
 	OpI32WrapI64: "i32.wrap_i64", OpF32DemoteF64: "f32.demote_f64", OpF64PromoteF32: "f64.promote_f32",
 	OpF64ConvertI32S: "f64.convert_i32_s", OpF64ConvertI32U: "f64.convert_i32_u",
 	OpF64ConvertI64S: "f64.convert_i64_s", OpF64ConvertI64U: "f64.convert_i64_u",
