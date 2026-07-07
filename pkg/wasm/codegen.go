@@ -178,7 +178,9 @@ func CompileModuleWasi(m *Module, stdout, stderr io.Writer) (map[string]vm.Value
 		}
 		if errors.Is(err, errRegOverflow) {
 			resetChunk(vals[i])
-			compileStub(vals[i], &m.Funcs[i], fmt.Sprintf("wasm: %s too large for register file", funcName(m, i)))
+			// The cause is either >256 registers or a jump beyond int16; -profile
+			// distinguishes them. Both are paserati bytecode-format limits.
+			compileStub(vals[i], &m.Funcs[i], fmt.Sprintf("wasm: %s exceeds bytecode limits (256 regs / 32KB jumps)", funcName(m, i)))
 			continue
 		}
 		if err != nil {
