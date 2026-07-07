@@ -22,6 +22,7 @@ import (
 func main() {
 	list := flag.Bool("list", false, "list exported functions and exit")
 	run := flag.Bool("run", false, "run the WASI _start entry point (exits with its code)")
+	profile := flag.Bool("profile", false, "report each function's register/jump profile vs paserati's limits")
 	flag.Usage = usage
 	flag.Parse()
 
@@ -39,6 +40,16 @@ func main() {
 	mod, err := wasm.Decode(data)
 	if err != nil {
 		fatalf("decode: %v", err)
+	}
+
+	// -profile: report the register/jump profile vs paserati's bytecode limits.
+	if *profile {
+		mp, err := wasm.Profile(mod)
+		if err != nil {
+			fatalf("profile: %v", err)
+		}
+		fmt.Print(mp.String())
+		return
 	}
 
 	// -run: WASI command mode — set up the host, call _start, exit with its code.
