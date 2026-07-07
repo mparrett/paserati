@@ -225,24 +225,7 @@ var forceSpillAll = false
 // an array at R0 so only the operand stack needs registers — used when a function
 // has too many locals for the direct mapping.
 func (g *funcGen) compileInto(val vm.Value) error {
-	if g.spill {
-		if err := g.spilledEntry(); err != nil {
-			return err
-		}
-	} else {
-		g.base = g.fn.NumLocals()
-		g.maxReg = g.base
-		if g.base > 256 {
-			return fmt.Errorf("%d locals: %w", g.base, errRegOverflow)
-		}
-		if len(g.fn.Locals) > 0 {
-			zero := g.c.AddConstant(vm.Number(0))
-			for i := g.fn.NumParams(); i < g.fn.NumLocals(); i++ {
-				g.loadConst(byte(i), zero)
-			}
-		}
-	}
-	if err := g.emitBody(); err != nil {
+	if err := g.emitAll(); err != nil {
 		return err
 	}
 	// The operand stack lives above the locals; a deep stack can push past the
@@ -262,6 +245,66 @@ func (g *funcGen) compileInto(val vm.Value) error {
 	g.c.MaxRegs = g.maxReg
 	val.AsFunction().RegisterSize = g.maxReg
 	return nil
+}
+
+// emitAll lowers the prologue (register-mapped or spilled) and the body into
+// g.out, leaving finish/encoding to the caller. Shared by real compilation and
+// the profiler.
+func (g *funcGen) emitAll() error {
+	if g.spill {
+		if err := g.spilledEntry(); err != nil {
+			return err
+		}
+	} else {
+		g.base = g.fn.NumLocals()
+		g.maxReg = g.base
+		if g.base > 256 {
+			return fmt.Errorf("%d locals: %w", g.base, errRegOverflow)
+		}
+		if len(g.fn.Locals) > 0 {
+			zero := g.c.AddConstant(vm.Number(0))
+			for i := g.fn.NumParams(); i < g.fn.NumLocals(); i++ {
+				g.loadConst(byte(i), zero)
+			}
+		}
+	}
+	return g.emitBody()
+}
+
+// layoutMaxJump peepholes and lays out offsets (like finish, but without
+// encoding) and returns the largest absolute jump distance. For diagnostics.
+func (g *funcGen) layoutMaxJump() int {
+	peephole(g.out)
+	off := 0
+	for _, in := range g.out {
+		if in.dead {
+			continue
+		}
+		in.off = off
+		off += instrSize(in)
+	}
+	max := 0
+	for _, in := range g.out {
+		if in.dead {
+			continue
+		}
+		var d int
+		switch in.kind {
+		case akJump:
+			d = in.target.off - (in.off + 3)
+		case akCondJump:
+			d = in.target.off - (in.off + 4)
+		default:
+			continue
+		}
+		if d < 0 {
+			d = -d
+		}
+		if d > max {
+			max = d
+		}
+	}
+	return max
 }
 
 // spilledEntry lowers the prologue of a spilled function: R0 holds a fresh
