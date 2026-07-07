@@ -1,8 +1,9 @@
 # Session Handoff — WASM transpiler: the jump wall is CLOSED; let-go runs
 
-**Created:** 2026-07-06 (late). **Updated:** 2026-07-06 (later) — the pending
-decision was made and implemented; long jumps are done and let-go runs end to
-end. This section supersedes the "decision waiting" framing below.
+**Created:** 2026-07-06 (late). **Updated:** 2026-07-06 (later) — long jumps
+done, let-go runs end to end; then a cross-repo round with the let-go team on a
+goroutine-free build (see "Cross-repo" below — four builds run, stock paserati
+ruled out, stop-here call made). This supersedes the "decision waiting" framing.
 **Working dir:** work is in the **`paserati-wasm` worktree** on `feat/wasm-transpile`
 (the `../paserati` checkout is a different branch — don't confuse them).
 
@@ -54,6 +55,43 @@ the jumps.
   correct 32-bit offset landing on target).
 - `go test ./pkg/vm ./pkg/wasm ./tests` green; `go vet` clean.
 
+## Cross-repo: goroutine-free let-go, and the four-build result
+
+After long jumps shipped, the let-go team (nooga side, via their Claude) explored
+removing the asyncify gowrapper — the source of the worst oversized functions.
+On the wasm MVP target asyncify is TinyGo's *only* goroutine mechanism, and
+wasip1 has no threads, so goroutines buy cooperative concurrency a wasi target
+never uses. Their `spike/nogoroutine` branch (`-scheduler=none`, no asyncify)
+boots and runs the sample. They dropped two goroutine-free artifacts and asked
+whether that reaches **stock paserati** (no spiller, no long jumps).
+
+Measured with `-profile` (all four run byte-identical to wasmtime):
+
+| build | funcs | needs spiller (>256 regs) | needs long jumps (>32 KB) | worst jump |
+|---|---|---|---|---|
+| asyncify opt2      | 2721 | 1 (248 loc) | 22 | ~392 KB |
+| asyncify optz      | 3048 | 1 (462 loc) | 11 | ~223 KB |
+| nogoroutine opt2   | 2590 | 1 (246 loc) | 6  | ~110 KB |
+| nogoroutine optz   | 2896 | 1 (460 loc) | 3  | ~130 KB |
+
+**Conclusion: stock paserati is not reachable by `-opt` level alone.** Removing
+goroutines killed the catastrophic case but not the pattern — one large core
+function (eval/apply-shaped) stays big regardless. And the two `-opt` levels
+trade the walls against each other: opt2 keeps the register wall marginal (~246
+locals, only just over 256 with the operand stack) but leaves more long jumps;
+optz halves the jumps but nearly doubles that function's locals. No level wins
+both axes.
+
+**Decision: stop chasing stock paserati.** The residue is small and already
+handled cheaply — the spiller is transpiler-only (no VM change) and the long
+jumps are two additive opcodes. paserati runs all four builds correctly today;
+fighting TinyGo codegen to shave one function under both limits buys nothing at
+runtime. Full exchange in the shared dir (see Artifacts): `NOTE-nogoroutine*.md`
+(theirs), `NOTE-paserati-nogoroutine*-scan.md` (ours). An untried lever if anyone
+resumes it: `-opt=1` / `-opt=s` might sit between opt2 and optz — not worth
+gating on. Whether goroutine-free graduates from spike to a real build tag is
+the let-go team's roadmap call.
+
 ## Repro quick-ref
 
 ```bash
@@ -74,9 +112,13 @@ done
    matters. Independent of everything above.
 2. **A-track: the wazero embedding pitch to let-go upstream (nooga).** Gating is
    already proven on `spike/wasi-gating`. The deciding factor is a concrete
-   consumer — a Go host that would embed let-go via wazero. Full case in
-   `~/projects-new/project-docs/paserati/wasi-letgo-proposal-and-transpiler-gaps.md`
-   (now marked RESOLVED at the top for the transpiler side).
+   consumer — a Go host that would embed let-go via wazero. **Pitch is drafted
+   and ready to send:**
+   `~/projects-new/project-docs/paserati/wazero-embedding-pitch-nooga.md` (leads
+   with wazero embedding, names the number-fidelity cost, ends on a demo offer;
+   not yet sent). Background case in the sibling
+   `wasi-letgo-proposal-and-transpiler-gaps.md` (RESOLVED at the top for the
+   transpiler side).
 3. (Housekeeping) Nothing pending on the transpiler correctness frontier. The
    numeric ISA, WASI host, spiller, and now long jumps are all done.
 
@@ -96,10 +138,15 @@ done
 
 ## Artifacts (durable locations)
 
-- **Team's runtime-only artifacts (durable, on disk):**
+- **Team's runtime-only artifacts + the cross-repo note exchange (durable):**
   `~/projects-new/3p/paserati/scratch/letgo-wasi-targets/runtime-only-tinygo/`
-  — `lg-runtime-only-tinygo-opt2.wasm`, `-optz.wasm`, `sample.lgb`, `sample.lg`,
-  README. Faithful 24 MB stdlib-Go build one dir up (`../lg-stdgo-wasip1.wasm`).
+  — four builds (`lg-runtime-only-tinygo-{opt2,optz}.wasm` = asyncify;
+  `lg-nogoroutine-tinygo-{opt2,optz}.wasm` = goroutine-free), `sample.lgb`,
+  `sample.lg`, README. Notes: `NOTE-nogoroutine*.md` / `NOTE-scheduler-none.md`
+  (theirs), `NOTE-paserati-nogoroutine*-scan.md` (ours — the four-build scan and
+  the stop-here call). Faithful 24 MB stdlib-Go build one dir up
+  (`../lg-stdgo-wasip1.wasm`). The team's branch is `spike/nogoroutine` @
+  `f7ee209` (local/unpushed).
 - Float/i64 probes committed as `pkg/wasm/testdata/tinygo_{floats,i64}.wasm`.
   Regenerate letgo.wasm: `tinygo build -target=wasi -opt=z -no-debug -o x.wasm .`
   from `~/projects-new/3p/worktrees/let-go-tinygo-main`.
