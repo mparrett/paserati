@@ -31,6 +31,11 @@ func RunStart(m *Module, stdout, stderr io.Writer) (int, error) {
 		return int(host.exitCode), nil
 	}
 	if callErr != nil {
+		// A VM exception stringifies as a bare "VM exception"; surface the thrown
+		// value (message string) so the caller sees what actually failed.
+		if ee, ok := callErr.(vm.ExceptionError); ok {
+			return 0, fmt.Errorf("wasm trap: %s", ee.GetExceptionValue().ToString())
+		}
 		return 0, callErr
 	}
 	return 0, nil

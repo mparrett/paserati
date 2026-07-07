@@ -1,6 +1,7 @@
 package wasm
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -60,6 +61,14 @@ var binopOp = map[Opcode]vm.OpCode{
 	OpF64Gt:  vm.OpGreater,
 	OpF64Le:  vm.OpLessEqual,
 	OpF64Ge:  vm.OpGreaterEqual,
+
+	// f32 compares are exact on the carried float64 value.
+	OpF32Eq: vm.OpEqual,
+	OpF32Ne: vm.OpNotEqual,
+	OpF32Lt: vm.OpLess,
+	OpF32Gt: vm.OpGreater,
+	OpF32Le: vm.OpLessEqual,
+	OpF32Ge: vm.OpGreaterEqual,
 }
 
 // ctrlFrame tracks one open block/loop/if for branch resolution. Branch targets
@@ -157,6 +166,12 @@ func CompileModuleWasi(m *Module, stdout, stderr io.Writer) (map[string]vm.Value
 		fn := &m.Funcs[i]
 		g := &funcGen{c: vals[i].AsFunction().Chunk, fn: fn, mod: m, vals: vals, mem: mem, glob: glob, rt: rt, imports: binds, table: table}
 		if err := g.compileInto(vals[i]); err != nil {
+			// A function too big for the register file is stubbed, not fatal: it
+			// traps only if actually called (like an unimplemented import).
+			if errors.Is(err, errRegOverflow) {
+				compileStub(vals[i], fn, fmt.Sprintf("wasm: %s too large for register file (%v)", funcName(m, i), err))
+				continue
+			}
 			return nil, nil, fmt.Errorf("%s: %w", funcName(m, i), err)
 		}
 	}
@@ -185,12 +200,17 @@ func funcName(m *Module, i int) string {
 	return fmt.Sprintf("func%d", i)
 }
 
+// errRegOverflow marks a function that needs more than paserati's 256-register
+// (byte-indexed) file. Such functions are rare (one big init in a whole module);
+// the module compiler stubs them rather than failing the whole compile.
+var errRegOverflow = errors.New("register file overflow")
+
 // compileInto runs codegen and fills val's chunk and register size.
 func (g *funcGen) compileInto(val vm.Value) error {
 	g.base = g.fn.NumLocals()
 	g.maxReg = g.base
 	if g.base > 256 {
-		return fmt.Errorf("%d locals exceeds register file", g.base)
+		return fmt.Errorf("%d locals: %w", g.base, errRegOverflow)
 	}
 	if len(g.fn.Locals) > 0 {
 		zero := g.c.AddConstant(vm.Number(0))
@@ -201,10 +221,37 @@ func (g *funcGen) compileInto(val vm.Value) error {
 	if err := g.emitBody(); err != nil {
 		return err
 	}
+	// The operand stack lives above the locals; a deep stack can push past the
+	// register file too. The emitted chunk is discarded when we stub, so the
+	// byte-wrapped registers it may contain never run.
+	if g.maxReg > 256 {
+		return fmt.Errorf("%d registers: %w", g.maxReg, errRegOverflow)
+	}
 	g.finish() // peephole + encode into g.c
 	g.c.MaxRegs = g.maxReg
 	val.AsFunction().RegisterSize = g.maxReg
 	return nil
+}
+
+// compileStub replaces a function's body with one that throws — used for
+// functions the register file can't hold. If the guest never calls it, the
+// module runs; if it does, the throw surfaces as a clean runtime trap.
+func compileStub(val vm.Value, fn *Func, msg string) {
+	f := val.AsFunction()
+	c := f.Chunk
+	c.Code = c.Code[:0]
+	g := &funcGen{c: c, fn: fn, rt: newRTHelpers()}
+	g.base = fn.NumParams()
+	if g.base > 255 {
+		g.base = 255
+	}
+	g.maxReg = g.base + 1
+	t := byte(g.base)
+	g.loadConst(t, c.AddConstant(vm.NewString(msg)))
+	g.emitOp1(vm.OpThrow, t)
+	g.finish()
+	c.MaxRegs = g.maxReg
+	f.RegisterSize = g.maxReg
 }
 
 func (g *funcGen) emitBody() error {
@@ -368,13 +415,15 @@ func (g *funcGen) emitBody() error {
 			}
 
 		case OpI32Load, OpI32Load8U, OpI32Load8S, OpI32Load16U, OpI32Load16S,
-			OpI64Load, OpF32Load, OpF64Load:
+			OpI64Load, OpI64Load8S, OpI64Load8U, OpI64Load16S, OpI64Load16U,
+			OpI64Load32S, OpI64Load32U, OpF32Load, OpF64Load:
 			if err := g.emitLoad(g.loadHelper(ins.Op), ins.U32); err != nil {
 				return err
 			}
 
 		case OpI32Store, OpI32Store8, OpI32Store16,
-			OpI64Store, OpF32Store, OpF64Store:
+			OpI64Store, OpI64Store8, OpI64Store16, OpI64Store32,
+			OpF32Store, OpF64Store:
 			if err := g.emitStore(g.storeHelper(ins.Op), ins.U32); err != nil {
 				return err
 			}

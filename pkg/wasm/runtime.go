@@ -116,6 +116,33 @@ func newRTHelpers() *rtHelpers {
 			return f(args[0]), nil
 		})
 	}
+	// f32u wraps a float→float op, rounding the result to float32 precision.
+	f32u := func(name string, f func(x float64) float64) vm.Value {
+		return unary(name, func(v vm.Value) vm.Value { return vm.Number(float64(float32(f(v.ToFloat())))) })
+	}
+	// f32b is the binary counterpart (add/sub/mul/div/min/max/copysign for f32).
+	f32b := func(name string, f func(a, b float64) float64) vm.Value {
+		return vm.NewNativeFunction(2, false, name, func(args []vm.Value) (vm.Value, error) {
+			return vm.Number(float64(float32(f(args[0].ToFloat(), args[1].ToFloat())))), nil
+		})
+	}
+	// f64b lowers a two-operand f64 op that has no paserati opcode (min/max/copysign).
+	f64b := func(name string, f func(a, b float64) float64) vm.Value {
+		return vm.NewNativeFunction(2, false, name, func(args []vm.Value) (vm.Value, error) {
+			return vm.Number(f(args[0].ToFloat(), args[1].ToFloat())), nil
+		})
+	}
+	// trunc builds a trapping (non-saturating) float→int op: NaN or out-of-range
+	// traps, matching wasm i{32,64}.trunc_f{32,64}_{s,u}. Range is [lo, hiExcl).
+	trunc := func(name string, lo, hiExcl float64, conv func(float64) vm.Value) vm.Value {
+		return vm.NewNativeFunction(1, false, name, func(args []vm.Value) (vm.Value, error) {
+			t := math.Trunc(args[0].ToFloat())
+			if math.IsNaN(t) || t < lo || t >= hiExcl {
+				return vm.Undefined, fmt.Errorf("%s: %v out of range", name, args[0].ToFloat())
+			}
+			return conv(t), nil
+		})
+	}
 	i64bin := func(name string, f func(a, b int64) int64) vm.Value {
 		return vm.NewNativeFunction(2, false, name, func(args []vm.Value) (vm.Value, error) {
 			return i64Value(f(asI64(args[0]), asI64(args[1]))), nil
@@ -214,6 +241,37 @@ func newRTHelpers() *rtHelpers {
 			OpI64Ctz:    unary("i64.ctz", func(v vm.Value) vm.Value { return i64Value(int64(bits.TrailingZeros64(uint64(asI64(v))))) }),
 			OpI64Popcnt: unary("i64.popcnt", func(v vm.Value) vm.Value { return i64Value(int64(bits.OnesCount64(uint64(asI64(v))))) }),
 			OpI64Eqz:    unary("i64.eqz", func(v vm.Value) vm.Value { return vm.BooleanValue(asI64(v) == 0) }),
+
+			// f64 unary math with no paserati opcode.
+			OpF64Ceil:    unary("f64.ceil", func(v vm.Value) vm.Value { return vm.Number(math.Ceil(v.ToFloat())) }),
+			OpF64Floor:   unary("f64.floor", func(v vm.Value) vm.Value { return vm.Number(math.Floor(v.ToFloat())) }),
+			OpF64Trunc:   unary("f64.trunc", func(v vm.Value) vm.Value { return vm.Number(math.Trunc(v.ToFloat())) }),
+			OpF64Nearest: unary("f64.nearest", func(v vm.Value) vm.Value { return vm.Number(math.RoundToEven(v.ToFloat())) }),
+
+			// f32 unary math (result rounded to float32).
+			OpF32Abs:     f32u("f32.abs", math.Abs),
+			OpF32Neg:     f32u("f32.neg", func(x float64) float64 { return -x }),
+			OpF32Ceil:    f32u("f32.ceil", math.Ceil),
+			OpF32Floor:   f32u("f32.floor", math.Floor),
+			OpF32Trunc:   f32u("f32.trunc", math.Trunc),
+			OpF32Nearest: f32u("f32.nearest", math.RoundToEven),
+			OpF32Sqrt:    f32u("f32.sqrt", math.Sqrt),
+
+			// int→f32 conversions (rounded to float32).
+			OpF32ConvertI32S: unary("f32.convert_i32_s", func(v vm.Value) vm.Value { return vm.Number(float64(float32(int32(v.ToFloat())))) }),
+			OpF32ConvertI32U: unary("f32.convert_i32_u", func(v vm.Value) vm.Value { return vm.Number(float64(float32(asU32(v)))) }),
+			OpF32ConvertI64S: unary("f32.convert_i64_s", func(v vm.Value) vm.Value { return vm.Number(float64(float32(asI64(v)))) }),
+			OpF32ConvertI64U: unary("f32.convert_i64_u", func(v vm.Value) vm.Value { return vm.Number(float64(float32(uint64(asI64(v))))) }),
+
+			// Trapping float→int truncation. Ranges are [lo, 2^width).
+			OpI32TruncF32S: trunc("i32.trunc_f32_s", -2147483648, 2147483648, func(t float64) vm.Value { return vm.Number(float64(int32(t))) }),
+			OpI32TruncF64S: trunc("i32.trunc_f64_s", -2147483648, 2147483648, func(t float64) vm.Value { return vm.Number(float64(int32(t))) }),
+			OpI32TruncF32U: trunc("i32.trunc_f32_u", 0, 4294967296, func(t float64) vm.Value { return vm.Number(float64(int32(uint32(t)))) }),
+			OpI32TruncF64U: trunc("i32.trunc_f64_u", 0, 4294967296, func(t float64) vm.Value { return vm.Number(float64(int32(uint32(t)))) }),
+			OpI64TruncF32S: trunc("i64.trunc_f32_s", -9223372036854775808, 9223372036854775808, func(t float64) vm.Value { return i64Value(int64(t)) }),
+			OpI64TruncF64S: trunc("i64.trunc_f64_s", -9223372036854775808, 9223372036854775808, func(t float64) vm.Value { return i64Value(int64(t)) }),
+			OpI64TruncF32U: trunc("i64.trunc_f32_u", 0, 18446744073709551616, func(t float64) vm.Value { return i64Value(int64(uint64(t))) }),
+			OpI64TruncF64U: trunc("i64.trunc_f64_u", 0, 18446744073709551616, func(t float64) vm.Value { return i64Value(int64(uint64(t))) }),
 		},
 
 		binaryOps: map[Opcode]vm.Value{
@@ -270,6 +328,20 @@ func newRTHelpers() *rtHelpers {
 			OpI64GtU: i64ucmp("i64.gt_u", func(a, b uint64) bool { return a > b }),
 			OpI64LeU: i64ucmp("i64.le_u", func(a, b uint64) bool { return a <= b }),
 			OpI64GeU: i64ucmp("i64.ge_u", func(a, b uint64) bool { return a >= b }),
+
+			// f64 binary ops with no paserati opcode.
+			OpF64Min:      f64b("f64.min", math.Min),
+			OpF64Max:      f64b("f64.max", math.Max),
+			OpF64Copysign: f64b("f64.copysign", math.Copysign),
+
+			// f32 binary arithmetic (result rounded to float32).
+			OpF32Add:      f32b("f32.add", func(a, b float64) float64 { return a + b }),
+			OpF32Sub:      f32b("f32.sub", func(a, b float64) float64 { return a - b }),
+			OpF32Mul:      f32b("f32.mul", func(a, b float64) float64 { return a * b }),
+			OpF32Div:      f32b("f32.div", func(a, b float64) float64 { return a / b }),
+			OpF32Min:      f32b("f32.min", math.Min),
+			OpF32Max:      f32b("f32.max", math.Max),
+			OpF32Copysign: f32b("f32.copysign", math.Copysign),
 		},
 	}
 }

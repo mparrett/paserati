@@ -50,23 +50,34 @@ type memory struct {
 
 	grow vm.Value // memory.grow(delta) -> old page count (or -1)
 
-	loadI32  vm.Value
-	load8U   vm.Value
-	load8S   vm.Value
-	load16U  vm.Value
-	load16S  vm.Value
-	loadI64  vm.Value
-	loadF32  vm.Value
-	loadF64  vm.Value
-	storeI32 vm.Value
-	store8   vm.Value
-	store16  vm.Value
-	storeI64 vm.Value
-	storeF32 vm.Value
-	storeF64 vm.Value
-	bulkCopy vm.Value
-	bulkFill vm.Value
-	size     vm.Value
+	loadI32 vm.Value
+	load8U  vm.Value
+	load8S  vm.Value
+	load16U vm.Value
+	load16S vm.Value
+	loadI64 vm.Value
+	loadF32 vm.Value
+	loadF64 vm.Value
+	// Narrow i64 loads: read N bytes, sign/zero-extend to a BigInt i64.
+	loadI64_8S  vm.Value
+	loadI64_8U  vm.Value
+	loadI64_16S vm.Value
+	loadI64_16U vm.Value
+	loadI64_32S vm.Value
+	loadI64_32U vm.Value
+	storeI32    vm.Value
+	store8      vm.Value
+	store16     vm.Value
+	storeI64    vm.Value
+	storeF32    vm.Value
+	storeF64    vm.Value
+	// Narrow i64 stores: write the low N bytes of a BigInt i64.
+	storeI64_8  vm.Value
+	storeI64_16 vm.Value
+	storeI64_32 vm.Value
+	bulkCopy    vm.Value
+	bulkFill    vm.Value
+	size        vm.Value
 }
 
 // newMemory allocates the linear memory, applies active data segments, and
@@ -162,6 +173,57 @@ func newMemory(m *Module) (*memory, error) {
 		}
 		return i64Value(int64(binary.LittleEndian.Uint64(data[e:]))), nil
 	}
+	// Narrow i64 loads: read N bytes, sign/zero-extend to i64 (BigInt).
+	loadI64N := func(size int, signed bool) func([]vm.Value) (vm.Value, error) {
+		return func(args []vm.Value) (vm.Value, error) {
+			e, err := ea(args, size)
+			if err != nil {
+				return vm.Undefined, err
+			}
+			var u uint64
+			switch size {
+			case 1:
+				u = uint64(data[e])
+			case 2:
+				u = uint64(binary.LittleEndian.Uint16(data[e:]))
+			default:
+				u = uint64(binary.LittleEndian.Uint32(data[e:]))
+			}
+			var v int64
+			if signed {
+				switch size {
+				case 1:
+					v = int64(int8(u))
+				case 2:
+					v = int64(int16(u))
+				default:
+					v = int64(int32(u))
+				}
+			} else {
+				v = int64(u)
+			}
+			return i64Value(v), nil
+		}
+	}
+	// Narrow i64 stores: write the low N bytes of the i64 (BigInt) value.
+	storeI64N := func(size int) func([]vm.Value) (vm.Value, error) {
+		return func(args []vm.Value) (vm.Value, error) {
+			e, err := storeAddr(args, size)
+			if err != nil {
+				return vm.Undefined, err
+			}
+			u := uint64(asI64(args[1]))
+			switch size {
+			case 1:
+				data[e] = byte(u)
+			case 2:
+				binary.LittleEndian.PutUint16(data[e:], uint16(u))
+			default:
+				binary.LittleEndian.PutUint32(data[e:], uint32(u))
+			}
+			return vm.Undefined, nil
+		}
+	}
 	loadF64 := func(args []vm.Value) (vm.Value, error) {
 		e, err := ea(args, 8)
 		if err != nil {
@@ -249,25 +311,35 @@ func newMemory(m *Module) (*memory, error) {
 	}
 
 	return &memory{
-		Buffer:   buf,
-		getData:  func() []byte { return data },
-		grow:     vm.NewNativeFunction(1, false, "mem.grow", grow),
-		loadI32:  vm.NewNativeFunction(2, false, "mem.load_i32", load(4, true)),
-		load8U:   vm.NewNativeFunction(2, false, "mem.load8_u", load(1, false)),
-		load8S:   vm.NewNativeFunction(2, false, "mem.load8_s", load(1, true)),
-		load16U:  vm.NewNativeFunction(2, false, "mem.load16_u", load(2, false)),
-		load16S:  vm.NewNativeFunction(2, false, "mem.load16_s", load(2, true)),
-		loadI64:  vm.NewNativeFunction(2, false, "mem.load_i64", loadI64),
-		loadF32:  vm.NewNativeFunction(2, false, "mem.load_f32", loadF32),
-		loadF64:  vm.NewNativeFunction(2, false, "mem.load_f64", loadF64),
-		storeI32: vm.NewNativeFunction(3, false, "mem.store_i32", store(4)),
-		store8:   vm.NewNativeFunction(3, false, "mem.store8", store(1)),
-		store16:  vm.NewNativeFunction(3, false, "mem.store16", store(2)),
-		storeI64: vm.NewNativeFunction(3, false, "mem.store_i64", storeI64),
-		storeF32: vm.NewNativeFunction(3, false, "mem.store_f32", storeF32),
-		storeF64: vm.NewNativeFunction(3, false, "mem.store_f64", storeF64),
-		bulkCopy: vm.NewNativeFunction(3, false, "mem.copy", bulkCopy),
-		bulkFill: vm.NewNativeFunction(3, false, "mem.fill", bulkFill),
+		Buffer:  buf,
+		getData: func() []byte { return data },
+		grow:    vm.NewNativeFunction(1, false, "mem.grow", grow),
+		loadI32: vm.NewNativeFunction(2, false, "mem.load_i32", load(4, true)),
+		load8U:  vm.NewNativeFunction(2, false, "mem.load8_u", load(1, false)),
+		load8S:  vm.NewNativeFunction(2, false, "mem.load8_s", load(1, true)),
+		load16U: vm.NewNativeFunction(2, false, "mem.load16_u", load(2, false)),
+		load16S: vm.NewNativeFunction(2, false, "mem.load16_s", load(2, true)),
+		loadI64: vm.NewNativeFunction(2, false, "mem.load_i64", loadI64),
+		loadF32: vm.NewNativeFunction(2, false, "mem.load_f32", loadF32),
+		loadF64: vm.NewNativeFunction(2, false, "mem.load_f64", loadF64),
+
+		loadI64_8S:  vm.NewNativeFunction(2, false, "mem.load_i64_8s", loadI64N(1, true)),
+		loadI64_8U:  vm.NewNativeFunction(2, false, "mem.load_i64_8u", loadI64N(1, false)),
+		loadI64_16S: vm.NewNativeFunction(2, false, "mem.load_i64_16s", loadI64N(2, true)),
+		loadI64_16U: vm.NewNativeFunction(2, false, "mem.load_i64_16u", loadI64N(2, false)),
+		loadI64_32S: vm.NewNativeFunction(2, false, "mem.load_i64_32s", loadI64N(4, true)),
+		loadI64_32U: vm.NewNativeFunction(2, false, "mem.load_i64_32u", loadI64N(4, false)),
+		storeI64_8:  vm.NewNativeFunction(3, false, "mem.store_i64_8", storeI64N(1)),
+		storeI64_16: vm.NewNativeFunction(3, false, "mem.store_i64_16", storeI64N(2)),
+		storeI64_32: vm.NewNativeFunction(3, false, "mem.store_i64_32", storeI64N(4)),
+		storeI32:    vm.NewNativeFunction(3, false, "mem.store_i32", store(4)),
+		store8:      vm.NewNativeFunction(3, false, "mem.store8", store(1)),
+		store16:     vm.NewNativeFunction(3, false, "mem.store16", store(2)),
+		storeI64:    vm.NewNativeFunction(3, false, "mem.store_i64", storeI64),
+		storeF32:    vm.NewNativeFunction(3, false, "mem.store_f32", storeF32),
+		storeF64:    vm.NewNativeFunction(3, false, "mem.store_f64", storeF64),
+		bulkCopy:    vm.NewNativeFunction(3, false, "mem.copy", bulkCopy),
+		bulkFill:    vm.NewNativeFunction(3, false, "mem.fill", bulkFill),
 		size: vm.NewNativeFunction(0, false, "mem.size", func([]vm.Value) (vm.Value, error) {
 			return vm.Number(float64(len(data) / wasmPageSize)), nil
 		}),
@@ -357,6 +429,18 @@ func (g *funcGen) loadHelper(op Opcode) vm.Value {
 		return g.mem.load16S
 	case OpI64Load:
 		return g.mem.loadI64
+	case OpI64Load8S:
+		return g.mem.loadI64_8S
+	case OpI64Load8U:
+		return g.mem.loadI64_8U
+	case OpI64Load16S:
+		return g.mem.loadI64_16S
+	case OpI64Load16U:
+		return g.mem.loadI64_16U
+	case OpI64Load32S:
+		return g.mem.loadI64_32S
+	case OpI64Load32U:
+		return g.mem.loadI64_32U
 	case OpF32Load:
 		return g.mem.loadF32
 	case OpF64Load:
@@ -391,6 +475,12 @@ func (g *funcGen) storeHelper(op Opcode) vm.Value {
 		return g.mem.store16
 	case OpI64Store:
 		return g.mem.storeI64
+	case OpI64Store8:
+		return g.mem.storeI64_8
+	case OpI64Store16:
+		return g.mem.storeI64_16
+	case OpI64Store32:
+		return g.mem.storeI64_32
 	case OpF32Store:
 		return g.mem.storeF32
 	case OpF64Store:
