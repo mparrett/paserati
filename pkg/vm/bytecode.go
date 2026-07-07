@@ -194,6 +194,14 @@ const (
 	// Dst ValReg: n = ToNumeric(ValReg); Dst = n; ValReg = n-1 (postfix old value)
 	OpDecPost OpCode = 171
 
+	// --- Long (32-bit offset) jumps ---
+	// The stock TS compiler never emits these; they exist for machine-generated
+	// bytecode (the wasm transpiler) whose functions can need jumps past the
+	// ±32 KB int16 range. Short jumps stay 2 bytes; the transpiler promotes only
+	// the overflowing ones.
+	OpJumpLong        OpCode = 172 // Offset(32bit): Unconditionally jump by Offset.
+	OpJumpIfFalseLong OpCode = 173 // Rx Offset(32bit): Jump by Offset if Rx is falsey.
+
 	// --- NEW: Global Variable Operations ---
 	OpGetGlobal     OpCode = 46 // Rx GlobalIdx(16bit): Rx = Globals[GlobalIdx] (direct indexed access)
 	OpSetGlobal     OpCode = 47 // GlobalIdx(16bit) Ry: Globals[GlobalIdx] = Ry (direct indexed access)
@@ -389,6 +397,10 @@ func (op OpCode) String() string {
 		return "OpJumpIfFalse"
 	case OpJump:
 		return "OpJump"
+	case OpJumpLong:
+		return "OpJumpLong"
+	case OpJumpIfFalseLong:
+		return "OpJumpIfFalseLong"
 	case OpLessEqual:
 		return "OpLessEqual"
 	case OpGreaterEqual:
@@ -769,6 +781,19 @@ type Chunk struct {
 	floatConstCache   map[float64]uint16 // Cache for float constants
 }
 
+// Reset clears the chunk's code, constants, and line table so codegen can retry
+// into it from scratch. Crucially it also drops the constant-dedup caches —
+// truncating Constants without clearing them would leave AddConstant returning
+// stale indices that point past the new (shorter) pool.
+func (c *Chunk) Reset() {
+	c.Code = c.Code[:0]
+	c.Constants = c.Constants[:0]
+	c.Lines = c.Lines[:0]
+	c.stringConstCache = nil
+	c.intConstCache = nil
+	c.floatConstCache = nil
+}
+
 // GetLine returns the source line number corresponding to a given bytecode offset.
 // It assumes the Lines slice is populated correctly (same length as Code, storing line per OpCode).
 func (c *Chunk) GetLine(offset int) int {
@@ -826,6 +851,13 @@ func (c *Chunk) WriteUint16(val uint16) {
 	c.Lines = append(c.Lines, c.currentLine)
 	c.Code = append(c.Code, byte(val&0xff))
 	c.Lines = append(c.Lines, c.currentLine)
+}
+
+// WriteUint32 adds a 32-bit unsigned integer operand, big-endian. Used for the
+// long-jump offsets (OpJumpLong/OpJumpIfFalseLong).
+func (c *Chunk) WriteUint32(val uint32) {
+	c.Code = append(c.Code, byte(val>>24), byte(val>>16), byte(val>>8), byte(val&0xff))
+	c.Lines = append(c.Lines, c.currentLine, c.currentLine, c.currentLine, c.currentLine)
 }
 
 // AddConstant adds a value to the chunk's constant pool and returns its index.
@@ -1036,6 +1068,10 @@ func (c *Chunk) disassembleInstruction(builder *strings.Builder, offset int) int
 		return c.jumpInstruction(builder, instruction.String(), offset, true) // Has register operand
 	case OpJump:
 		return c.jumpInstruction(builder, instruction.String(), offset, false) // No register operand
+	case OpJumpLong:
+		return c.longJumpInstruction(builder, instruction.String(), offset, false)
+	case OpJumpIfFalseLong:
+		return c.longJumpInstruction(builder, instruction.String(), offset, true)
 	case OpJumpIfNull, OpJumpIfUndefined, OpJumpIfNullish:
 		return c.jumpInstruction(builder, instruction.String(), offset, true) // Has register operand
 
@@ -1746,6 +1782,29 @@ func (c *Chunk) jumpInstruction(builder *strings.Builder, name string, offset in
 		builder.WriteString(fmt.Sprintf("%-16s %d (to %04d)\n", name, jumpOffset, jumpTarget))
 		return offset + 3 // Op + Offset(2)
 	}
+}
+
+// longJumpInstruction disassembles OpJumpLong / OpJumpIfFalseLong (32-bit offset).
+func (c *Chunk) longJumpInstruction(builder *strings.Builder, name string, offset int, hasRegister bool) int {
+	operandOffset := 1
+	if hasRegister {
+		operandOffset = 2
+	}
+	if offset+operandOffset+3 >= len(c.Code) {
+		builder.WriteString(fmt.Sprintf("%s (missing jump offset)\n", name))
+		return offset + 1
+	}
+	o := offset + operandOffset
+	jumpOffset := int32(uint32(c.Code[o])<<24 | uint32(c.Code[o+1])<<16 | uint32(c.Code[o+2])<<8 | uint32(c.Code[o+3]))
+	if hasRegister {
+		reg := c.Code[offset+1]
+		jumpTarget := offset + 6 + int(jumpOffset) // op + reg + 4-byte offset
+		builder.WriteString(fmt.Sprintf("%-16s R%d, %d (to %04d)\n", name, reg, jumpOffset, jumpTarget))
+		return offset + 6
+	}
+	jumpTarget := offset + 5 + int(jumpOffset) // op + 4-byte offset
+	builder.WriteString(fmt.Sprintf("%-16s %d (to %04d)\n", name, jumpOffset, jumpTarget))
+	return offset + 5
 }
 
 // makeArrayInstruction handles OpMakeArray DestReg StartReg Count

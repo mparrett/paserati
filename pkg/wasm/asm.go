@@ -23,7 +23,8 @@ type asmInstr struct {
 	condReg byte
 	target  *asmInstr // akJump/akCondJump
 	dead    bool
-	off     int // byte offset, assigned during layout
+	long    bool // akJump/akCondJump promoted to a 32-bit offset (branch relaxation)
+	off     int  // byte offset, assigned during layout
 }
 
 // --- builder (funcGen methods) ---
@@ -59,47 +60,35 @@ func instrSize(in *asmInstr) int {
 	case akLabel:
 		return 0
 	case akJump:
+		if in.long {
+			return 5 // op + 4-byte offset
+		}
 		return 3 // op + 2-byte offset
 	case akCondJump:
+		if in.long {
+			return 6 // op + condReg + 4-byte offset
+		}
 		return 4 // op + condReg + 2-byte offset
 	default:
 		return 1 + len(in.ops)
 	}
 }
 
-// finish runs the peephole, assigns offsets, and encodes into g.c.
-// finish peepholes, lays out offsets, and encodes into g.c. It returns true if a
-// jump's relative distance exceeds paserati's int16 encoding — in which case it
-// stops before emitting misaligned bytecode and the caller stubs the function.
+// jumpDist returns the relative distance from a jump/branch to its target,
+// measured from the byte just past the instruction (where the VM applies the
+// offset). Requires offsets to be laid out.
+func jumpDist(in *asmInstr) int {
+	return in.target.off - (in.off + instrSize(in))
+}
+
+// finish peepholes, lays out offsets, and encodes into g.c. Jumps whose distance
+// exceeds paserati's int16 range are promoted to the 32-bit long variants
+// (OpJumpLong/OpJumpIfFalseLong); short jumps stay 2 bytes. Always succeeds — a
+// 32-bit offset covers any function paserati can hold — so it returns false
+// (kept for the caller's signature; jumps no longer force a stub).
 func (g *funcGen) finish() bool {
 	peephole(g.out)
-
-	off := 0
-	for _, in := range g.out {
-		if in.dead {
-			continue
-		}
-		in.off = off
-		off += instrSize(in)
-	}
-
-	for _, in := range g.out {
-		if in.dead {
-			continue
-		}
-		var d int
-		switch in.kind {
-		case akJump:
-			d = in.target.off - (in.off + 3)
-		case akCondJump:
-			d = in.target.off - (in.off + 4)
-		default:
-			continue
-		}
-		if d > 32767 || d < -32768 {
-			return true
-		}
-	}
+	g.relaxJumps()
 
 	for _, in := range g.out {
 		if in.dead {
@@ -109,12 +98,23 @@ func (g *funcGen) finish() bool {
 		case akLabel:
 			// no bytes
 		case akJump:
-			g.c.WriteOpCode(vm.OpJump, 1)
-			g.c.WriteUint16(uint16(int16(in.target.off - (in.off + 3))))
+			if in.long {
+				g.c.WriteOpCode(vm.OpJumpLong, 1)
+				g.c.WriteUint32(uint32(int32(jumpDist(in))))
+			} else {
+				g.c.WriteOpCode(vm.OpJump, 1)
+				g.c.WriteUint16(uint16(int16(jumpDist(in))))
+			}
 		case akCondJump:
-			g.c.WriteOpCode(vm.OpJumpIfFalse, 1)
-			g.c.EmitByte(in.condReg)
-			g.c.WriteUint16(uint16(int16(in.target.off - (in.off + 4))))
+			if in.long {
+				g.c.WriteOpCode(vm.OpJumpIfFalseLong, 1)
+				g.c.EmitByte(in.condReg)
+				g.c.WriteUint32(uint32(int32(jumpDist(in))))
+			} else {
+				g.c.WriteOpCode(vm.OpJumpIfFalse, 1)
+				g.c.EmitByte(in.condReg)
+				g.c.WriteUint16(uint16(int16(jumpDist(in))))
+			}
 		default:
 			g.c.WriteOpCode(in.op, 1)
 			for _, b := range in.ops {
@@ -123,6 +123,43 @@ func (g *funcGen) finish() bool {
 		}
 	}
 	return false
+}
+
+// relaxJumps lays out byte offsets and promotes any jump whose distance
+// overflows int16 to its long (32-bit) form. Promotion only grows the code, so
+// distances are monotonically non-decreasing across iterations — the fixpoint
+// converges (each round promotes at least one jump or halts).
+func (g *funcGen) relaxJumps() {
+	for {
+		layout(g.out)
+		changed := false
+		for _, in := range g.out {
+			if in.dead || in.long {
+				continue
+			}
+			if in.kind != akJump && in.kind != akCondJump {
+				continue
+			}
+			if d := jumpDist(in); d > 32767 || d < -32768 {
+				in.long = true
+				changed = true
+			}
+		}
+		if !changed {
+			return
+		}
+	}
+}
+
+func layout(out []*asmInstr) {
+	off := 0
+	for _, in := range out {
+		if in.dead {
+			continue
+		}
+		in.off = off
+		off += instrSize(in)
+	}
 }
 
 // --- peephole ---
