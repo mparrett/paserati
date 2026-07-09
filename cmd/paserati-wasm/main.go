@@ -144,7 +144,13 @@ func funcSig(mod *wasm.Module, name string) (*wasm.FuncType, bool) {
 	if !ok {
 		return nil, false
 	}
-	return mod.Funcs[ex.Index].Type, true
+	// Export indices count imported functions first; mod.Funcs holds only the
+	// defined ones (mirrors the shift in CompileModuleWasi's export loop).
+	d := int(ex.Index) - mod.ImportedFuncCount
+	if d < 0 || d >= len(mod.Funcs) {
+		return nil, false // re-exported import: no defined signature to show
+	}
+	return mod.Funcs[d].Type, true
 }
 
 func sigString(sig *wasm.FuncType) string {
