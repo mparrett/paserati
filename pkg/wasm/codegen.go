@@ -31,17 +31,21 @@ import (
 //     keeps the register mapping consistent across labels.
 
 var binopOp = map[Opcode]vm.OpCode{
+	// i32.add/sub get a wrap coercion after the arithmetic (see the emission
+	// loop): the float result is exact but wasm requires wrapping mod 2^32.
 	OpI32Add: vm.OpAdd,
 	OpI32Sub: vm.OpSubtract,
-	OpI32Mul: vm.OpMultiply,
+	// mul is NOT here: int32×int32 products reach 2^62, past float64's exact
+	// range, so wrap-after-multiply is wrong. It lowers to the i32.mul helper.
 	// div_s/rem_s are NOT here: paserati's OpDivide is float division (9/10 → 0.9),
 	// but wasm i32.div_s truncates toward zero. They lower to integer helpers.
+	// shr_u is NOT here: OpUnsignedShiftRight yields the unsigned float (JS >>>),
+	// violating the signed-i32 carry representation. It lowers to a helper.
 	OpI32And:  vm.OpBitwiseAnd,
 	OpI32Or:   vm.OpBitwiseOr,
 	OpI32Xor:  vm.OpBitwiseXor,
 	OpI32Shl:  vm.OpShiftLeft,
 	OpI32ShrS: vm.OpShiftRight,
-	OpI32ShrU: vm.OpUnsignedShiftRight,
 	OpI32Eq:   vm.OpEqual,
 	OpI32Ne:   vm.OpNotEqual,
 	OpI32LtS:  vm.OpLess,
@@ -630,6 +634,15 @@ func (g *funcGen) emitBody() error {
 			a := g.pop()
 			dst := g.push() // == a's register (in place)
 			g.emit3(op, dst, a, b)
+			if ins.Op == OpI32Add || ins.Op == OpI32Sub {
+				// Wrap mod 2^32: sums/differences of int32 stay exact in float64
+				// (< 2^33), and OpBitwiseOr applies ToInt32 to both operands, so
+				// or-with-0 is a correct and cheap wrap.
+				zero := g.push()
+				g.loadConst(zero, g.c.AddConstant(vm.Number(0)))
+				g.emit3(vm.OpBitwiseOr, dst, dst, zero)
+				g.pop()
+			}
 		}
 	}
 	return nil
