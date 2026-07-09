@@ -15,8 +15,10 @@ import (
 type rtHelpers struct {
 	i64add             vm.Value
 	gtU, geU, ltU, leU vm.Value // unsigned compares → boolean
-	divU, remU         vm.Value // unsigned div/rem → uint32 as Number
+	divU, remU         vm.Value // unsigned div/rem → signed-i32 representation
 	rotl, rotr         vm.Value // 32-bit rotates (no paserati opcode)
+	mulWrap            vm.Value // wrapping i32 multiply — float64 products reach 2^62, past exact range
+	shrU               vm.Value // i32.shr_u → signed-i32 rep (OpUnsignedShiftRight yields unsigned floats)
 
 	i64gtS, i64ltS vm.Value // i64 signed compares → boolean
 	i64xor         vm.Value // i64 bitwise xor → BigInt
@@ -97,18 +99,26 @@ func newRTHelpers() *rtHelpers {
 			return vm.BooleanValue(f(asU32(args[0]), asU32(args[1]))), nil
 		})
 	}
+	// All i32 helpers re-sign their uint32 result: the carried representation is
+	// signed i32 (asU32 reinterprets on the way in), so returning the unsigned
+	// float would break downstream equality, signed compares, stores, and asU32.
 	div := func(name string, f func(a, b uint32) uint32) vm.Value {
 		return vm.NewNativeFunction(2, false, name, func(args []vm.Value) (vm.Value, error) {
 			a, b := asU32(args[0]), asU32(args[1])
 			if b == 0 {
 				return vm.Undefined, fmt.Errorf("%s by zero", name)
 			}
-			return vm.Number(float64(f(a, b))), nil
+			return vm.Number(float64(int32(f(a, b)))), nil
 		})
 	}
 	rot := func(name string, f func(a uint32, n int) uint32) vm.Value {
 		return vm.NewNativeFunction(2, false, name, func(args []vm.Value) (vm.Value, error) {
-			return vm.Number(float64(f(asU32(args[0]), int(asU32(args[1])&31)))), nil
+			return vm.Number(float64(int32(f(asU32(args[0]), int(asU32(args[1])&31))))), nil
+		})
+	}
+	wrap2 := func(name string, f func(a, b uint32) uint32) vm.Value {
+		return vm.NewNativeFunction(2, false, name, func(args []vm.Value) (vm.Value, error) {
+			return vm.Number(float64(int32(f(asU32(args[0]), asU32(args[1]))))), nil
 		})
 	}
 	i64cmp := func(name string, f func(a, b int64) bool) vm.Value {
@@ -190,6 +200,8 @@ func newRTHelpers() *rtHelpers {
 		remU:     div("i32.rem_u", func(a, b uint32) uint32 { return a % b }),
 		rotl:     rot("i32.rotl", func(a uint32, n int) uint32 { return bits.RotateLeft32(a, n) }),
 		rotr:     rot("i32.rotr", func(a uint32, n int) uint32 { return bits.RotateLeft32(a, -n) }),
+		mulWrap:  wrap2("i32.mul", func(a, b uint32) uint32 { return a * b }),
+		shrU:     wrap2("i32.shr_u", func(a, b uint32) uint32 { return a >> (b & 31) }),
 
 		i64gtS: i64cmp("i64.gt_s", func(a, b int64) bool { return a > b }),
 		i64ltS: i64cmp("i64.lt_s", func(a, b int64) bool { return a < b }),
@@ -391,6 +403,10 @@ func (h *rtHelpers) unsignedHelper(op Opcode) (vm.Value, bool) {
 		return h.rotl, true
 	case OpI32Rotr:
 		return h.rotr, true
+	case OpI32Mul:
+		return h.mulWrap, true
+	case OpI32ShrU:
+		return h.shrU, true
 	case OpI64GtS:
 		return h.i64gtS, true
 	case OpI64LtS:
