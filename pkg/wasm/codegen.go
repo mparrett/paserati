@@ -100,6 +100,7 @@ type funcGen struct {
 	maxReg      int             // high-water register count
 	ctrl        []*ctrlFrame
 	unreachable bool // in a dead region after an unconditional branch/return
+	deadDepth   int  // block/loop/if nesting opened *within* the current dead region
 	spill       bool // locals live in an array at R0 (function exceeds register file)
 }
 
@@ -371,10 +372,31 @@ func compileStub(val vm.Value, fn *Func, msg string) {
 
 func (g *funcGen) emitBody() error {
 	for _, ins := range g.fn.Body {
-		// Dead code after an unconditional branch/return: only structural
-		// delimiters are meaningful until the region closes.
-		if g.unreachable && ins.Op != OpEnd && ins.Op != OpElse {
-			return fmt.Errorf("unreachable code before %s not supported", ins.Op)
+		// Dead code after an unconditional branch/return/unreachable: skip it,
+		// but track block nesting so only the end/else that closes back to the
+		// enclosing (reachable-opened) frame does real work. wasm validates dead
+		// code against a polymorphic stack; stock Go's compiler emits it freely
+		// (TinyGo does not). Skipping is safe — dead code is never a branch target.
+		if g.unreachable {
+			switch ins.Op {
+			case OpBlock, OpLoop, OpIf:
+				g.deadDepth++ // a nested block inside the dead region
+				continue
+			case OpEnd:
+				if g.deadDepth > 0 {
+					g.deadDepth-- // closes a dead nested block; still unreachable
+					continue
+				}
+				// deadDepth == 0: this end closes the enclosing frame — fall
+				// through to real OpEnd handling (which clears unreachable).
+			case OpElse:
+				if g.deadDepth > 0 {
+					continue // else of a dead nested if
+				}
+				// deadDepth == 0: the enclosing if's else — fall through.
+			default:
+				continue // any other dead instruction: emit nothing
+			}
 		}
 
 		switch ins.Op {
@@ -619,6 +641,14 @@ func (g *funcGen) emitBody() error {
 func (g *funcGen) branchTo(depth uint32) error {
 	i := len(g.ctrl) - 1 - int(depth)
 	if i < 0 {
+		// depth == len(g.ctrl): a branch to the function's implicit outermost
+		// block — i.e. return its result(s). That block isn't on g.ctrl, so it
+		// underflows by exactly one. (Stock Go's compiler emits these; TinyGo
+		// doesn't.) Anything past that is a genuinely out-of-range depth.
+		if i == -1 {
+			g.emitReturn()
+			return nil
+		}
 		return fmt.Errorf("branch depth %d exceeds control stack", depth)
 	}
 	f := g.ctrl[i]
