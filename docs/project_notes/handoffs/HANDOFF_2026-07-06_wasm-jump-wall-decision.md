@@ -171,6 +171,10 @@ done
   infographic). Co-owned live source is `DEV-REPORT.md` in the shared dir; live
   artifact URL (default-private):
   `https://claude.ai/code/artifact/1a072175-a395-4454-b2eb-38a37f39dfb8`.
+  Public githack render (SHA-pinned, off the fork's `showcase/let-go-dev-report`
+  branch, commit `5818551`):
+  `https://rawcdn.githack.com/mparrett/paserati/58185510d355ac10e4de8af7e4b48e8f46ddea0f/docs/archived/dev-report-let-go-on-paserati.html`
+  (bump the SHA in the URL after re-pushing an updated report).
 - **Team's runtime-only artifacts + the cross-repo note exchange (durable):**
   `~/projects-new/3p/paserati/scratch/letgo-wasi-targets/runtime-only-tinygo/`
   — four builds (`lg-runtime-only-tinygo-{opt2,optz}.wasm` = asyncify;
