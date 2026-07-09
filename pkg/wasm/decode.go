@@ -248,42 +248,46 @@ func (r *reader) skipLimits() error {
 	return err
 }
 
-// constExprValue reads a global/segment init const-expression, returning the
-// integer value for i32/i64.const forms (0 for others), and consuming the end.
-func (r *reader) constExprValue() (int64, error) {
+// constExprValue reads a global/segment init const-expression, consuming the
+// end. i32/i64.const values land in i; f32/f64.const values in f (previously
+// discarded, which zeroed every float global initialiser).
+func (r *reader) constExprValue() (i int64, f float64, err error) {
 	op, err := r.byte()
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	var v int64
 	switch Opcode(op) {
 	case OpI32Const, OpI64Const:
-		if v, err = r.s64(); err != nil {
-			return 0, err
+		if i, err = r.s64(); err != nil {
+			return 0, 0, err
 		}
 	case OpGlobalGet:
 		if _, err = r.u32(); err != nil { // references another global; value unknown here
-			return 0, err
+			return 0, 0, err
 		}
 	case OpF32Const:
-		if _, err = r.take(4); err != nil {
-			return 0, err
+		b, err := r.take(4)
+		if err != nil {
+			return 0, 0, err
 		}
+		f = float64(math.Float32frombits(binary.LittleEndian.Uint32(b)))
 	case OpF64Const:
-		if _, err = r.take(8); err != nil {
-			return 0, err
+		b, err := r.take(8)
+		if err != nil {
+			return 0, 0, err
 		}
+		f = math.Float64frombits(binary.LittleEndian.Uint64(b))
 	default:
-		return 0, fmt.Errorf("const expr: unexpected opcode 0x%02x", op)
+		return 0, 0, fmt.Errorf("const expr: unexpected opcode 0x%02x", op)
 	}
 	end, err := r.byte()
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	if Opcode(end) != OpEnd {
-		return 0, fmt.Errorf("const expr: expected end, got 0x%02x", end)
+		return 0, 0, fmt.Errorf("const expr: expected end, got 0x%02x", end)
 	}
-	return v, nil
+	return i, f, nil
 }
 
 // constI32Expr reads a constant offset expression of the form
@@ -343,8 +347,16 @@ func decodeImportSection(r *reader, m *Module) error {
 				return err
 			}
 		case ImportMemory:
-			if err = r.skipLimits(); err != nil {
+			// An imported memory is instantiated locally: this runtime is the
+			// embedder, so the memory the host "provides" is the one we create.
+			// Skipping it left m.Memory nil and legal import-memory modules
+			// failing with "memory load without a declared memory".
+			min, max, hasMax, err := r.limits()
+			if err != nil {
 				return err
+			}
+			if m.Memory == nil { // only memory 0 is modelled
+				m.Memory = &MemType{Min: min, Max: max, HasMax: hasMax}
 			}
 		case ImportGlobal:
 			if _, err = r.byte(); err != nil { // valtype
@@ -394,11 +406,11 @@ func decodeGlobalSection(r *reader, m *Module) error {
 		if err != nil {
 			return err
 		}
-		init, err := r.constExprValue()
+		init, finit, err := r.constExprValue()
 		if err != nil {
 			return err
 		}
-		m.Globals = append(m.Globals, Global{Type: ValType(vt), Mutable: mut == 1, Init: init})
+		m.Globals = append(m.Globals, Global{Type: ValType(vt), Mutable: mut == 1, Init: init, FInit: finit})
 	}
 	return nil
 }

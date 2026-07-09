@@ -79,12 +79,13 @@ type TableType struct {
 	HasMax   bool
 }
 
-// Global is a module global: its value type, mutability, and (for the subset)
-// a constant i32/i64 initialiser.
+// Global is a module global: its value type, mutability, and a constant
+// initialiser — Init for i32/i64, FInit for f32/f64 (see globalInitValue).
 type Global struct {
 	Type    ValType
 	Mutable bool
 	Init    int64
+	FInit   float64
 }
 
 // ImportKind enumerates the four import descriptor kinds.

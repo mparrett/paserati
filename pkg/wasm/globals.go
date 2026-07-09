@@ -12,12 +12,28 @@ import (
 // Each global.get/set lowers to an OpCall into a helper with the global index
 // folded in as a const argument, mirroring the memory helpers.
 //
-// Values are stored as plain vm.Values (Number for i32/f64). i64 globals lose
-// precision above 2^53 for now; faithful i64 is tied to the i64 work.
+// Values are stored per type: Number (signed i32) for i32, the exact-BigInt
+// carrier for i64, Number for f32/f64 — matching how each type is carried by
+// the rest of the transpiled code (see globalInitValue).
 type globals struct {
 	values []vm.Value
 	get    vm.Value
 	set    vm.Value
+}
+
+// globalInitValue materialises a global's initialiser in the same carry
+// representation the transpiled code uses for that type: exact BigInt for i64
+// (Number lost precision past 2^53), the float bits for f32/f64 (previously
+// decoded as zero), signed i32 otherwise.
+func globalInitValue(g Global) vm.Value {
+	switch g.Type {
+	case I64:
+		return i64Value(g.Init)
+	case F32, F64:
+		return vm.Number(g.FInit)
+	default:
+		return vm.Number(float64(int32(g.Init)))
+	}
 }
 
 // newGlobals builds the storage (sized for imported + defined globals) and the
@@ -34,7 +50,7 @@ func newGlobals(m *Module) *globals {
 		vals[i] = vm.Undefined // imported global values are unavailable
 	}
 	for i, g := range m.Globals {
-		vals[imported+i] = vm.Number(float64(g.Init))
+		vals[imported+i] = globalInitValue(g)
 	}
 
 	idxOf := func(args []vm.Value) (int, error) {
