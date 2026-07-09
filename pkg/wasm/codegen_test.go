@@ -324,3 +324,26 @@ func TestCompileGcd(t *testing.T) {
 		}
 	}
 }
+
+// TestCompileDeadCodeAndBranchToReturn covers two codegen cases stock-Go's wasm
+// emits but TinyGo doesn't: dead code after return/unreachable (skipped, incl.
+// nested blocks) and a `br` to the function-implicit outermost block (== return).
+// These cleared the last gaps on the 64-bit-faithful stock-Go let-go build.
+func TestCompileDeadCodeAndBranchToReturn(t *testing.T) {
+	cases := []struct {
+		fn   string
+		arg  float64
+		want float64
+	}{
+		{"br_return", 7, 7},              // br 0 == return local.0
+		{"br_return_nested", 41, 42},     // br 1 from a block == function-level return
+		{"deadcode", 0, 42},              // dead nested block after return, skipped
+		{"dead_after_unreachable", 5, 5}, // dead block w/ unreachable inside, skipped
+	}
+	for _, c := range cases {
+		m, fn := compileExport(t, "testdata/deadcode.wasm", c.fn)
+		if got := callI(t, m, fn, c.arg); got != c.want {
+			t.Errorf("%s(%v) = %v, want %v", c.fn, c.arg, got, c.want)
+		}
+	}
+}
