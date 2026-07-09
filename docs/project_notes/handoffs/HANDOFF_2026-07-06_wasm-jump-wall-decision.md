@@ -172,9 +172,12 @@ done
   artifact URL (default-private):
   `https://claude.ai/code/artifact/1a072175-a395-4454-b2eb-38a37f39dfb8`.
   Public githack render (SHA-pinned, off the fork's `showcase/let-go-dev-report`
-  branch, commit `5818551`):
-  `https://rawcdn.githack.com/mparrett/paserati/58185510d355ac10e4de8af7e4b48e8f46ddea0f/docs/archived/dev-report-let-go-on-paserati.html`
-  (bump the SHA in the URL after re-pushing an updated report).
+  branch, commit `1dda175`):
+  `https://rawcdn.githack.com/mparrett/paserati/1dda1753516d4aa93beac2eca74054ccd86c53a4/docs/archived/dev-report-let-go-on-paserati.html`
+  (bump the SHA in the URL after re-pushing an updated report). NOTE: the
+  committed `.html` must be the *self-contained* report, not the claude.ai
+  "Save Page As" viewer shell (which loads content in an iframe and renders empty
+  off-site) — pull real artifact content via WebFetch on the artifact URL.
 - **Team's runtime-only artifacts + the cross-repo note exchange (durable):**
   `~/projects-new/3p/paserati/scratch/letgo-wasi-targets/runtime-only-tinygo/`
   — four builds (`lg-runtime-only-tinygo-{opt2,optz}.wasm` = asyncify;
