@@ -6,6 +6,20 @@ goroutine-free build (see "Cross-repo" below — four builds run, stock paserati
 ruled out, stop-here call made), and a codified coordination protocol for the two
 sessions (see "How the two sessions coordinate"). This supersedes the "decision
 waiting" framing.
+
+**2026-07-09 — the 64-bit-faithful stock-Go build now runs (commit `56209fc`).**
+Two additive codegen fixes (dead-code-skip after return/unreachable with
+block-nesting tracking; `br` to the function-implicit block = return) took the
+24 MB standard-Go let-go build from 227 `-profile` errors → **0** (13657 funcs,
+all direct). The full stock-Go let-go REPL runs on paserati: `(* 1e9 1e9)` =
+`1000000000000000000` (exact 10^18), **byte-identical to wasmtime, ~7s** — the
+64-bit-faithful let-go, dropping TinyGo's 32-bit-`int` limit, zero let-go work.
+No VM change; regression test + `testdata/deadcode.wasm` added. **Strategic read:**
+paserati as a wasm *runtime* has no product consumer (wasmtime/wazero win on
+speed/completeness); the aligned value of this track has been as a **stress test
+that hardened stock paserati** — the standout is the compiler-panic fix
+**PR nooga#17**. Treat the transpiler as a research spike + bug-discovery tool,
+not a direction, absent a polyglot-embedding consumer.
 **Working dir:** work is in the **`paserati-wasm` worktree** on `feat/wasm-transpile`
 (the `../paserati` checkout is a different branch — don't confuse them).
 
