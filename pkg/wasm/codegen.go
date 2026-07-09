@@ -114,7 +114,14 @@ func CompileFunc(fn *Func, name string) (vm.Value, error) {
 	c := vm.NewChunk()
 	val := vm.NewFunction(fn.NumParams(), fn.NumParams(), 0, 0, false, name, c, false, false, false, false)
 	g := &funcGen{c: c, fn: fn, rt: newRTHelpers()}
-	if err := g.compileInto(val); err != nil {
+	err := g.compileInto(val)
+	if errors.Is(err, errRegOverflow) {
+		// Same recovery as the module path: retry with locals spilled.
+		resetChunk(val)
+		g = &funcGen{c: val.AsFunction().Chunk, fn: fn, rt: g.rt, spill: true}
+		err = g.compileInto(val)
+	}
+	if err != nil {
 		return vm.Undefined, fmt.Errorf("%s: %w", name, err)
 	}
 	return val, nil
@@ -183,9 +190,10 @@ func CompileModuleWasi(m *Module, stdout, stderr io.Writer) (map[string]vm.Value
 		}
 		if errors.Is(err, errRegOverflow) {
 			resetChunk(vals[i])
-			// The cause is either >256 registers or a jump beyond int16; -profile
-			// distinguishes them. Both are paserati bytecode-format limits.
-			compileStub(vals[i], &m.Funcs[i], fmt.Sprintf("wasm: %s exceeds bytecode limits (256 regs / 32KB jumps)", funcName(m, i)))
+			// Even the spilled form ran out of registers — only a function with
+			// >255 params can get here (jumps no longer overflow: the encoder
+			// promotes past ±32 KB to the 32-bit long form).
+			compileStub(vals[i], &m.Funcs[i], fmt.Sprintf("wasm: %s exceeds the register file even with locals spilled", funcName(m, i)))
 			continue
 		}
 		if err != nil {

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/nooga/paserati/pkg/vm"
 )
 
 // forceSpillRun compiles a fixture with every function routed through the spill
@@ -42,4 +44,29 @@ func TestSpillI64(t *testing.T) {
 		"mul: 1000000010000000021", "shl: 1099511627776", "shru: -1",
 		"divu: 6148914691236517205", "remu: 1", "clz: 30",
 	}, "\n"))
+}
+
+// TestSpillRetryOnOverflow exercises the path the forced runs above bypass:
+// bigspill.wat declares 300 locals, so the direct register mapping must fail
+// with errRegOverflow and CompileModuleWasi must recover via resetChunk + the
+// spilled retry. A regression in that automatic recovery (e.g. the stale
+// const-pool caches resetChunk once missed) fails here, not just under
+// forceSpillAll. Expected value is the wasmtime reference.
+func TestSpillRetryOnOverflow(t *testing.T) {
+	m := mustDecode(t, "testdata/bigspill.wasm")
+	mp, err := Profile(m)
+	if err != nil {
+		t.Fatalf("profile: %v", err)
+	}
+	if !strings.Contains(mp.String(), "spilled") {
+		t.Fatalf("expected bigspill to need the spiller; profile:\n%s", mp.String())
+	}
+	exports, _, err := CompileModuleWasi(m, nil, nil)
+	if err != nil {
+		t.Fatalf("CompileModuleWasi: %v", err)
+	}
+	machine := vm.NewVM()
+	if got := callI(t, machine, exports["bigsum"], 5); got != 44855 {
+		t.Errorf("bigsum(5) = %v, want 44855 (5 + sum 0..299)", got)
+	}
 }
