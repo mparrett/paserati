@@ -1901,6 +1901,18 @@ startExecution:
 			// Type checking specific to operation groups
 			switch opcode {
 			case OpAdd:
+				// Fast path: both operands already numbers. Skips two non-inlinable
+				// vm.toPrimitive calls (each with helperCallDepth/unwinding/handler
+				// bookkeeping) plus the string/BigInt/Symbol branches. Semantically
+				// identical to the slow path: toPrimitive is the identity for
+				// numbers, and the numeric branch computes
+				// Number(lhs.ToFloat() + rhs.ToFloat()).
+				if lt, rt := leftVal.typ, rightVal.typ; (lt == TypeIntegerNumber || lt == TypeFloatNumber) &&
+					(rt == TypeIntegerNumber || rt == TypeFloatNumber) {
+					registers[destReg] = Number(leftVal.ToFloat() + rightVal.ToFloat())
+					continue
+				}
+
 				// JS semantics: ToPrimitive on both first (for string check),
 				// then if either is String → concatenate ToString(lhs)+ToString(rhs);
 				// else ToNumeric on both; if both BigInt → BigInt add; else Number add.
