@@ -71,6 +71,30 @@ func BenchmarkFibPlaceholderRun(b *testing.B) {
 	// No need to restore stdout here due to defer
 }
 
+// BenchmarkArith isolates the OpSubtract/Multiply/Divide/Remainder numeric fast paths.
+func BenchmarkArith(b *testing.B) {
+	chunk := compileFile(b, "scripts/bench_arith.ts")
+	paserati := driver.NewPaserati()
+
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0644)
+	if err != nil {
+		b.Fatalf("Failed to open os.DevNull: %v", err)
+	}
+	defer devNull.Close()
+	oldStdout := os.Stdout
+	os.Stdout = devNull
+	defer func() { os.Stdout = oldStdout }()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, runtimeErrs := paserati.InterpretChunk(chunk)
+		if len(runtimeErrs) > 0 {
+			b.Fatalf("Runtime error during benchmark iteration %d: %v", i, runtimeErrs)
+		}
+	}
+	b.StopTimer()
+}
+
 // BenchmarkMatrixMult runs the matrix_mult.ts script.
 func BenchmarkMatrixMult(b *testing.B) {
 	// Compile once outside the loop.
