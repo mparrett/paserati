@@ -29,12 +29,14 @@ func compileFile(tb testing.TB, filename string) *vm.Chunk {
 	return chunk
 }
 
-// BenchmarkFib runs the (currently placeholder) fib.ts script.
-// Renamed to match BenchmarkXxx pattern.
+// BenchmarkFibPlaceholderRun benchmarks recursion + arithmetic via a factorial
+// workload. Uses the dedicated bench_factorial.ts (sized for b.N >= ~15 at 500ms
+// benchtime) rather than the smoke-test factorial.ts, whose 1e6-iteration size
+// forced b.N=1 — a single-shot measurement that scattered ~15% on CI runners.
+// (Name kept for perf-data baseline continuity; the workload is factorial, not fib.)
 func BenchmarkFibPlaceholderRun(b *testing.B) {
 	// Compile once outside the loop.
-	// Use the correct filename provided by the user.
-	chunk := compileFile(b, "scripts/factorial.ts")
+	chunk := compileFile(b, "scripts/bench_factorial.ts")
 	paserati := driver.NewPaserati()
 
 	// Redirect stdout during benchmark to avoid polluting output
