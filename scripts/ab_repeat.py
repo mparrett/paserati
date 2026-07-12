@@ -45,6 +45,26 @@ def snapshot(worktree, bench_args, out, timeout):
     return _read_snapshot(out)
 
 
+def _summarize(deltas, budget, confirm_k, strip="github.com/nooga/paserati/"):
+    """Per-family gate rows from {family: [delta% per cycle]}: the median-of-N
+    gate (gate_median = median > budget) and the confirm-K-of-N gate. This is the
+    real gate decision — scripts/test_ab_repeat.py drives it on captured samples
+    to prove single-shot phantoms vanish under median-of-N."""
+    rows = []
+    for fam, ds in deltas.items():
+        med = statistics.median(ds)
+        exceed = sum(1 for d in ds if d > budget)
+        rows.append({
+            "fam": fam.replace(strip, ""),
+            "n": len(ds), "median": med, "worst": max(ds, key=abs),
+            "exceed": exceed, "ds": ds,
+            "gate_median": med > budget,
+            "gate_confirm": exceed >= confirm_k,
+        })
+    rows.sort(key=lambda r: r["median"], reverse=True)
+    return rows
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", required=True, help="pre-built base worktree")
@@ -85,18 +105,7 @@ def main():
                 deltas.setdefault(fam, []).append((h[fam] / b[fam] - 1.0) * 100)
         print("::endgroup::", flush=True)
 
-    rows = []
-    for fam, ds in deltas.items():
-        med = statistics.median(ds)
-        exceed = sum(1 for d in ds if d > args.budget)
-        rows.append({
-            "fam": fam.replace("github.com/nooga/paserati/", ""),
-            "n": len(ds), "median": med, "worst": max(ds, key=abs),
-            "exceed": exceed, "ds": ds,
-            "gate_median": med > args.budget,
-            "gate_confirm": exceed >= args.confirm_k,
-        })
-    rows.sort(key=lambda r: r["median"], reverse=True)
+    rows = _summarize(deltas, args.budget, args.confirm_k)
 
     json.dump({"budget": args.budget, "confirm_k": args.confirm_k,
                "count": args.count, "n": args.n,
