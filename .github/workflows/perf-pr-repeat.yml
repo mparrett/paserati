@@ -28,8 +28,8 @@ on:
         description: 'PR number to benchmark'
         required: true
       n:
-        description: 'repeat count (interleaved cycles)'
-        default: '7'
+        description: 'repeat count (interleaved cycles; odd)'
+        default: '9'
       budget:
         description: 'gate budget %'
         default: '10'
@@ -96,7 +96,7 @@ jobs:
 
       - name: Interleaved repeat A/B
         env:
-          N: ${{ github.event.inputs.n || '7' }}
+          N: ${{ github.event.inputs.n || '9' }}
           BUDGET: ${{ github.event.inputs.budget || '10' }}
         run: |
           set -euo pipefail

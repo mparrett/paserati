@@ -69,7 +69,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", required=True, help="pre-built base worktree")
     ap.add_argument("--head", required=True, help="pre-built head worktree")
-    ap.add_argument("--n", type=int, default=7, help="repeat count (cycles)")
+    # median-of-N tolerates floor((N-1)/2) contaminated cycles. Observed CI
+    # contamination ran up to 2 of 5 cycles, so N=5 (tolerates 2) sat at the edge
+    # and broke on 1/4 runs; N=7 (tolerates 3) held 0 FP/10. N=9 (tolerates 4)
+    # is the next ODD step for extra margin near benchstat's >=10-sample guidance
+    # — even N is avoided because its median averages the two middle cycles,
+    # reintroducing the mean-like tail sensitivity we want to escape.
+    ap.add_argument("--n", type=int, default=9, help="repeat count (interleaved cycles); odd")
     ap.add_argument("--profile", default="", help="bench-ratchet -profile (let-go); empty uses --count/--benchtime")
     ap.add_argument("--count", type=int, default=3, help="go test -count per snapshot")
     ap.add_argument("--benchtime", default="500ms")
