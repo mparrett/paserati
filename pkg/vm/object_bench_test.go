@@ -1,5 +1,8 @@
 package vm
 
+// no-op change: perf-pr.yml noise-floor probe. base==head perf, so every
+// reported A/B delta is pure same-runner measurement noise. Safe to revert.
+
 import (
 	"fmt"
 	"testing"
