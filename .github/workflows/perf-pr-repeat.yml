@@ -1,5 +1,6 @@
 name: Perf PR (repeat A/B)
 
+# no-op trigger: mem-anchor contended-CI validation (same-code A/B, see PR body)
 # Variance-reduced same-runner A/B (nooga/paserati#21). A single-shot base-vs-head
 # A/B on shared runners is too heavy-tailed to gate on: the register-only anchor
 # is blind to memory-bandwidth contention, so memory-bound families (GetOwn on
