@@ -102,10 +102,7 @@
   </header>
 
   <div class="controls">
-    <div class="toggle" role="group" aria-label="View mode">
-      <button id="m-overall" class="seg" aria-pressed="true">Overall</button>
-      <button id="m-all" class="seg" aria-pressed="false">Breakdown</button>
-    </div>
+    <div id="modes" class="toggle" role="group" aria-label="View mode"></div>
     <span id="count" class="count"></span>
   </div>
 
@@ -114,7 +111,7 @@
     workflow runs on a commit, its point appears here.</div>
 
   <footer>Source: <code>baseline.json</code> + <code>timeline/*.json</code>.
-    Rendered client-side; runs no benchmarks.</footer>
+    Rendered client-side; runs no benchmarks.<span id="cpunote"></span></footer>
 </div>
 
 <script>
@@ -140,9 +137,26 @@ function labelFor(s) {
 
   if (!files.length) { document.getElementById("empty").hidden = false; renderReadout(baseline, []); return; }
 
-  const snaps = (await Promise.all(files.map(f => getJSON("timeline/" + f).catch(() => null))))
+  let snaps = (await Promise.all(files.map(f => getJSON("timeline/" + f).catch(() => null))))
     .filter(Boolean)
     .sort((a, b) => (a.captured_at || "").localeCompare(b.captured_at || ""));
+
+  // The calibration anchor is a pure-ALU loop; across CPU tiers it drifts vs the
+  // mixed/memory workloads it normalizes (e.g. EPYC 9V74 reads the anchor ~12%
+  // slow but not the suite, collapsing that snapshot's ratios). So a point on a
+  // minority CPU is unreliable, not signal — keep only the modal CPU and say how
+  // many were hidden (the data stays on perf-data; this is a display filter).
+  const cpuOf = s => s.machine?.cpu_model || "?";
+  const cpuCounts = {};
+  for (const s of snaps) cpuCounts[cpuOf(s)] = (cpuCounts[cpuOf(s)] || 0) + 1;
+  const modalCpu = Object.entries(cpuCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const hidden = snaps.filter(s => cpuOf(s) !== modalCpu);
+  if (modalCpu && hidden.length) snaps = snaps.filter(s => cpuOf(s) === modalCpu);
+
+  const note = document.getElementById("cpunote");
+  if (note && hidden.length) {
+    note.textContent = ` · ${hidden.length} off-reference-CPU point${hidden.length === 1 ? "" : "s"} hidden (anchor unreliable off ${modalCpu.replace(/ \d+-Core.*/, "")})`;
+  }
 
   renderReadout(baseline, snaps);
   const labels = snaps.map(labelFor);
@@ -151,9 +165,15 @@ function labelFor(s) {
   for (const s of snaps) for (const n of Object.keys(s.benchmarks || {})) allNames.add(n);
 
   // Reference ratio per benchmark: the baseline's, else the first snapshot's.
+  // But only trust the baseline when it was captured on the modal CPU. The
+  // baseline anchor carries the same cross-tier drift we filter snapshots for
+  // (its ratio_to_anchor is off by the anchor's error), so an off-tier baseline
+  // would rebase every series by that artifact — the very thing this page hides.
+  // When off-tier, fall through to the first (modal) snapshot as the reference.
+  const baselineOnTier = (baseline.machine?.cpu_model || "?") === modalCpu;
   const ref = {};
   for (const n of allNames) {
-    const b = baseline.benchmarks?.[n]?.ratio_to_anchor;
+    const b = baselineOnTier ? baseline.benchmarks?.[n]?.ratio_to_anchor : 0;
     if (b > 0) { ref[n] = b; continue; }
     const first = snaps.find(s => s.benchmarks?.[n]?.ratio_to_anchor > 0);
     ref[n] = first ? first.benchmarks[n].ratio_to_anchor : 0;
@@ -171,27 +191,86 @@ function labelFor(s) {
     borderWidth: 1.5, pointRadius: 2, pointHoverRadius: 4, spanGaps: true, tension: .25,
   }));
 
-  // The baseline bar: a dashed amber guide at 1.0× — the "redline" of this gauge.
-  const baselineLine = {
-    label: "baseline (1.0×)", data: labels.map(() => 1),
-    borderColor: "#f2b40a", borderDash: [5, 4], borderWidth: 1.5,
-    pointRadius: 0, pointHoverRadius: 0, fill: false, tension: 0,
-  };
+  // test262.total is a MEAN over the passing set, whose membership drifts as
+  // conformance changes. The perf-timeline job stamps each snapshot's entry with a
+  // set_hash; where it differs between two consecutive points the mean isn't over
+  // the same workload, so the slope across that gap isn't a pure engine delta.
+  // Surface those boundaries so the line isn't read as one continuous series.
+  const t262Hash = snaps.map(s => s.benchmarks?.["test262.total"]?.set_hash || null);
+  const setChangedAt = j => j > 0 && !!t262Hash[j] && !!t262Hash[j - 1] && t262Hash[j] !== t262Hash[j - 1];
+  const anySetChange = labels.some((_, j) => setChangedAt(j));
 
-  // Overall view: mean across all benchmarks per snapshot, with a ±1σ band.
-  const mean = [], lo = [], hi = [];
-  for (let j = 0; j < snaps.length; j++) {
-    const vals = series.map(d => d.data[j]).filter(v => v != null);
-    if (!vals.length) { mean.push(null); lo.push(null); hi.push(null); continue; }
-    const m = vals.reduce((a, b) => a + b, 0) / vals.length;
-    const sd = Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / vals.length);
-    mean.push(m); lo.push(m - sd); hi.push(m + sd);
+  // The baseline bar: a dashed amber guide at 1.0× — the "redline" of this gauge.
+  const baseDS = () => ({ label: "baseline (1.0×)", data: labels.map(() => 1),
+    borderColor: "#f2b40a", borderDash: [5, 4], borderWidth: 1.5,
+    pointRadius: 0, pointHoverRadius: 0, fill: false, tension: 0 });
+
+  // ---- Grouping: collapse the long breakdown into benchmark families ----
+  // Derived from the key, no hardcoded list: package.Benchmark<Family>/...
+  function groupOf(name) {
+    if (name.startsWith("test262")) return "Test262";
+    const fam = (name.split(".Benchmark")[1] || "").split("/")[0];
+    if (fam === "GetOwn") return "GetOwn";
+    if (fam.startsWith("Prototype")) return "Prototype";   // MethodAccess + CacheHitRate
+    return "Workloads";                                    // Fib, Matrix
   }
-  const bandLo = { label: "_band", data: lo, borderColor: "transparent", pointRadius: 0, fill: false };
-  const bandHi = { label: "± std dev", data: hi, borderColor: "transparent", pointRadius: 0,
-                   backgroundColor: "rgba(236,224,200,0.10)", fill: "-1" };
-  const meanLine = { label: "mean", data: mean, borderColor: "#ece0c8", backgroundColor: "#ece0c8",
-                     borderWidth: 2.5, pointRadius: 2.5, pointHoverRadius: 4, tension: .25 };
+  const GROUPS = ["GetOwn", "Prototype", "Workloads", "Test262"];
+  const members = {};                                      // group -> [series]
+  names.forEach((n, i) => (members[groupOf(n)] ||= []).push(series[i]));
+
+  // Overall is the CONTINUOUS micro suite only — Test262 is opt-in and sparse
+  // (present on a subset of snapshots), so folding it into Overall's mean would
+  // change the composition at exactly the snapshots where it appears, moving the
+  // line for a reason unrelated to the engine. Test262 keeps its own tab.
+  const micro = GROUPS.filter(g => g !== "Test262").flatMap(g => members[g] || []);
+
+  // mean + ±1σ band across an arbitrary subset of series, per snapshot.
+  function meanBand(sub) {
+    const mean = [], lo = [], hi = [];
+    for (let j = 0; j < snaps.length; j++) {
+      const vals = sub.map(d => d.data[j]).filter(v => v != null);
+      if (!vals.length) { mean.push(null); lo.push(null); hi.push(null); continue; }
+      const m = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const sd = Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / vals.length);
+      mean.push(m); lo.push(m - sd); hi.push(m + sd);
+    }
+    return { mean, lo, hi };
+  }
+
+  // Datasets for a mode: "Overall" (mean of all) · a group (that family's faint
+  // members behind a bold mean + ±σ band) · "All" (every raw line).
+  function datasetsFor(mode) {
+    if (mode === "All") return [baseDS(), ...series];
+    const sub = mode === "Overall" ? micro : (members[mode] || []);
+    const { mean, lo, hi } = meanBand(sub);
+    const faint = mode === "Overall" ? [] : sub.map(d => ({ ...d,
+      label: "_" + d.label,   // hidden from legend/tooltip — visual context only
+      borderColor: "rgba(150,170,190,0.22)", backgroundColor: "transparent",
+      borderWidth: 0.8, pointRadius: 0, pointHoverRadius: 0 }));
+    const meanDS = { label: mode === "Overall" ? "mean" : mode + " mean", data: mean,
+      borderColor: "#ece0c8", backgroundColor: "#ece0c8", borderWidth: 2.5,
+      pointRadius: 2.5, pointHoverRadius: 4, tension: .25 };
+    // On the Test262 tab, dash the span into a set-changed point and flag it with a
+    // triangle, so a jump caused by the workload changing reads differently from a
+    // real engine move. (Amber, matching the baseline guide's "watch this" hue.)
+    if (mode === "Test262" && anySetChange) {
+      const amber = "#d08a3c";
+      meanDS.segment = {
+        borderColor: c => setChangedAt(c.p1DataIndex) ? amber : undefined,
+        borderDash:  c => setChangedAt(c.p1DataIndex) ? [4, 3] : undefined,
+      };
+      meanDS.pointStyle           = labels.map((_, j) => setChangedAt(j) ? "triangle" : "circle");
+      meanDS.pointRadius          = labels.map((_, j) => setChangedAt(j) ? 5 : 2.5);
+      meanDS.pointBackgroundColor = labels.map((_, j) => setChangedAt(j) ? amber : "#ece0c8");
+      meanDS.pointBorderColor     = labels.map((_, j) => setChangedAt(j) ? amber : "#ece0c8");
+    }
+    return [ baseDS(), ...faint,
+      { label: "_band", data: lo, borderColor: "transparent", pointRadius: 0, fill: false },
+      { label: "± std dev", data: hi, borderColor: "transparent", pointRadius: 0,
+        backgroundColor: "rgba(236,224,200,0.12)", fill: "-1" },
+      meanDS ];
+  }
+  const groupCount = m => m === "All" ? names.length : m === "Overall" ? micro.length : (members[m] || []).length;
 
   const ink = "#a3906c", grid = "#2a2114";
   const chart = new Chart(document.getElementById("chart"), {
@@ -208,7 +287,11 @@ function labelFor(s) {
           backgroundColor: "#1f1810", borderColor: "#322817", borderWidth: 1,
           titleColor: "#ece0c8", bodyColor: "#ece0c8",
           filter: it => !it.dataset.label.startsWith("_"),
-          callbacks: { label: c => c.parsed.y == null ? null : `${c.dataset.label}: ${c.parsed.y.toFixed(3)}×` },
+          callbacks: {
+            label: c => c.parsed.y == null ? null : `${c.dataset.label}: ${c.parsed.y.toFixed(3)}×`,
+            afterLabel: c => (c.dataset.label === "Test262 mean" && setChangedAt(c.dataIndex))
+              ? "△ test set changed here — slope isn't a pure engine delta" : "",
+          },
         },
       },
       scales: {
@@ -221,18 +304,32 @@ function labelFor(s) {
   });
 
   const countEl = document.getElementById("count");
-  const bOverall = document.getElementById("m-overall"), bAll = document.getElementById("m-all");
+  const modesEl = document.getElementById("modes");
+  const MODES = ["Overall", ...GROUPS, "All"];
+  const btns = {};
   function setMode(mode) {
-    const overall = mode === "overall";
-    chart.data.datasets = overall ? [baselineLine, bandLo, bandHi, meanLine] : [baselineLine, ...series];
+    if (!MODES.includes(mode)) mode = "Overall";
+    chart.data.datasets = datasetsFor(mode);
     chart.update();
-    bOverall.setAttribute("aria-pressed", overall); bOverall.classList.toggle("on", overall);
-    bAll.setAttribute("aria-pressed", !overall);     bAll.classList.toggle("on", !overall);
-    countEl.textContent = `${overall ? "mean of " : ""}${names.length} benchmarks · ${snaps.length} snapshots`;
+    for (const m of MODES) {
+      const on = m === mode;
+      btns[m].setAttribute("aria-pressed", on);
+      btns[m].classList.toggle("on", on);
+    }
+    const c = groupCount(mode), lead = mode === "All" ? "" : "mean of ";
+    countEl.textContent = `${lead}${c} benchmark${c === 1 ? "" : "s"} · ${snaps.length} snapshots`;
+    if (mode === "Test262" && anySetChange) countEl.textContent += " · △ = contributing test set changed";
   }
-  bOverall.onclick = () => setMode("overall");
-  bAll.onclick = () => setMode("all");
-  setMode(new URLSearchParams(location.search).get("mode") === "all" ? "all" : "overall");
+  for (const m of MODES) {
+    const b = document.createElement("button");
+    b.className = "seg"; b.textContent = m;
+    b.onclick = () => setMode(m);
+    modesEl.appendChild(b); btns[m] = b;
+  }
+  // Match the ?mode= param case-insensitively: the tab names are capitalized now,
+  // but old links used lowercase (?mode=all / ?mode=overall) — honor those.
+  const want = (new URLSearchParams(location.search).get("mode") || "").toLowerCase();
+  setMode(MODES.find(m => m.toLowerCase() === want) || "Overall");
 })();
 
 function renderReadout(baseline, snaps) {
