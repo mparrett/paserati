@@ -24,7 +24,7 @@ func TestAggregateFromFileUsesMin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	base, err := aggregateFromFile(path)
+	base, err := aggregateFromFile(path, "min")
 	if err != nil {
 		t.Fatalf("aggregateFromFile: %v", err)
 	}
