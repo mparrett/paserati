@@ -1,0 +1,101 @@
+name: Perf Test262 Backfill
+
+# One-off backfill: measure an OLD commit's Test262 macro on a CURRENT runner and
+# inject `test262.total` into that commit's EXISTING perf-data snapshot — without
+# touching its historical micro-benchmarks (so an existing spike/dip stays visible
+# to overlay against).
+#
+# Pre-PR#10 commits lack cmd/bench-test262, so the macro tooling is grafted from
+# main; the engine measured stays the target commit's. Normalization uses a FRESH
+# anchor measured on the same runner as the macro (run-to-run anchor drift is
+# exactly what the ratio cancels), so backfilled points stay comparable to the
+# forward ones.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit SHA to backfill test262.total into (must already have a snapshot)'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  # Share the perf-data writer lock with the timeline so snapshots don't collide.
+  group: perf-timeline-main
+  cancel-in-progress: false
+
+env:
+  PER_TEST_TIMEOUT: 1.2s
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check out target ref + graft macro tooling from main
+        env:
+          TARGET_REF: ${{ github.event.inputs.ref }}
+        run: |
+          set -euo pipefail
+          main_sha="$(git rev-parse origin/main)"
+          # Orphan fork-CI commits aren't ref-reachable, so checkout@v4 didn't fetch
+          # them; fetch the target explicitly (it must be pushed to a ref to be
+          # fetchable — see the backfill/* temp branches).
+          git fetch --no-tags origin "$TARGET_REF"
+          git checkout --force FETCH_HEAD
+          # Graft just the macro tooling (absent or older on pre-PR#10 commits) so
+          # the methodology matches the forward snapshots. Engine stays the target's.
+          git checkout "$main_sha" -- cmd/bench-test262 scripts/macro-test262.sh
+
+      - name: Cache Test262 corpus
+        uses: actions/cache@v4
+        with:
+          path: test262
+          key: test262-${{ hashFiles('.test262-rev') }}
+          restore-keys: test262-
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Measure macro + fresh anchor, inject into existing snapshot
+        run: |
+          set -euo pipefail
+          short_sha="$(git rev-parse --short=12 HEAD)"
+
+          # Fresh anchor on THIS runner, same run as the macro → comparable ratio.
+          anchor_ns="$(go test -run '^$' -bench '^BenchmarkRatchetAnchor$' -count 3 ./pkg/vm 2>/dev/null \
+            | awk '/BenchmarkRatchetAnchor/ { sum += $3; n++ } END { if (n) printf "%.6f", sum/n }')"
+          [ -n "$anchor_ns" ] || { echo "failed to measure anchor" >&2; exit 1; }
+
+          ./setup-test262.sh
+          ./scripts/macro-test262.sh "${RUNNER_TEMP}/t262.jsonl" "${RUNNER_TEMP}/t262.stats.json"
+          total_ns="$(jq -s '.[] | select(.name=="total") | .ns_per_op'  "${RUNNER_TEMP}/t262.jsonl")"
+          passed="$(jq -s  '.[] | select(.name=="total") | .iterations'  "${RUNNER_TEMP}/t262.jsonl")"
+          ratio="$(jq -n --argjson n "$total_ns" --argjson a "$anchor_ns" '$n / $a')"
+          echo "anchor=${anchor_ns} ns/op · total=${total_ns} ns · ratio=${ratio} · passing=${passed}"
+
+          # Update THIS commit's existing snapshot on perf-data (micro untouched).
+          remote="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          wt="${RUNNER_TEMP}/perf-data"
+          git clone --depth 1 --branch perf-data "$remote" "$wt"
+          snap="$(find "$wt/timeline" -name "*-${short_sha}.json" | head -1)"
+          [ -n "$snap" ] || { echo "no existing snapshot for ${short_sha} — run the timeline first" >&2; exit 1; }
+
+          jq --argjson ns "$total_ns" --argjson r "$ratio" --argjson p "$passed" '
+            .benchmarks["test262.total"] = {
+              ns_per_op: $ns, allocs_per_op: 0, bytes_per_op: 0, ratio_to_anchor: $r,
+              samples: [{ iterations: $p, ns_per_op: $ns, ratio_to_anchor: $r }]
+            }' "$snap" > "$snap.tmp"
+          mv "$snap.tmp" "$snap"
+
+          git -C "$wt" config user.name "github-actions[bot]"
+          git -C "$wt" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$wt" add timeline
+          git -C "$wt" commit -m "perf: backfill test262.total into $(basename "$snap")"
+          git -C "$wt" push "$remote" HEAD:perf-data
