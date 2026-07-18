@@ -1058,6 +1058,19 @@
           "captured_at": "2026-06-27T22:01:49Z"
         }
       ]
+    },
+    "test262.total": {
+      "ns_per_op": 3055652.151166841,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "ratio_to_anchor": 2172264.0476863687,
+      "samples": [
+        {
+          "iterations": 40194,
+          "ns_per_op": 3055652.151166841,
+          "ratio_to_anchor": 2172264.0476863687
+        }
+      ]
     }
   }
 }
