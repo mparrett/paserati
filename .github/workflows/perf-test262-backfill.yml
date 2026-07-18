@@ -75,10 +75,21 @@ jobs:
 
           ./setup-test262.sh
           ./scripts/macro-test262.sh "${RUNNER_TEMP}/t262.jsonl" "${RUNNER_TEMP}/t262.stats.json"
-          total_ns="$(jq -s '.[] | select(.name=="total") | .ns_per_op'  "${RUNNER_TEMP}/t262.jsonl")"
-          passed="$(jq -s  '.[] | select(.name=="total") | .iterations'  "${RUNNER_TEMP}/t262.jsonl")"
-          ratio="$(jq -n --argjson n "$total_ns" --argjson a "$anchor_ns" '$n / $a')"
-          echo "anchor=${anchor_ns} ns/op · total=${total_ns} ns · ratio=${ratio} · passing=${passed}"
+          total_ns="$(jq 'select(.name=="total") | .ns_per_op'  "${RUNNER_TEMP}/t262.jsonl")"
+          passed="$(jq  'select(.name=="total") | .iterations'  "${RUNNER_TEMP}/t262.jsonl")"
+          set_hash="$(jq -r 'select(.name=="total") | .set_hash // ""' "${RUNNER_TEMP}/t262.jsonl")"
+
+          # Mean over an empty passing set is undefined — nothing meaningful to inject.
+          [ "${passed:-0}" -gt 0 ] || { echo "no passing tests for ${short_sha} — skipping" >&2; exit 1; }
+
+          # Metric MUST match the forward timeline (perf-timeline.yml, da8af1c): the
+          # MEAN per-test ns (summed_ns / passing_count), not the sum. The sum conflates
+          # per-test speed with pass-count (#26), so a sum-era backfill point would be
+          # incomparable to the mean-era forward points on the same series. set_hash is
+          # soft — absent until bench-test262 (#24) is on main, in which case it's omitted.
+          mean_ns="$(jq -n --argjson n "$total_ns" --argjson p "$passed" '$n / $p')"
+          ratio="$(jq -n --argjson m "$mean_ns" --argjson a "$anchor_ns" '$m / $a')"
+          echo "anchor=${anchor_ns} ns/op · mean=${mean_ns} ns/test over ${passed} passing (set ${set_hash:-none}) · ratio=${ratio}"
 
           # Update THIS commit's existing snapshot on perf-data (micro untouched).
           remote="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
@@ -87,11 +98,11 @@ jobs:
           snap="$(find "$wt/timeline" -name "*-${short_sha}.json" | head -1)"
           [ -n "$snap" ] || { echo "no existing snapshot for ${short_sha} — run the timeline first" >&2; exit 1; }
 
-          jq --argjson ns "$total_ns" --argjson r "$ratio" --argjson p "$passed" '
-            .benchmarks["test262.total"] = {
-              ns_per_op: $ns, allocs_per_op: 0, bytes_per_op: 0, ratio_to_anchor: $r,
-              samples: [{ iterations: $p, ns_per_op: $ns, ratio_to_anchor: $r }]
-            }' "$snap" > "$snap.tmp"
+          jq --argjson m "$mean_ns" --argjson r "$ratio" --argjson p "$passed" --arg h "$set_hash" '
+            .benchmarks["test262.total"] = ({
+              ns_per_op: $m, allocs_per_op: 0, bytes_per_op: 0, ratio_to_anchor: $r,
+              samples: [{ iterations: $p, ns_per_op: $m, ratio_to_anchor: $r }]
+            } + (if $h == "" then {} else { set_hash: $h } end))' "$snap" > "$snap.tmp"
           mv "$snap.tmp" "$snap"
 
           git -C "$wt" config user.name "github-actions[bot]"
