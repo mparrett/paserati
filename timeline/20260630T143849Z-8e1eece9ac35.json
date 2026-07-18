@@ -1060,15 +1060,15 @@
       ]
     },
     "test262.total": {
-      "ns_per_op": 3053981.183310942,
+      "ns_per_op": 3026546.6178036523,
       "allocs_per_op": 0,
       "bytes_per_op": 0,
-      "ratio_to_anchor": 2449062.6971218456,
+      "ratio_to_anchor": 2150554.7143452563,
       "samples": [
         {
           "iterations": 40194,
-          "ns_per_op": 3053981.183310942,
-          "ratio_to_anchor": 2449062.6971218456
+          "ns_per_op": 3026546.6178036523,
+          "ratio_to_anchor": 2150554.7143452563
         }
       ]
     }
