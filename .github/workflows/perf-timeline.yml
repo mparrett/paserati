@@ -91,26 +91,47 @@ jobs:
           set -euo pipefail
           out="${{ steps.snap.outputs.out }}"
           ./setup-test262.sh
-          ./scripts/macro-test262.sh "${RUNNER_TEMP}/t262.jsonl" "${RUNNER_TEMP}/t262.stats.json"
 
-          total_ns="$(jq -s '.[] | select(.name=="total") | .ns_per_op' "${RUNNER_TEMP}/t262.jsonl")"
-          passed="$(jq -s  '.[] | select(.name=="total") | .iterations' "${RUNNER_TEMP}/t262.jsonl")"
+          # Run the macro MACRO_COUNT times and keep the MIN summed-ns total: a single
+          # suite run is heavily contaminated by one-directional runner noise (GC, CPU
+          # migration, co-tenancy); min selects the least-contaminated run (#28), same
+          # rationale as the bench-ratchet A/B reducer (#22). passing count and set_hash
+          # are run-invariant; carry them from the winning run.
+          count="${MACRO_COUNT:-3}"
+          total_ns=""; passed=""; set_hash=""
+          for rep in $(seq 1 "$count"); do
+            ./scripts/macro-test262.sh "${RUNNER_TEMP}/t262.jsonl" "${RUNNER_TEMP}/t262.stats.json"
+            rep_ns="$(jq 'select(.name=="total") | .ns_per_op' "${RUNNER_TEMP}/t262.jsonl")"
+            echo "  macro rep ${rep}/${count}: total=${rep_ns} ns"
+            if [ -z "$total_ns" ] || jq -n --argjson a "$rep_ns" --argjson b "$total_ns" -e '$a < $b' >/dev/null; then
+              total_ns="$rep_ns"
+              passed="$(jq 'select(.name=="total") | .iterations' "${RUNNER_TEMP}/t262.jsonl")"
+              set_hash="$(jq -r 'select(.name=="total") | .set_hash // ""' "${RUNNER_TEMP}/t262.jsonl")"
+            fi
+          done
           anchor_ns="$(jq -r '.anchor.ns_per_op' "$out")"
 
-          # Anchor-normalize exactly as bench-ratchet does (ratio = summed_ns /
-          # anchor_ns). The page plots each series self-relative, so the large
-          # absolute ratio doesn't affect the chart scale. Passing-set size goes
-          # in a sample for provenance (the corpus-drift caveat).
-          jq --argjson ns "$total_ns" --argjson a "$anchor_ns" --argjson p "$passed" '
-            .benchmarks["test262.total"] = {
-              ns_per_op: $ns, allocs_per_op: 0, bytes_per_op: 0,
-              ratio_to_anchor: ($ns / $a),
-              samples: [{ iterations: $p, ns_per_op: $ns, ratio_to_anchor: ($ns / $a) }]
-            }' "$out" > "${out}.tmp"
+          # Mean over an empty passing set is undefined — skip the fold.
+          if [ "${passed:-0}" -gt 0 ]; then
+          # Metric is the MEAN per-test ns (summed_ns / passing_count), not the sum: the
+          # sum conflates per-test speed with pass-count (#26); the mean removes that
+          # count-inflation. set_hash fingerprints the contributing set (#24) so a residual
+          # composition shift the mean can't cancel stays visible — soft, omitted until
+          # #24's tooling lands. Anchor-normalized; the page plots each series self-relative.
+          mean_ns="$(jq -n --argjson n "$total_ns" --argjson p "$passed" '$n / $p')"
+          jq --argjson m "$mean_ns" --argjson a "$anchor_ns" --argjson p "$passed" --arg h "$set_hash" '
+            .benchmarks["test262.total"] = ({
+              ns_per_op: $m, allocs_per_op: 0, bytes_per_op: 0,
+              ratio_to_anchor: ($m / $a),
+              samples: [{ iterations: $p, ns_per_op: $m, ratio_to_anchor: ($m / $a) }]
+            } + (if $h == "" then {} else { set_hash: $h } end))' "$out" > "${out}.tmp"
           mv "${out}.tmp" "$out"
-
-          echo "test262.total: ${total_ns} ns over ${passed} passing tests" \
-               "(ratio $(jq -r '.benchmarks["test262.total"].ratio_to_anchor' "$out"))"
+          echo "test262.total: mean $(jq -r '.benchmarks["test262.total"].ns_per_op' "$out") ns/test" \
+               "over ${passed} passing (set ${set_hash:-none}, min of ${count} runs," \
+               "ratio $(jq -r '.benchmarks["test262.total"].ratio_to_anchor' "$out"))"
+          else
+            echo "test262.total: no passing tests — skipped"
+          fi
 
       - name: Render run summary
         run: |
