@@ -74,10 +74,25 @@ jobs:
           [ -n "$anchor_ns" ] || { echo "failed to measure anchor" >&2; exit 1; }
 
           ./setup-test262.sh
-          ./scripts/macro-test262.sh "${RUNNER_TEMP}/t262.jsonl" "${RUNNER_TEMP}/t262.stats.json"
-          total_ns="$(jq 'select(.name=="total") | .ns_per_op'  "${RUNNER_TEMP}/t262.jsonl")"
-          passed="$(jq  'select(.name=="total") | .iterations'  "${RUNNER_TEMP}/t262.jsonl")"
-          set_hash="$(jq -r 'select(.name=="total") | .set_hash // ""' "${RUNNER_TEMP}/t262.jsonl")"
+
+          # Run the macro MACRO_COUNT times and keep the MIN summed-ns total. A single
+          # suite run is heavily contaminated by one-directional runner noise (GC, CPU
+          # migration, co-tenancy); the timeline showed ~6% run-to-run scatter that
+          # swamped the engine-change signal (#28). Min selects the least-contaminated
+          # run — same rationale as the bench-ratchet A/B reducer (#22). passing count
+          # and set_hash are run-invariant; carry them from the winning run.
+          count="${MACRO_COUNT:-3}"
+          total_ns=""; passed=""; set_hash=""
+          for rep in $(seq 1 "$count"); do
+            ./scripts/macro-test262.sh "${RUNNER_TEMP}/t262.jsonl" "${RUNNER_TEMP}/t262.stats.json"
+            rep_ns="$(jq 'select(.name=="total") | .ns_per_op' "${RUNNER_TEMP}/t262.jsonl")"
+            echo "  macro rep ${rep}/${count}: total=${rep_ns} ns"
+            if [ -z "$total_ns" ] || jq -n --argjson a "$rep_ns" --argjson b "$total_ns" -e '$a < $b' >/dev/null; then
+              total_ns="$rep_ns"
+              passed="$(jq  'select(.name=="total") | .iterations'  "${RUNNER_TEMP}/t262.jsonl")"
+              set_hash="$(jq -r 'select(.name=="total") | .set_hash // ""' "${RUNNER_TEMP}/t262.jsonl")"
+            fi
+          done
 
           # Mean over an empty passing set is undefined — nothing meaningful to inject.
           [ "${passed:-0}" -gt 0 ] || { echo "no passing tests for ${short_sha} — skipping" >&2; exit 1; }
