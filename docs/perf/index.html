@@ -70,6 +70,11 @@
   .seg:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   .controls .count { margin-left: auto; font: 11px/1 ui-monospace, monospace;
                      color: var(--ink-dim); }
+  /* The tier row is secondary to the family tabs — same control, quieter weight. */
+  .controls-cpu { margin: 0 0 12px; }
+  .ctl-label { font: 600 10px/1 ui-monospace, monospace; letter-spacing: .18em;
+               text-transform: uppercase; color: var(--ink-dim); }
+  .controls-cpu .seg { padding: 6px 11px; font-size: 11px; }
 
   .card { background: var(--bg-elev); border: 1px solid var(--line);
           border-radius: 14px; padding: 18px; }
@@ -104,6 +109,10 @@
   <div class="controls">
     <div id="modes" class="toggle" role="group" aria-label="View mode"></div>
     <span id="count" class="count"></span>
+  </div>
+  <div class="controls controls-cpu">
+    <span class="ctl-label">Machine</span>
+    <div id="cpus" class="toggle" role="group" aria-label="Machine tier"></div>
   </div>
 
   <div class="card"><canvas id="chart" height="118"></canvas></div>
@@ -161,33 +170,42 @@ function labelFor(s) {
   // The calibration anchor is a pure-ALU loop; across CPU tiers it drifts vs the
   // mixed/memory workloads it normalizes (e.g. EPYC 9V74 reads the anchor ~12%
   // slow but not the suite, collapsing that snapshot's ratios). So a point on a
-  // minority CPU is unreliable, not signal — keep only the modal CPU and say how
-  // many were hidden (the data stays on perf-data; this is a display filter).
+  // minority CPU is unreliable, not signal — the default view keeps only the modal
+  // CPU (the data stays on perf-data; this is a display filter).
+  //
+  // But "hidden" was too strong a default: a snapshot that lands off-tier becomes
+  // unreachable from the page, and the tip commit lands off-tier often enough that
+  // the newest point can be missing with no way to see it. So the tier is a
+  // selectable view — modal by default, any captured tier, or "All".
   const cpuOf = s => s.machine?.cpu_model || "?";
+  const cpuShort = c => c.replace(/\(R\)|\(TM\)|CPU|Processor|@.*$|\d+-Core/g, "")
+                         .replace(/\s+/g, " ").trim();
+  const allSnaps = snaps;
   const cpuCounts = {};
-  for (const s of snaps) cpuCounts[cpuOf(s)] = (cpuCounts[cpuOf(s)] || 0) + 1;
-  const modalCpu = Object.entries(cpuCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
-  const hidden = snaps.filter(s => cpuOf(s) !== modalCpu);
-  if (modalCpu && hidden.length) snaps = snaps.filter(s => cpuOf(s) === modalCpu);
+  for (const s of allSnaps) cpuCounts[cpuOf(s)] = (cpuCounts[cpuOf(s)] || 0) + 1;
+  const cpus = Object.keys(cpuCounts).sort((a, b) => cpuCounts[b] - cpuCounts[a]);
+  const modalCpu = cpus[0];
 
-  const note = document.getElementById("cpunote");
-  if (note && hidden.length) {
-    note.textContent = ` · ${hidden.length} off-reference-CPU point${hidden.length === 1 ? "" : "s"} hidden (anchor unreliable off ${modalCpu.replace(/ \d+-Core.*/, "")})`;
-  }
+  // Fixed tab set, so the tabs don't appear and vanish as the selected tier
+  // changes which benchmark families happen to be present.
+  const GROUPS = ["GetOwn", "Prototype", "Workloads", "Test262"];
 
-  renderReadout(baseline, snaps, modalCpu);
+  // Everything downstream is derived from the selected subset, so it's rebuilt
+  // when the tier changes rather than computed once.
+  function buildView(snaps) {
   const labels = snaps.map(labelFor);
 
   const allNames = new Set();
   for (const s of snaps) for (const n of Object.keys(s.benchmarks || {})) allNames.add(n);
 
   // Reference ratio per benchmark: the baseline's, else the first snapshot's.
-  // But only trust the baseline when it was captured on the modal CPU. The
+  // But only trust the baseline when it was captured on the tier being shown. The
   // baseline anchor carries the same cross-tier drift we filter snapshots for
   // (its ratio_to_anchor is off by the anchor's error), so an off-tier baseline
   // would rebase every series by that artifact — the very thing this page hides.
-  // When off-tier, fall through to the first (modal) snapshot as the reference.
-  const baselineOnTier = (baseline.machine?.cpu_model || "?") === modalCpu;
+  // When off-tier, fall through to the first shown snapshot as the reference.
+  const shownCpus = new Set(snaps.map(cpuOf));
+  const baselineOnTier = shownCpus.size === 1 && shownCpus.has(baseline.machine?.cpu_model || "?");
   const ref = {};
   for (const n of allNames) {
     const b = baselineOnTier ? baseline.benchmarks?.[n]?.ratio_to_anchor : 0;
@@ -231,7 +249,6 @@ function labelFor(s) {
     if (fam.startsWith("Prototype")) return "Prototype";   // MethodAccess + CacheHitRate
     return "Workloads";                                    // Fib, Matrix
   }
-  const GROUPS = ["GetOwn", "Prototype", "Workloads", "Test262"];
   const members = {};                                      // group -> [series]
   names.forEach((n, i) => (members[groupOf(n)] ||= []).push(series[i]));
 
@@ -289,10 +306,16 @@ function labelFor(s) {
   }
   const groupCount = m => m === "All" ? names.length : m === "Overall" ? micro.length : (members[m] || []).length;
 
+  return { labels, snaps, datasetsFor, groupCount, anySetChange, setChangedAt };
+  }
+
+  let view = buildView(modalCpu ? allSnaps.filter(s => cpuOf(s) === modalCpu) : allSnaps);
+  const setChangedAt = j => view.setChangedAt(j);
+
   const ink = "#a3906c", grid = "#2a2114";
   const chart = new Chart(document.getElementById("chart"), {
     type: "line",
-    data: { labels, datasets: [] },
+    data: { labels: view.labels, datasets: [] },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: "nearest", intersect: false },
@@ -324,18 +347,19 @@ function labelFor(s) {
   const modesEl = document.getElementById("modes");
   const MODES = ["Overall", ...GROUPS, "All"];
   const btns = {};
-  function setMode(mode) {
-    if (!MODES.includes(mode)) mode = "Overall";
-    chart.data.datasets = datasetsFor(mode);
+  let mode = "Overall";
+  function setMode(m0) {
+    mode = MODES.includes(m0) ? m0 : "Overall";
+    chart.data.datasets = view.datasetsFor(mode);
     chart.update();
     for (const m of MODES) {
       const on = m === mode;
       btns[m].setAttribute("aria-pressed", on);
       btns[m].classList.toggle("on", on);
     }
-    const c = groupCount(mode), lead = mode === "All" ? "" : "mean of ";
-    countEl.textContent = `${lead}${c} benchmark${c === 1 ? "" : "s"} · ${snaps.length} snapshots`;
-    if (mode === "Test262" && anySetChange) countEl.textContent += " · △ = contributing test set changed";
+    const c = view.groupCount(mode), lead = mode === "All" ? "" : "mean of ";
+    countEl.textContent = `${lead}${c} benchmark${c === 1 ? "" : "s"} · ${view.snaps.length} snapshots`;
+    if (mode === "Test262" && view.anySetChange) countEl.textContent += " · △ = contributing test set changed";
   }
   for (const m of MODES) {
     const b = document.createElement("button");
@@ -343,29 +367,85 @@ function labelFor(s) {
     b.onclick = () => setMode(m);
     modesEl.appendChild(b); btns[m] = b;
   }
+
+  // ---- Machine tier selector ----
+  // "All" is deliberately available but never the default: ratio_to_anchor only
+  // normalizes within a CPU model, so a mixed line is not a comparable series —
+  // it's every captured point, tier artifacts included. Say so when it's picked
+  // rather than letting the chart imply the tiers are interchangeable.
+  const CPU_ALL = "All";
+  const cpuChoices = [CPU_ALL, ...cpus];
+  const cpuEl = document.getElementById("cpus");
+  const cpuBtns = {};
+  const note = document.getElementById("cpunote");
+  let cpuSel = modalCpu || CPU_ALL;
+
+  function setCpu(sel) {
+    cpuSel = cpuChoices.includes(sel) ? sel : (modalCpu || CPU_ALL);
+    const subset = cpuSel === CPU_ALL ? allSnaps : allSnaps.filter(s => cpuOf(s) === cpuSel);
+    view = buildView(subset);
+    chart.data.labels = view.labels;
+    for (const c of cpuChoices) {
+      const on = c === cpuSel;
+      cpuBtns[c].setAttribute("aria-pressed", on);
+      cpuBtns[c].classList.toggle("on", on);
+    }
+    renderReadout(baseline, view.snaps, cpuSel === CPU_ALL ? null : cpuSel);
+    if (note) {
+      if (cpuSel === CPU_ALL) {
+        note.textContent = ` · showing all ${cpus.length} CPU tiers — ratios normalize only WITHIN a tier, so cross-tier steps are artifacts, not engine moves`;
+      } else {
+        const off = allSnaps.length - subset.length;
+        note.textContent = off
+          ? ` · ${off} point${off === 1 ? "" : "s"} on other tiers hidden (anchor unreliable off ${cpuShort(cpuSel)})`
+          : "";
+      }
+    }
+    setMode(mode);   // re-render the current tab against the new view
+  }
+
+  for (const c of cpuChoices) {
+    const b = document.createElement("button");
+    b.className = "seg";
+    b.textContent = c === CPU_ALL ? `All (${allSnaps.length})` : `${cpuShort(c)} (${cpuCounts[c]})`;
+    b.title = c === CPU_ALL ? "Every snapshot, all CPU tiers" : c;
+    b.onclick = () => setCpu(c);
+    cpuEl.appendChild(b); cpuBtns[c] = b;
+  }
   // Match the ?mode= param case-insensitively: the tab names are capitalized now,
   // but old links used lowercase (?mode=all / ?mode=overall) — honor those.
   const want = (new URLSearchParams(location.search).get("mode") || "").toLowerCase();
-  setMode(MODES.find(m => m.toLowerCase() === want) || "Overall");
+  mode = MODES.find(m => m.toLowerCase() === want) || "Overall";
+
+  // ?cpu= selects a tier by substring ("9v74", "xeon") or "all"; default is modal.
+  // setCpu builds the view and then calls setMode, so this is the single entry point.
+  const wantCpu = (new URLSearchParams(location.search).get("cpu") || "").toLowerCase();
+  setCpu(wantCpu === "all" ? CPU_ALL
+       : cpus.find(c => c.toLowerCase().includes(wantCpu) && wantCpu) || modalCpu || CPU_ALL);
 })();
 
-function renderReadout(baseline, snaps, modalCpu) {
+function renderReadout(baseline, snaps, selectedCpu) {
   const m = baseline.machine || {}, latest = snaps[snaps.length - 1];
   const chips = [];
-  // Label the page with the tier the chart is actually normalized to — the modal
-  // CPU the timeline filter keeps — not the baseline's machine. The two diverge
-  // whenever the committed baseline was captured off-tier (the same condition that
-  // makes `ref` fall through to the first modal snapshot), and printing the
-  // baseline's CPU then names a machine whose points the page is busy hiding.
-  const tier = modalCpu || m.cpu_model;
-  if (tier)                   chips.push(`reference CPU <b>${tier}</b>`);
+  // Label the page with the tier the chart is actually showing — not the baseline's
+  // machine. The two diverge whenever the committed baseline was captured off-tier
+  // (the same condition that makes `ref` fall through to the first shown snapshot),
+  // and printing the baseline's CPU then names a machine whose points may not even
+  // be on screen. null means the mixed "All" view, which has no single tier: say
+  // that outright rather than falling back to some snapshot's CPU.
+  if (selectedCpu === null) {
+    const n = new Set(snaps.map(s => s.machine?.cpu_model || "?")).size;
+    chips.push(`CPU tier <b>mixed — ${n} tiers</b>`);
+  } else if (selectedCpu || m.cpu_model) {
+    chips.push(`reference CPU <b>${selectedCpu || m.cpu_model}</b>`);
+  }
   if (baseline.anchor?.ns_per_op) chips.push(`anchor <b>${baseline.anchor.ns_per_op.toFixed(2)} ns</b>`);
   if (latest?.anchor?.ns_per_op)  chips.push(`latest anchor <b>${latest.anchor.ns_per_op.toFixed(2)} ns</b>`);
   if (baseline.captured_at_sha) {
     // Say so when the baseline isn't on the reference tier: its ratios aren't what
     // the series is rebased on, so an unqualified sha here reads as more load-bearing
     // than it is.
-    const offTier = modalCpu && (m.cpu_model || "?") !== modalCpu;
+    const offTier = selectedCpu != null && (m.cpu_model || "?") !== selectedCpu;
     chips.push(`baseline <b>${baseline.captured_at_sha.slice(0, 8)}</b>${offTier ? " · off-tier, rebased" : ""}`);
   }
   document.getElementById("readout").innerHTML = chips.map(c => `<span class="chip">${c}</span>`).join("");
