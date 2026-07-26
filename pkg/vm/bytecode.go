@@ -194,6 +194,12 @@ const (
 	// Dst ValReg: n = ToNumeric(ValReg); Dst = n; ValReg = n-1 (postfix old value)
 	OpDecPost OpCode = 171
 
+	// --- Iterator fast path (for-of over plain arrays) ---
+	// Rx Ry: Rx = true if Ry is the built-in array-iterator next method (carries ArrayIterState)
+	OpIterFastCheck OpCode = 172
+	// Rx Ry Rz: step the built-in iterator behind next-method Rz: Rx = value, Ry = done. No call, no result object.
+	OpFastIterNext OpCode = 173
+
 	// --- NEW: Global Variable Operations ---
 	OpGetGlobal     OpCode = 46 // Rx GlobalIdx(16bit): Rx = Globals[GlobalIdx] (direct indexed access)
 	OpSetGlobal     OpCode = 47 // GlobalIdx(16bit) Ry: Globals[GlobalIdx] = Ry (direct indexed access)
@@ -351,6 +357,10 @@ func (op OpCode) String() string {
 		return "OpDecPre"
 	case OpDecPost:
 		return "OpDecPost"
+	case OpIterFastCheck:
+		return "OpIterFastCheck"
+	case OpFastIterNext:
+		return "OpFastIterNext"
 	case OpEqual:
 		return "OpEqual"
 	case OpNotEqual:
@@ -990,8 +1000,12 @@ func (c *Chunk) disassembleInstruction(builder *strings.Builder, offset int) int
 		OpRemainder, OpExponent,
 		OpIn, OpInstanceof,
 		OpBitwiseAnd, OpBitwiseOr, OpBitwiseXor,
-		OpShiftLeft, OpShiftRight, OpUnsignedShiftRight:
+		OpShiftLeft, OpShiftRight, OpUnsignedShiftRight,
+		OpIterFastCheck:
 		return c.registerRegisterRegisterInstruction(builder, instruction.String(), offset) // Rx, Ry, Rz
+
+	case OpFastIterNext:
+		return c.registerRegisterRegisterRegisterInstruction(builder, instruction.String(), offset) // Rx, Ry, Rz, Rw
 
 	case OpCall, OpTailCall:
 		return c.callInstruction(builder, instruction.String(), offset)
@@ -1428,6 +1442,24 @@ func (c *Chunk) registerRegisterRegisterInstruction(builder *strings.Builder, na
 	regZ := c.Code[offset+3]
 	builder.WriteString(fmt.Sprintf("%-16s R%d, R%d, R%d\n", name, regX, regY, regZ))
 	return offset + 4 // Opcode + 3 register bytes
+}
+
+// registerRegisterRegisterRegisterInstruction handles OpCode Rx, Ry, Rz, Rw
+func (c *Chunk) registerRegisterRegisterRegisterInstruction(builder *strings.Builder, name string, offset int) int {
+	if offset+4 >= len(c.Code) {
+		builder.WriteString(fmt.Sprintf("%s (missing register operands)\n", name))
+		next := offset + 5
+		if next > len(c.Code) {
+			next = len(c.Code)
+		}
+		return next
+	}
+	regX := c.Code[offset+1]
+	regY := c.Code[offset+2]
+	regZ := c.Code[offset+3]
+	regW := c.Code[offset+4]
+	builder.WriteString(fmt.Sprintf("%-16s R%d, R%d, R%d, R%d\n", name, regX, regY, regZ, regW))
+	return offset + 5 // Opcode + 4 register bytes
 }
 
 // registerConstantInstruction handles OpCode Rx, ConstIdx

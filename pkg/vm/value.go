@@ -151,11 +151,6 @@ func (vt ValueType) String() string {
 	}
 }
 
-type StringObject struct {
-	Object
-	value string
-}
-
 type SymbolObject struct {
 	Object
 	value          string
@@ -291,10 +286,10 @@ type AsyncGeneratorObject GeneratorObject
 type MapObject struct {
 	Object
 	size       int
-	entries    map[string]Value // key -> value
-	keys       map[string]Value // key -> original key (for key iteration)
-	order      []string         // insertion order of keys (for deterministic iteration)
-	tombstones map[string]bool  // keys that were deleted but still in order (for live iteration)
+	entries    map[mapKey]Value // key -> value
+	keys       map[mapKey]Value // key -> original key (for key iteration)
+	order      []mapKey         // insertion order of keys (for deterministic iteration)
+	tombstones map[mapKey]bool  // keys that were deleted but still in order (for live iteration)
 	Properties *PlainObject     // User-defined properties on the Map object
 	prototype  Value            // Map prototype
 }
@@ -302,9 +297,9 @@ type MapObject struct {
 type SetObject struct {
 	Object
 	size       int
-	values     map[string]Value // key -> original value (for value iteration)
-	order      []string         // insertion order of values (for deterministic iteration)
-	tombstones map[string]bool  // values that were deleted but still in order (for live iteration)
+	values     map[mapKey]Value // key -> original value (for value iteration)
+	order      []mapKey         // insertion order of values (for deterministic iteration)
+	tombstones map[mapKey]bool  // values that were deleted but still in order (for live iteration)
 	Properties *PlainObject     // User-defined properties on the Set object
 	prototype  Value            // Set prototype
 }
@@ -484,8 +479,21 @@ func NewBigInt(value *big.Int) Value {
 	return Value{typ: TypeBigInt, obj: unsafe.Pointer(&BigIntObject{value: value})}
 }
 
+// NewString stores the string's header (data pointer + length) directly in the
+// Value's obj/payload fields instead of boxing it in a heap-allocated
+// StringObject. The Go GC scans the unsafe.Pointer field, so the backing bytes
+// stay alive as long as the Value is reachable; AsString reconstructs the
+// string without copying via unsafe.String. The empty string stores a nil
+// pointer (unsafe.StringData("") is not guaranteed dereferenceable).
 func NewString(value string) Value {
-	return Value{typ: TypeString, obj: unsafe.Pointer(&StringObject{value: value})}
+	if len(value) == 0 {
+		return Value{typ: TypeString}
+	}
+	return Value{
+		typ:     TypeString,
+		payload: uint64(len(value)),
+		obj:     unsafe.Pointer(unsafe.StringData(value)),
+	}
 }
 
 func NewSymbol(value string) Value {
@@ -604,8 +612,8 @@ func (a *ArrayObject) GetPrototype() Value {
 func NewMap() Value {
 	mapObj := &MapObject{
 		size:    0,
-		entries: make(map[string]Value),
-		keys:    make(map[string]Value),
+		entries: make(map[mapKey]Value),
+		keys:    make(map[mapKey]Value),
 	}
 	return Value{typ: TypeMap, obj: unsafe.Pointer(mapObj)}
 }
@@ -619,7 +627,7 @@ func (m *MapObject) GetPrototype() Value { return m.prototype }
 func NewSet() Value {
 	setObj := &SetObject{
 		size:   0,
-		values: make(map[string]Value),
+		values: make(map[mapKey]Value),
 	}
 	return Value{typ: TypeSet, obj: unsafe.Pointer(setObj)}
 }
@@ -708,33 +716,67 @@ func (wr *WeakRefObject) Deref() Value {
 	return Value{typ: wr.targetType, obj: unsafe.Pointer(p)}
 }
 
-// hashKey creates a unique string key for any JavaScript value
-// Uses SameValueZero equality (NaN === NaN, +0 === -0)
-func hashKey(v Value) string {
+// mapKeyKind discriminates the flavor of a Map/Set key so keys of different
+// types never collide even when their payloads coincide. mkDead (the zero
+// value) matches no real key and marks a revived entry's stale order slot.
+type mapKeyKind uint8
+
+const (
+	mkDead mapKeyKind = iota
+	mkNull
+	mkUndefined
+	mkBoolFalse
+	mkBoolTrue
+	mkNumber
+	mkString
+	mkObject // objects/functions/symbols/bigint - reference identity by pointer
+)
+
+// nanKeyBits is the canonical bit pattern all NaN keys collapse to, so
+// SameValueZero's NaN === NaN holds (distinct NaN payloads hash the same).
+const nanKeyBits uint64 = 0x7FF8000000000001
+
+// mapKey is an allocation-free Map/Set key. It replaces the old string hash
+// (which allocated via strconv/fmt on every operation) with a comparable value
+// struct: constructing one copies a tag plus a uint64 and, for strings, a
+// header that aliases the existing backing - no heap work. Go compares/hashes
+// the struct field-wise, giving the same SameValueZero partitioning the string
+// keys did.
+type mapKey struct {
+	kind mapKeyKind
+	bits uint64 // number bits (canonical) or pointer address
+	str  string // string keys only
+}
+
+// hashKey maps a value to its Map/Set key under SameValueZero equality
+// (NaN === NaN, +0 === -0). Allocation-free.
+func hashKey(v Value) mapKey {
 	switch v.Type() {
 	case TypeNull:
-		return "null"
+		return mapKey{kind: mkNull}
 	case TypeUndefined:
-		return "undefined"
+		return mapKey{kind: mkUndefined}
 	case TypeString:
-		return "s:" + v.ToString()
+		return mapKey{kind: mkString, str: v.ToString()}
 	case TypeBoolean:
 		if v.AsBoolean() {
-			return "b:true"
+			return mapKey{kind: mkBoolTrue}
 		}
-		return "b:false"
+		return mapKey{kind: mkBoolFalse}
 	case TypeFloatNumber, TypeIntegerNumber:
 		f := v.ToFloat()
+		var bits uint64
 		if math.IsNaN(f) {
-			return "n:NaN"
+			bits = nanKeyBits
+		} else if f != 0 { // +0 and -0 collapse to bits 0 (SameValueZero)
+			bits = math.Float64bits(f)
 		}
-		if f == 0 {
-			return "n:0" // Treat +0 and -0 as same (SameValueZero)
-		}
-		return "n:" + strconv.FormatFloat(f, 'g', -1, 64)
+		return mapKey{kind: mkNumber, bits: bits}
 	default:
-		// For objects, use pointer address as unique key
-		return "o:" + fmt.Sprintf("%p", v.obj)
+		// Objects (and functions/symbols/bigint) key on pointer identity, as
+		// before. The Map/Set holds the key Value strongly, so the address
+		// stays valid for the entry's lifetime and Go never moves heap objects.
+		return mapKey{kind: mkObject, bits: uint64(uintptr(v.obj))}
 	}
 }
 
@@ -767,7 +809,12 @@ func (v Value) IsBoolean() bool {
 }
 
 func (v Value) IsObject() bool {
-	return v.typ == TypeObject || v.typ == TypeDictObject || v.typ == TypeArray || v.typ == TypeArguments || v.typ == TypeGenerator || v.typ == TypeAsyncGenerator || v.typ == TypePromise || v.typ == TypeRegExp || v.typ == TypeTypedArray || v.typ == TypeDataView || v.typ == TypeArrayBuffer || v.typ == TypeSharedArrayBuffer || v.typ == TypeProxy || v.typ == TypeMap || v.typ == TypeSet || v.typ == TypeWeakMap || v.typ == TypeWeakSet || v.typ == TypeWeakRef
+	// The object ValueTypes form a contiguous span [TypeObject, TypeProxy], so this
+	// range check is equivalent to (and much faster than) an 18-way OR-chain — it
+	// rejects the common non-object case (numbers) in one comparison instead of 18.
+	// TestIsObjectExhaustive locks in the equivalence; if a type is ever inserted
+	// mid-enum and breaks contiguity, that test fails.
+	return v.typ >= TypeObject && v.typ <= TypeProxy
 }
 
 func (v Value) IsDictObject() bool {
@@ -876,7 +923,10 @@ func (v Value) AsString() string {
 	if v.typ != TypeString {
 		panic("value is not a string")
 	}
-	return (*StringObject)(v.obj).value
+	if v.payload == 0 {
+		return ""
+	}
+	return unsafe.String((*byte)(v.obj), int(v.payload))
 }
 
 func (v Value) AsSymbol() string {
@@ -1044,7 +1094,7 @@ func (v Value) AsBoolean() bool {
 func (v Value) ToString() string {
 	switch v.typ {
 	case TypeString:
-		return (*StringObject)(v.obj).value
+		return v.AsString()
 	case TypeSymbol:
 		return fmt.Sprintf("Symbol(%s)", (*SymbolObject)(v.obj).value)
 	case TypeFloatNumber:
@@ -1321,6 +1371,21 @@ func (v Value) ToPrimitive(hint string) Value {
 }
 
 func (v Value) ToInteger() int32 {
+	// Fast path: already a number — the overwhelmingly common operand for ToInt32
+	// coercions (bitwise & | ^ << >> >>> ~, asm.js-style `x | 0`). A number is
+	// never an object, so this takes the identical path the switch below would;
+	// short-circuiting here skips the object/ToPrimitive guard entirely.
+	switch v.typ {
+	case TypeIntegerNumber:
+		return v.AsInteger()
+	case TypeFloatNumber:
+		f := v.AsFloat()
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return 0
+		}
+		return int32(uint32(int64(f)))
+	}
+
 	// First apply ToPrimitive if it's an object
 	if v.IsObject() || v.typ == TypeArray || v.typ == TypeArguments || v.typ == TypeRegExp || v.typ == TypeMap || v.typ == TypeSet || v.typ == TypeProxy {
 		v = v.ToPrimitive("number")
@@ -2290,6 +2355,7 @@ func (a *ArrayObject) HasOwnSymbolProp(sym *SymbolObject) bool {
 
 // DefineAccessorProperty defines an accessor property on the array object
 func (a *ArrayObject) DefineAccessorProperty(name string, getter Value, hasGetter bool, setter Value, hasSetter bool, enumerable *bool, configurable *bool) {
+	noteAccessorKey(name)
 	// Initialize maps if needed
 	if a.getters == nil {
 		a.getters = make(map[string]Value)
@@ -2514,7 +2580,7 @@ func (m *MapObject) Set(key, value Value) {
 			delete(m.tombstones, keyStr)
 			for i, k := range m.order {
 				if k == keyStr {
-					m.order[i] = "" // dead entry marker
+					m.order[i] = mapKey{} // dead entry marker (mkDead)
 				}
 			}
 		}
@@ -2550,7 +2616,7 @@ func (m *MapObject) Delete(key Value) bool {
 		// Mark this key as a tombstone so live iterators skip it,
 		// but re-insertion can revive the entry at its original position.
 		if m.tombstones == nil {
-			m.tombstones = make(map[string]bool)
+			m.tombstones = make(map[mapKey]bool)
 		}
 		m.tombstones[keyStr] = true
 		m.size--
@@ -2560,8 +2626,8 @@ func (m *MapObject) Delete(key Value) bool {
 }
 
 func (m *MapObject) Clear() {
-	m.entries = make(map[string]Value)
-	m.keys = make(map[string]Value)
+	m.entries = make(map[mapKey]Value)
+	m.keys = make(map[mapKey]Value)
 	m.order = nil        // Reset insertion order
 	m.tombstones = nil   // Clear tombstones
 	m.size = 0
@@ -2585,10 +2651,9 @@ func (m *MapObject) ForEach(fn func(key Value, value Value)) {
 		}
 		if originalKey, ok := m.keys[keyStr]; ok {
 			fn(originalKey, value)
-		} else {
-			// Fallback: synthesize string key
-			fn(NewString(keyStr), value)
 		}
+		// keys is always populated alongside entries in Set, so the original
+		// key is present; there is no string to synthesize from a mapKey.
 	}
 }
 
@@ -2618,8 +2683,8 @@ func (m *MapObject) GetEntryAt(index int) (Value, Value, bool) {
 	if originalKey, ok := m.keys[keyStr]; ok {
 		return originalKey, value, true
 	}
-	// Fallback: synthesize string key
-	return NewString(keyStr), value, true
+	// keys is always populated alongside entries in Set; unreachable otherwise.
+	return Undefined, Undefined, false
 }
 
 // SetObject methods
@@ -2633,7 +2698,7 @@ func (s *SetObject) Add(value Value) {
 			delete(s.tombstones, keyStr)
 			for i, k := range s.order {
 				if k == keyStr {
-					s.order[i] = "" // dead entry marker
+					s.order[i] = mapKey{} // dead entry marker (mkDead)
 				}
 			}
 		}
@@ -2656,7 +2721,7 @@ func (s *SetObject) Delete(value Value) bool {
 		delete(s.values, keyStr)
 		// Mark as tombstone for live iteration
 		if s.tombstones == nil {
-			s.tombstones = make(map[string]bool)
+			s.tombstones = make(map[mapKey]bool)
 		}
 		s.tombstones[keyStr] = true
 		s.size--
@@ -2666,7 +2731,7 @@ func (s *SetObject) Delete(value Value) bool {
 }
 
 func (s *SetObject) Clear() {
-	s.values = make(map[string]Value)
+	s.values = make(map[mapKey]Value)
 	s.order = nil      // Reset insertion order
 	s.tombstones = nil // Clear tombstones
 	s.size = 0

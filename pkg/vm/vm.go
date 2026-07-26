@@ -160,6 +160,14 @@ type VM struct {
 	registerStack [RegFileSize * MaxFrames]Value
 	nextRegSlot   int // Points to the next available slot in registerStack
 
+	// sentinelRegPool is a LIFO free-list of 1-element register slices reused as
+	// the sentinel frame's result holder on native->JS reentry
+	// (executeUserFunctionSafe / ...WithNewTarget). Reentries nest strictly, so
+	// the pool grows to the max nesting depth and then recycles - eliminating a
+	// per-callback heap allocation (every Array.map/forEach/sort element,
+	// Promise executor, etc.).
+	sentinelRegPool [][]Value
+
 	// List of upvalues pointing to variables still on the registerStack
 	openUpvalues []*Upvalue
 	// Map for O(1) lookup of existing upvalues by location pointer
@@ -1654,6 +1662,44 @@ startExecution:
 			// In many languages, ! evaluates truthiness
 			registers[destReg] = BooleanValue(isFalsey(srcVal)) // Use local Bool
 
+		case OpIterFastCheck:
+			// Emitted once per for-of loop, after the compiler has cached the
+			// iterator's next method in a register (matching the spec's
+			// IteratorRecord.[[NextMethod]] caching). True only for built-in
+			// iterators the VM can step directly: closure-based ones carry
+			// state on the next method itself; Map/Set iterators carry it on
+			// the iterator object behind the shared prototype next. Anything
+			// else (user iterators, generators, replaced next) takes the
+			// generic call path.
+			destReg := code[ip]
+			iterReg := code[ip+1]
+			nextReg := code[ip+2]
+			ip += 3
+			registers[destReg] = BooleanValue(resolveFastIterState(registers[iterReg], registers[nextReg]) != nil)
+
+		case OpFastIterNext:
+			// Fast for-of step: advance the built-in iterator state - no
+			// method call, no {value, done} result object. Step re-reads
+			// source length/content each iteration, so mutation during
+			// iteration behaves exactly like the native next it bypasses
+			// (both call the same Step).
+			valueReg := code[ip]
+			doneReg := code[ip+1]
+			iterReg := code[ip+2]
+			nextReg := code[ip+3]
+			ip += 4
+			st := resolveFastIterState(registers[iterReg], registers[nextReg])
+			if st == nil {
+				// Unreachable when emitted behind OpIterFastCheck; fail loudly
+				// rather than silently terminating the loop.
+				frame.ip = ip
+				status := vm.runtimeError("OpFastIterNext without steppable iterator state")
+				return status, Undefined
+			}
+			v, done := st.Step()
+			registers[valueReg] = v
+			registers[doneReg] = BooleanValue(done)
+
 		case OpTypeof:
 			destReg := code[ip]
 			srcReg := code[ip+1]
@@ -1901,6 +1947,18 @@ startExecution:
 			// Type checking specific to operation groups
 			switch opcode {
 			case OpAdd:
+				// Fast path: both operands already numbers. Skips two non-inlinable
+				// vm.toPrimitive calls (each with helperCallDepth/unwinding/handler
+				// bookkeeping) plus the string/BigInt/Symbol branches. Semantically
+				// identical to the slow path: toPrimitive is the identity for
+				// numbers, and the numeric branch computes
+				// Number(lhs.ToFloat() + rhs.ToFloat()).
+				if lt, rt := leftVal.typ, rightVal.typ; (lt == TypeIntegerNumber || lt == TypeFloatNumber) &&
+					(rt == TypeIntegerNumber || rt == TypeFloatNumber) {
+					registers[destReg] = Number(leftVal.ToFloat() + rightVal.ToFloat())
+					continue
+				}
+
 				// JS semantics: ToPrimitive on both first (for string check),
 				// then if either is String → concatenate ToString(lhs)+ToString(rhs);
 				// else ToNumeric on both; if both BigInt → BigInt add; else Number add.
@@ -2017,6 +2075,24 @@ startExecution:
 					registers[destReg] = Number(leftNum + rightNum)
 				}
 			case OpSubtract, OpMultiply, OpDivide:
+				// Fast path: both operands already numbers. Skips two non-inlinable
+				// vm.toPrimitive calls plus the Symbol/BigInt branches. Identical to
+				// the slow path's numeric case (toPrimitive is the identity for
+				// numbers, neither is Symbol/BigInt).
+				if lt, rt := leftVal.typ, rightVal.typ; (lt == TypeIntegerNumber || lt == TypeFloatNumber) &&
+					(rt == TypeIntegerNumber || rt == TypeFloatNumber) {
+					ln, rn := leftVal.ToFloat(), rightVal.ToFloat()
+					switch opcode {
+					case OpSubtract:
+						registers[destReg] = Number(ln - rn)
+					case OpMultiply:
+						registers[destReg] = Number(ln * rn)
+					case OpDivide:
+						registers[destReg] = Number(ln / rn)
+					}
+					continue
+				}
+
 				// Apply ToPrimitive and type coercion like JavaScript
 				// ECMAScript order: ToNumeric(lhs) then ToNumeric(rhs)
 				// ToNumeric calls ToPrimitive internally, and ToNumber(Symbol) throws
@@ -2145,6 +2221,13 @@ startExecution:
 					}
 				}
 			case OpRemainder:
+				// Fast path: both operands already numbers (see OpSubtract above).
+				if lt, rt := leftVal.typ, rightVal.typ; (lt == TypeIntegerNumber || lt == TypeFloatNumber) &&
+					(rt == TypeIntegerNumber || rt == TypeFloatNumber) {
+					registers[destReg] = Number(math.Mod(leftVal.ToFloat(), rightVal.ToFloat()))
+					continue
+				}
+
 				// Apply ToPrimitive and type coercion
 				// ECMAScript order: ToNumeric(lhs) then ToNumeric(rhs)
 				frame.ip = ip
@@ -2296,7 +2379,7 @@ startExecution:
 					// String comparison (lexicographic by UTF-16 code units per ECMAScript)
 					leftStr := leftVal.ToString()
 					rightStr := rightVal.ToString()
-					cmp := compareStringsUTF16(leftStr, rightStr)
+					cmp := compareStrings(leftStr, rightStr)
 					switch opcode {
 					case OpGreater:
 						result = cmp > 0
@@ -2368,7 +2451,7 @@ startExecution:
 					if leftPrim.Type() == TypeString && rightPrim.Type() == TypeString {
 						leftStr := leftPrim.AsString()
 						rightStr := rightPrim.AsString()
-						cmp := compareStringsUTF16(leftStr, rightStr)
+						cmp := compareStrings(leftStr, rightStr)
 						switch opcode {
 						case OpGreater:
 							result = cmp > 0
@@ -2644,7 +2727,7 @@ startExecution:
 					if !hasProperty && plainObj == vm.GlobalObject {
 						if idx, exists := vm.heap.nameToIndex[propKey]; exists {
 							// Only consider user-defined globals (not builtins) that are initialized
-							if idx >= vm.heap.builtinCount && vm.heap.initialized[idx] {
+							if idx >= vm.heap.builtinCount && vm.heap.IsInitialized(idx) {
 								hasProperty = true
 							}
 						}
@@ -7478,7 +7561,7 @@ startExecution:
 				if !isValidArrayIndex {
 					// Handle Symbol keys directly
 					if indexVal.Type() == TypeSymbol {
-						if ok, status, res := vm.opSetPropSymbol(ip, &baseVal, indexVal, &valueVal); !ok {
+						if ok, status, res := vm.opSetPropSymbol(ip, &registers[baseReg], indexVal, &valueVal); !ok {
 							return status, res
 						}
 						continue
@@ -7499,7 +7582,7 @@ startExecution:
 						}
 						// Per ECMAScript ToPropertyKey: if ToPrimitive returns a Symbol, use it directly
 						if primitiveVal.Type() == TypeSymbol {
-							if ok, status, res := vm.opSetPropSymbol(ip, &baseVal, primitiveVal, &valueVal); !ok {
+							if ok, status, res := vm.opSetPropSymbol(ip, &registers[baseReg], primitiveVal, &valueVal); !ok {
 								return status, res
 							}
 							continue
@@ -7508,7 +7591,7 @@ startExecution:
 					} else {
 						key = indexVal.ToString()
 					}
-					if ok, status, res := vm.opSetProp(ip, &baseVal, key, &valueVal); !ok {
+					if ok, status, res := vm.opSetProp(ip, &registers[baseReg], key, &valueVal); !ok {
 						if status != InterpretOK {
 							return status, res
 						}
@@ -7520,12 +7603,17 @@ startExecution:
 				// idx is now set from either number or string path
 				// and we've verified it's a valid array index (non-negative integer)
 
-				// Check for setter on Array.prototype chain before direct write
-				// ECMAScript requires invoking inherited setters for array indices
-				idxKey := strconv.Itoa(idx)
-				setterKey := "s:" + idxKey // PropertyKey hash format for string keys
+				// Check for setter on Array.prototype chain before direct write.
+				// ECMAScript requires invoking inherited setters for array indices,
+				// but integer-indexed accessors on the prototype chain essentially
+				// never exist, so guard the whole walk (a strconv.Itoa + string
+				// concat + chain scan, on every element write) behind a latch that is
+				// only set once such an accessor is actually defined. See
+				// arrayIndexAccessorSeen in object.go.
 				setterFound := false
-				if vm.ArrayPrototype.IsObject() {
+				if arrayIndexAccessorSeen && vm.ArrayPrototype.IsObject() {
+					idxKey := strconv.Itoa(idx)
+					setterKey := "s:" + idxKey // PropertyKey hash format for string keys
 					for cur := vm.ArrayPrototype.AsPlainObject(); cur != nil; {
 						// Check directly in the setters map (keyed by PropertyKey.hash())
 						if cur.setters != nil {
@@ -7585,7 +7673,7 @@ startExecution:
 						// Convert index to string for property key
 						key := fmt.Sprintf("%d", idx)
 						// Use opSetProp to handle property setting with accessor awareness
-						if ok, status, res := vm.opSetProp(ip, &baseVal, key, &valueVal); !ok {
+						if ok, status, res := vm.opSetProp(ip, &registers[baseReg], key, &valueVal); !ok {
 							if status != InterpretOK {
 								return status, res
 							}
@@ -7623,7 +7711,7 @@ startExecution:
 						// Skip setting silently (spec-incomplete structure)
 						continue
 					}
-					if ok, status, res := vm.opSetPropSymbol(ip, &baseVal, indexVal, &valueVal); !ok {
+					if ok, status, res := vm.opSetPropSymbol(ip, &registers[baseReg], indexVal, &valueVal); !ok {
 						return status, res
 					}
 					continue
@@ -7646,7 +7734,7 @@ startExecution:
 						}
 						// Per ECMAScript ToPropertyKey: if ToPrimitive returns a Symbol, use it directly
 						if primitiveVal.Type() == TypeSymbol {
-							if ok, status, res := vm.opSetPropSymbol(ip, &baseVal, primitiveVal, &valueVal); !ok {
+							if ok, status, res := vm.opSetPropSymbol(ip, &registers[baseReg], primitiveVal, &valueVal); !ok {
 								return status, res
 							}
 							continue
@@ -7718,7 +7806,7 @@ startExecution:
 				} else {
 					// Route through opSetProp which handles extensibility, writable,
 					// prototype chain accessors, and global object sync
-					if ok, status, res := vm.opSetProp(ip, &baseVal, key, &valueVal); !ok {
+					if ok, status, res := vm.opSetProp(ip, &registers[baseReg], key, &valueVal); !ok {
 						if status != InterpretOK {
 							return status, res
 						}
@@ -7736,18 +7824,18 @@ startExecution:
 					// Non-numeric index (Symbol, string, etc.) - set property via prototype chain
 					switch indexVal.Type() {
 					case TypeSymbol:
-						if ok, status, value := vm.opSetPropSymbol(ip, &baseVal, indexVal, &valueVal); !ok {
+						if ok, status, value := vm.opSetPropSymbol(ip, &registers[baseReg], indexVal, &valueVal); !ok {
 							return status, value
 						}
 					case TypeString:
 						key := AsString(indexVal)
-						if ok, status, value := vm.opSetProp(ip, &baseVal, key, &valueVal); !ok {
+						if ok, status, value := vm.opSetProp(ip, &registers[baseReg], key, &valueVal); !ok {
 							return status, value
 						}
 					default:
 						// Convert to string for property access
 						key := indexVal.ToString()
-						if ok, status, value := vm.opSetProp(ip, &baseVal, key, &valueVal); !ok {
+						if ok, status, value := vm.opSetProp(ip, &registers[baseReg], key, &valueVal); !ok {
 							return status, value
 						}
 					}
@@ -7757,17 +7845,17 @@ startExecution:
 				// Proxy objects: route all property setting through the proxy protocol via opSetProp
 				switch indexVal.Type() {
 				case TypeSymbol:
-					if ok, status, value := vm.opSetPropSymbol(ip, &baseVal, indexVal, &valueVal); !ok {
+					if ok, status, value := vm.opSetPropSymbol(ip, &registers[baseReg], indexVal, &valueVal); !ok {
 						return status, value
 					}
 				case TypeString:
 					key := AsString(indexVal)
-					if ok, status, value := vm.opSetProp(ip, &baseVal, key, &valueVal); !ok {
+					if ok, status, value := vm.opSetProp(ip, &registers[baseReg], key, &valueVal); !ok {
 						return status, value
 					}
 				default:
 					key := indexVal.ToString()
-					if ok, status, value := vm.opSetProp(ip, &baseVal, key, &valueVal); !ok {
+					if ok, status, value := vm.opSetProp(ip, &registers[baseReg], key, &valueVal); !ok {
 						return status, value
 					}
 				}
@@ -12507,7 +12595,7 @@ startExecution:
 						// Global var declarations are enumerable
 						// Builtins are typically non-enumerable, but we include user-defined globals
 						// Check if the variable is user-defined (index >= builtinCount) AND initialized
-						if idx >= vm.heap.builtinCount && vm.heap.initialized[idx] {
+						if idx >= vm.heap.builtinCount && vm.heap.IsInitialized(idx) {
 							keys = append(keys, name)
 							seen[name] = true
 						}
@@ -15953,6 +16041,25 @@ func compareStringsUTF16(a, b string) int {
 		return 1
 	}
 	return 0
+}
+
+// compareStrings returns the UTF-16 code-unit ordering of a and b (-1/0/1).
+// Allocation-free in the common case: when neither string contains an astral
+// character or lone surrogate - the only cases where UTF-8 byte order diverges
+// from UTF-16 code-unit order - Go's native byte comparison yields the same
+// ordering without materializing the two []uint16 slices. Falls back to the
+// full UTF-16 comparison only for astral/surrogate content.
+func compareStrings(a, b string) int {
+	if !stringNeedsUTF16Comparison(a) && !stringNeedsUTF16Comparison(b) {
+		if a < b {
+			return -1
+		}
+		if a > b {
+			return 1
+		}
+		return 0
+	}
+	return compareStringsUTF16(a, b)
 }
 
 // UTF16Length returns the number of UTF-16 code units in a string

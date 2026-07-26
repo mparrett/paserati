@@ -50,6 +50,8 @@ jobs:
 
       # Corpus for the Test262 macro series (see "Add Test262 macro" below).
       # Keyed on the checked-out ref's .test262-rev; setup-test262.sh re-pins as needed.
+      # Unconditional on this fork: the dashboard timeline wants a point per
+      # snapshot, where upstream gates the macro behind [perf-test262].
       - name: Cache Test262 corpus
         uses: actions/cache@v4
         with:
@@ -83,6 +85,7 @@ jobs:
       # series. Adds ~4 min/snapshot. Non-fatal: a macro hiccup must never drop
       # the micro snapshot that's already captured above. Backfilling pre-PR#10
       # commits needs scripts/macro-test262.sh grafted in — they don't ship it.
+      # Unconditional here; upstream gates this on [perf-test262].
       - name: Add Test262 macro to snapshot
         continue-on-error: true
         env:

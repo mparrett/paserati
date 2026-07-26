@@ -110,6 +110,7 @@ type Result struct {
 	NSPerOp     float64
 	BytesPerOp  int64
 	AllocsPerOp int64
+	SetHash     string // identity of the aggregated set (test262 macro); empty for micro benchmarks
 	Samples     []BenchmarkSample
 }
 
@@ -664,6 +665,8 @@ func aggregateFromFile(path string) (Baseline, error) {
 		count                     int
 		nsMin, bytesMin, allocMin float64
 		iters                     int64
+		setHash                   string // shared set identity across this key's records
+		setHashConflict           bool   // records disagreed → no coherent identity
 		samples                   []BenchmarkSample
 	}
 	byName := map[string]*accum{}
@@ -692,6 +695,13 @@ func aggregateFromFile(path string) (Baseline, error) {
 		if rec.Iterations > a.iters {
 			a.iters = rec.Iterations
 		}
+		if rec.SetHash != "" && !a.setHashConflict {
+			if a.setHash == "" {
+				a.setHash = rec.SetHash
+			} else if a.setHash != rec.SetHash {
+				a.setHash, a.setHashConflict = "", true
+			}
+		}
 		a.samples = append(a.samples, rec.Sample())
 	}
 
@@ -704,6 +714,7 @@ func aggregateFromFile(path string) (Baseline, error) {
 			NSPerOp:     a.nsMin,
 			BytesPerOp:  int64(a.bytesMin),
 			AllocsPerOp: int64(a.allocMin),
+			SetHash:     a.setHash,
 			Samples:     append([]BenchmarkSample(nil), a.samples...),
 		})
 	}
@@ -744,6 +755,7 @@ func buildCurrentBaseline(results []Result, anchor Result) Baseline {
 			AllocsPerOp:   r.AllocsPerOp,
 			BytesPerOp:    r.BytesPerOp,
 			RatioToAnchor: r.NSPerOp / anchor.NSPerOp,
+			SetHash:       r.SetHash,
 			Samples:       samples,
 		}
 	}
