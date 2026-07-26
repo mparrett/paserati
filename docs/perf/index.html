@@ -135,7 +135,7 @@ function labelFor(s) {
   try { baseline = await getJSON(BASE); } catch { baseline = { benchmarks: {}, machine: {}, anchor: {} }; }
   try { files = await getJSON(MANIFEST); } catch { files = []; }
 
-  if (!files.length) { document.getElementById("empty").hidden = false; renderReadout(baseline, []); return; }
+  if (!files.length) { document.getElementById("empty").hidden = false; renderReadout(baseline, [], null); return; }
 
   // Order by COMMIT time, not capture time. perf-timeline.yml names each snapshot
   // "<commit-epoch-UTC>-<sha>.json", so the filename prefix is the commit stamp
@@ -143,13 +143,19 @@ function labelFor(s) {
   // after the commit and the two agree, but a manual backfill measures an old
   // commit today — sorting on captured_at throws it to the right edge of the chart.
   // The stamp is ISO basic UTC, so a plain string compare is chronological.
-  const stampOf = f => (String(f).match(/^\d{8}T\d{6}Z/) || [""])[0];
+  //
+  // Rebased stacks routinely share a commit second, so sort on the whole filename
+  // rather than the stamp alone: the trailing sha then breaks ties deterministically.
+  // That tiebreak isn't topological — nothing in the filename encodes parentage —
+  // but same-second commits are adjacent on the axis anyway, and a stable order
+  // beats manifest order, which is whatever `find` happened to emit.
+  const sortKey = s => (String(s.file).match(/^\d{8}T\d{6}Z/) ? s.file : (s.captured_at || ""));
   let snaps = (await Promise.all(files.map(async f => {
       const s = await getJSON("timeline/" + f).catch(() => null);
       return s && Object.assign(s, { file: f });
     })))
     .filter(Boolean)
-    .sort((a, b) => (stampOf(a.file) || a.captured_at || "").localeCompare(stampOf(b.file) || b.captured_at || ""));
+    .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
 
   // The calibration anchor is a pure-ALU loop; across CPU tiers it drifts vs the
   // mixed/memory workloads it normalizes (e.g. EPYC 9V74 reads the anchor ~12%
@@ -168,7 +174,7 @@ function labelFor(s) {
     note.textContent = ` · ${hidden.length} off-reference-CPU point${hidden.length === 1 ? "" : "s"} hidden (anchor unreliable off ${modalCpu.replace(/ \d+-Core.*/, "")})`;
   }
 
-  renderReadout(baseline, snaps);
+  renderReadout(baseline, snaps, modalCpu);
   const labels = snaps.map(labelFor);
 
   const allNames = new Set();
@@ -342,13 +348,25 @@ function labelFor(s) {
   setMode(MODES.find(m => m.toLowerCase() === want) || "Overall");
 })();
 
-function renderReadout(baseline, snaps) {
+function renderReadout(baseline, snaps, modalCpu) {
   const m = baseline.machine || {}, latest = snaps[snaps.length - 1];
   const chips = [];
-  if (m.cpu_model)            chips.push(`machine <b>${m.cpu_model}</b>`);
+  // Label the page with the tier the chart is actually normalized to — the modal
+  // CPU the timeline filter keeps — not the baseline's machine. The two diverge
+  // whenever the committed baseline was captured off-tier (the same condition that
+  // makes `ref` fall through to the first modal snapshot), and printing the
+  // baseline's CPU then names a machine whose points the page is busy hiding.
+  const tier = modalCpu || m.cpu_model;
+  if (tier)                   chips.push(`reference CPU <b>${tier}</b>`);
   if (baseline.anchor?.ns_per_op) chips.push(`anchor <b>${baseline.anchor.ns_per_op.toFixed(2)} ns</b>`);
   if (latest?.anchor?.ns_per_op)  chips.push(`latest anchor <b>${latest.anchor.ns_per_op.toFixed(2)} ns</b>`);
-  if (baseline.captured_at_sha)   chips.push(`baseline <b>${baseline.captured_at_sha.slice(0, 8)}</b>`);
+  if (baseline.captured_at_sha) {
+    // Say so when the baseline isn't on the reference tier: its ratios aren't what
+    // the series is rebased on, so an unqualified sha here reads as more load-bearing
+    // than it is.
+    const offTier = modalCpu && (m.cpu_model || "?") !== modalCpu;
+    chips.push(`baseline <b>${baseline.captured_at_sha.slice(0, 8)}</b>${offTier ? " · off-tier, rebased" : ""}`);
+  }
   document.getElementById("readout").innerHTML = chips.map(c => `<span class="chip">${c}</span>`).join("");
 }
 </script>
