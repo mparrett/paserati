@@ -137,9 +137,19 @@ function labelFor(s) {
 
   if (!files.length) { document.getElementById("empty").hidden = false; renderReadout(baseline, []); return; }
 
-  let snaps = (await Promise.all(files.map(f => getJSON("timeline/" + f).catch(() => null))))
+  // Order by COMMIT time, not capture time. perf-timeline.yml names each snapshot
+  // "<commit-epoch-UTC>-<sha>.json", so the filename prefix is the commit stamp
+  // while captured_at is when the runner measured it. Forward runs measure minutes
+  // after the commit and the two agree, but a manual backfill measures an old
+  // commit today — sorting on captured_at throws it to the right edge of the chart.
+  // The stamp is ISO basic UTC, so a plain string compare is chronological.
+  const stampOf = f => (String(f).match(/^\d{8}T\d{6}Z/) || [""])[0];
+  let snaps = (await Promise.all(files.map(async f => {
+      const s = await getJSON("timeline/" + f).catch(() => null);
+      return s && Object.assign(s, { file: f });
+    })))
     .filter(Boolean)
-    .sort((a, b) => (a.captured_at || "").localeCompare(b.captured_at || ""));
+    .sort((a, b) => (stampOf(a.file) || a.captured_at || "").localeCompare(stampOf(b.file) || b.captured_at || ""));
 
   // The calibration anchor is a pure-ALU loop; across CPU tiers it drifts vs the
   // mixed/memory workloads it normalizes (e.g. EPYC 9V74 reads the anchor ~12%
