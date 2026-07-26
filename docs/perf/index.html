@@ -58,9 +58,12 @@
   .chip b { color: var(--ink); font-weight: 700; }
 
   /* ── controls ─────────────────────────────────────────── */
-  .controls { display: flex; align-items: center; gap: 12px; margin: 22px 0 12px; }
+  /* Both rows wrap: the family tabs alone are ~460px, so on a phone they must
+     reflow rather than push the page into a horizontal scroll. */
+  .controls { display: flex; align-items: center; gap: 12px; margin: 22px 0 12px;
+              flex-wrap: wrap; }
   .toggle { display: inline-flex; background: var(--bg-elev); border: 1px solid var(--line);
-            border-radius: 9px; padding: 3px; gap: 3px; }
+            border-radius: 9px; padding: 3px; gap: 3px; flex-wrap: wrap; }
   .seg { font: 600 12px/1 "Saira Condensed", system-ui, sans-serif; letter-spacing: .08em;
          text-transform: uppercase; color: var(--ink-dim); background: transparent; border: 0;
          border-radius: 6px; padding: 8px 14px; cursor: pointer;
@@ -87,6 +90,12 @@
   @media (max-width: 560px) {
     .hero { gap: 18px; }
     .hero img { width: min(240px, 70vw); }
+    .wrap { padding: 20px 14px 32px; }
+    /* Once the tabs wrap, margin-left:auto strands the count on its own line
+       flush right; put it back at the start of that line instead. */
+    .controls .count { margin-left: 0; width: 100%; }
+    .seg { padding: 7px 10px; }
+    .controls-cpu .seg { padding: 6px 9px; font-size: 10.5px; }
   }
 </style>
 </head>
@@ -135,8 +144,27 @@ async function getJSON(url) {
   if (!r.ok) throw new Error(url + " → " + r.status);
   return r.json();
 }
+// Snapshot filenames start with the COMMIT stamp in ISO basic UTC; parse it once
+// so both the axis and the tooltip read from commit time rather than capture time.
+function stampParts(s) {
+  return String(s.file || "").match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/);
+}
+// Axis: when the commit landed. A sha is unique but says nothing about *when*, and
+// the timeline's whole subject is change over time — so the axis carries the date
+// and the tooltip carries the identity.
 function labelFor(s) {
-  return s.captured_at_sha ? s.captured_at_sha.slice(0, 8) : (s.captured_at || "").slice(0, 10);
+  const m = stampParts(s);
+  return m ? `${m[2]}-${m[3]} ${m[4]}:${m[5]}` : (s.captured_at || "").slice(0, 10);
+}
+// Tooltip: the identity the axis gave up, plus the full stamp. Load-bearing where
+// a rebased stack puts several commits in the same minute — the axis labels are
+// then identical and the sha is the only thing telling the points apart.
+function titleFor(s) {
+  if (!s) return "";
+  const sha = (s.captured_at_sha || "").slice(0, 8);
+  const m = stampParts(s);
+  const when = m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]} UTC` : (s.captured_at || "");
+  return sha ? `${sha} · ${when}` : when;
 }
 
 (async function main() {
@@ -328,6 +356,7 @@ function labelFor(s) {
           titleColor: "#ece0c8", bodyColor: "#ece0c8",
           filter: it => !it.dataset.label.startsWith("_"),
           callbacks: {
+            title: items => titleFor(view.snaps[items[0]?.dataIndex]),
             label: c => c.parsed.y == null ? null : `${c.dataset.label}: ${c.parsed.y.toFixed(3)}×`,
             afterLabel: c => (c.dataset.label === "Test262 mean" && setChangedAt(c.dataIndex))
               ? "△ test set changed here — slope isn't a pure engine delta" : "",
@@ -373,7 +402,9 @@ function labelFor(s) {
   // normalizes within a CPU model, so a mixed line is not a comparable series —
   // it's every captured point, tier artifacts included. Say so when it's picked
   // rather than letting the chart imply the tiers are interchangeable.
-  const CPU_ALL = "All";
+  // "Any", not "All" — the mode toggle on the right already has an "All" (every
+  // benchmark series) and the two mean different things. Any = don't filter by tier.
+  const CPU_ALL = "Any";
   const cpuChoices = [CPU_ALL, ...cpus];
   const cpuEl = document.getElementById("cpus");
   const cpuBtns = {};
@@ -407,8 +438,8 @@ function labelFor(s) {
   for (const c of cpuChoices) {
     const b = document.createElement("button");
     b.className = "seg";
-    b.textContent = c === CPU_ALL ? `All (${allSnaps.length})` : `${cpuShort(c)} (${cpuCounts[c]})`;
-    b.title = c === CPU_ALL ? "Every snapshot, all CPU tiers" : c;
+    b.textContent = c === CPU_ALL ? `Any (${allSnaps.length})` : `${cpuShort(c)} (${cpuCounts[c]})`;
+    b.title = c === CPU_ALL ? "Every snapshot, regardless of CPU tier" : c;
     b.onclick = () => setCpu(c);
     cpuEl.appendChild(b); cpuBtns[c] = b;
   }
@@ -420,7 +451,7 @@ function labelFor(s) {
   // ?cpu= selects a tier by substring ("9v74", "xeon") or "all"; default is modal.
   // setCpu builds the view and then calls setMode, so this is the single entry point.
   const wantCpu = (new URLSearchParams(location.search).get("cpu") || "").toLowerCase();
-  setCpu(wantCpu === "all" ? CPU_ALL
+  setCpu(wantCpu === "any" || wantCpu === "all" ? CPU_ALL   // "all" kept: older links used it
        : cpus.find(c => c.toLowerCase().includes(wantCpu) && wantCpu) || modalCpu || CPU_ALL);
 })();
 
