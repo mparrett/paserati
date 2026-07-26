@@ -144,12 +144,13 @@ function labelFor(s) {
   // commit today — sorting on captured_at throws it to the right edge of the chart.
   // The stamp is ISO basic UTC, so a plain string compare is chronological.
   //
-  // Rebased stacks routinely share a commit second, so sort on the whole filename
-  // rather than the stamp alone: the trailing sha then breaks ties deterministically.
-  // That tiebreak isn't topological — nothing in the filename encodes parentage —
-  // but same-second commits are adjacent on the axis anyway, and a stable order
-  // beats manifest order, which is whatever `find` happened to emit.
-  const sortKey = s => (String(s.file).match(/^\d{8}T\d{6}Z/) ? s.file : (s.captured_at || ""));
+  // Sort on the STAMP ALONE and let ties fall through to manifest order. Rebased
+  // stacks routinely share a commit second (three of the vm-microopt commits sit on
+  // the same one) and nothing in a filename encodes parentage, so the filename can't
+  // break those ties correctly. pages.yml emits the manifest in topological commit
+  // order for exactly this reason, and Array.prototype.sort is stable (ES2019), so
+  // same-stamp points keep the order the manifest listed them in — true parentage.
+  const sortKey = s => (String(s.file).match(/^\d{8}T\d{6}Z/) || [s.captured_at || ""])[0];
   let snaps = (await Promise.all(files.map(async f => {
       const s = await getJSON("timeline/" + f).catch(() => null);
       return s && Object.assign(s, { file: f });
