@@ -8,8 +8,14 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - 'docs/perf/index.html'
-      - 'docs/perf/timeline/**'
+      # The page, its assets, and its deploy workflow contain no engine code, so a
+      # snapshot of such a commit just re-measures the previous commit's tree — a
+      # duplicate point that reads on the chart as a commit. It also costs ~13 min
+      # on the serialized concurrency group, which delays real snapshots behind it.
+      # A commit touching these AND engine code still triggers: paths-ignore only
+      # skips when EVERY changed path matches.
+      - 'docs/perf/**'
+      - '.github/workflows/pages.yml'
   # Manual backfill: dispatch once per historical commit to fill the timeline.
   # Snapshot identity is derived from the checked-out HEAD (sha + commit time),
   # so the rest of the job is commit-agnostic.
