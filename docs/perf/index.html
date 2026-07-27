@@ -217,7 +217,8 @@
 </div>
 
 <script>
-const MIXED = "Micro+Test262";   // the combined scope; see scopeOf
+const MIXED   = "Micro+Test262";  // every series: the micro families plus the macro
+const MICRO   = "All Micro";      // the micro families only — see scopeOf
 const BASE = "baseline.json";
 const MANIFEST = "timeline/index.json";
 // Series colours drawn from the sticker, kept quiet so the amber baseline line
@@ -437,7 +438,7 @@ function titleFor(s) {
   // 18 of the 35 micro cases — so a flat mean over cases is a GetOwn index wearing a
   // neutral name, and adding cases to one family silently re-weights every point in
   // history. Averaging within a family first gives each family one vote, which is
-  // what a reader takes "Overall" to promise.
+  // what a reader takes "All Micro" to promise.
   const microFamilyNames = GROUPS.filter(g => g !== "Test262").filter(g => (members[g] || []).length);
   const microFamilies = microFamilyNames.map(g => members[g]);
 
@@ -497,7 +498,7 @@ function titleFor(s) {
   // rather than quietly attributing a composition change to whichever case remains.
   function contributionsAt(mode, j) {
     if (j < 1) return null;
-    const buckets = mode === "Overall" ? microFamilies
+    const buckets = mode === MICRO ? microFamilies
                   : mode === MIXED ? series.map(d => [d])
                   : (members[mode] || []).map(d => [d]);
     const both = buckets
@@ -527,23 +528,30 @@ function titleFor(s) {
   }
   // One definition of each mode's band, shared by the chart and the flagged-changes
   // table so the two can't disagree.
-  const bandFor = mode => mode === "Overall" ? bandOver(microFamilies)
-                        : meanBand(mode === MIXED ? series : (members[mode] || []));
+  // Family-balanced for BOTH aggregate scopes. They previously differed in method
+  // as well as scope — All Micro averaged families, Micro+Test262 averaged cases —
+  // so the combined tab was the GetOwn-dominated shape All Micro had just been
+  // fixed out of, and no label said so. Now scope is the only difference between
+  // them, which is what the two names claim. Test262 joins as its own family: one
+  // macro-benchmark should not carry 1/36 of a score it is half the point of.
+  const bandFor = mode => mode === MICRO ? bandOver(microFamilies)
+                        : mode === MIXED ? bandOver([...microFamilies, members["Test262"] || []].filter(b => b.length))
+                        : meanBand(members[mode] || []);
   // Aggregating "All" mixes the micro suite with the Test262 macro, which are
   // different kinds of measurement. It is offered because a reader may want it,
   // and labelled where it is shown rather than quietly presented as one score.
 
-  // Datasets for a mode: "Overall" (mean of all) · a group (that family's faint
+  // Datasets for a mode: an aggregate scope · a group (that family's faint
   // members behind a bold mean + ±σ band) · "All" (every raw line).
   // The series a mode is *about*, independent of how they're drawn.
   // The combined scope, named for what it holds. "All" said nothing about the one
   // fact a reader needs — that it is the micro suite PLUS a macro-benchmark, two
   // different kinds of measurement on one axis. The codebase has always used this
   // vocabulary ("the Test262 macro", "the micro suite"); the tab now matches it.
-  const scopeOf = m => m === MIXED ? series : m === "Overall" ? micro : (members[m] || []);
+  const scopeOf = m => m === MIXED ? series : m === MICRO ? micro : (members[m] || []);
 
   // mode = WHICH benchmarks, detail = HOW they're drawn. These used to be tangled:
-  // "All" differed from "Overall" in both dimensions at once (every series vs
+  // "All" differed from the aggregate tab in both dimensions at once (every series vs
   // micro-only, AND raw lines vs a mean), so the relationship between the two tabs
   // was unreadable — you could not tell whether Overall was the collapsed form of
   // All or a different set. Splitting them means every scope can be seen either way,
@@ -557,14 +565,14 @@ function titleFor(s) {
     // makes the weighting auditable: you can see which family is moving Overall
     // instead of having to trust the label. (A ±σ over three numbers is a crude
     // statistic to read off a band; three lines are not.)
-    const faintSrc = mode === "Overall"
+    const faintSrc = mode === MICRO
       ? microFamilyNames.map(g => ({ label: g + " mean", data: bandOver([members[g]]).mean }))
       : sub;
     const faint = faintSrc.map(d => ({ ...d,
       label: "_" + d.label,   // hidden from legend/tooltip — visual context only
       borderColor: "rgba(150,170,190,0.22)", backgroundColor: "transparent",
-      borderWidth: mode === "Overall" ? 1.4 : 0.8, pointRadius: 0, pointHoverRadius: 0 }));
-    const meanDS = { label: mode === "Overall" ? "mean" : mode + " mean", data: mean,
+      borderWidth: mode === MICRO ? 1.4 : 0.8, pointRadius: 0, pointHoverRadius: 0 }));
+    const meanDS = { label: mode === MICRO ? "mean" : mode + " mean", data: mean,
       borderColor: "#ece0c8", backgroundColor: "#ece0c8", borderWidth: 2.5,
       pointRadius: 2.5, pointHoverRadius: 4, tension: .25 };
     // On the Test262 tab, dash the span into a set-changed point and flag it with a
@@ -588,7 +596,7 @@ function titleFor(s) {
     // 24f6f817 only because the suite grew 30 -> 35 cases, which is composition,
     // and a reader who takes it for error bars reads that as the pipeline getting
     // noisier. See the footer note.
-    const bandLabel = mode === "Overall" ? "± spread across families"
+    const bandLabel = (mode === MICRO || mode === MIXED) ? "± spread across families"
                                          : "± spread across benchmarks";
     return [ baseDS(), ...faint,
       { label: "_band", data: lo, borderColor: "transparent", pointRadius: 0, fill: false },
@@ -596,7 +604,7 @@ function titleFor(s) {
         backgroundColor: "rgba(236,224,200,0.12)", fill: "-1" },
       meanDS ];
   }
-  const groupCount = m => m === MIXED ? names.length : m === "Overall" ? micro.length : (members[m] || []).length;
+  const groupCount = m => m === MIXED ? names.length : m === MICRO ? micro.length : (members[m] || []).length;
 
   // The mean the flagged-changes table measures deltas against — same series the
   // chart draws for that mode, so the table can never disagree with the picture.
@@ -672,9 +680,9 @@ function titleFor(s) {
 
   const countEl = document.getElementById("count");
   const modesEl = document.getElementById("modes");
-  const MODES = ["Overall", ...GROUPS, MIXED];
+  const MODES = [MICRO, ...GROUPS, MIXED];
   const btns = {};
-  let mode = "Overall";
+  let mode = MICRO;
   // Detail is orthogonal to mode: it says how to DRAW the selected scope, not
   // which benchmarks are in it. Default aggregate — the collapsed view is the one
   // that answers "is it getting faster"; breakdown answers "what is in here".
@@ -717,7 +725,7 @@ function titleFor(s) {
   }
 
   function setMode(m0) {
-    mode = MODES.includes(m0) ? m0 : "Overall";
+    mode = MODES.includes(m0) ? m0 : MICRO;
     // A one-series scope has nothing to break down — Breakdown and Aggregate would
     // draw the same line, minus the band. Disable it rather than offering a no-op.
     // The PREFERENCE survives: leaving Test262 restores whatever was chosen, so the
@@ -749,7 +757,7 @@ function titleFor(s) {
     const c = view.scopeOf(mode).length;
     if (effective === "breakdown") {
       countEl.textContent = `${c} benchmark${c === 1 ? "" : "s"}, drawn separately · ${view.snaps.length} snapshots`;
-    } else if (mode === "Overall") {
+    } else if (mode === MICRO) {
       // Say that Overall is weighted by family. Without it the tab reads as a flat
       // average over cases, which is what it used to be and what the case count
       // still suggests on its own.
@@ -758,7 +766,7 @@ function titleFor(s) {
     } else if (mode === MIXED) {
       // Aggregating All averages the micro suite together with the Test262 macro.
       // Offered, but never presented as a single clean score.
-      countEl.textContent = `mean of ${c} benchmarks · mixes micro + Test262 macro · ${view.snaps.length} snapshots`;
+      countEl.textContent = `family-balanced mean · ${c} benchmarks in ${view.familyCount + 1} families incl. Test262 macro · ${view.snaps.length} snapshots`;
     } else {
       countEl.textContent = `mean of ${c} benchmark${c === 1 ? "" : "s"} · ${view.snaps.length} snapshots`;
     }
@@ -963,7 +971,8 @@ function titleFor(s) {
   // what it contains, and links to ?mode=all are already out there.
   mode = MODES.find(m => m.toLowerCase() === want)
       || (want === "all" ? MIXED : null)
-      || "Overall";
+      || (want === "overall" ? MICRO : null)
+      || MICRO;
   const wantDetail = (new URLSearchParams(location.search).get("detail") || "").toLowerCase();
   if (DETAILS.some(([k]) => k === wantDetail)) detail = wantDetail;
 
