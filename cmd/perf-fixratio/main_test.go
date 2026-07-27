@@ -209,3 +209,66 @@ func TestIndexJSONIgnored(t *testing.T) {
 		t.Fatalf("index.json was not skipped: %v", err)
 	}
 }
+
+// v2 nests one anchor+benchmarks profile per machine. The invariant is per
+// profile — a ratio is normalized against the anchor measured on ITS machine — so
+// the repair must descend rather than look only at the top level. Without this it
+// would silently pass every v2 file, which is worse than failing: the guard would
+// report "verified" while checking nothing.
+func TestRepairsV2PerMachineProfile(t *testing.T) {
+	v2 := `{
+  "version": 2,
+  "machines": {
+    "amd64/AMD EPYC 7763 64-Core Processor": {
+      "captured_at_sha": "aaaaaaaaaaaa",
+      "machine": {"arch":"amd64","cpu_model":"AMD EPYC 7763 64-Core Processor"},
+      "anchor": {"ns_per_op": 1.25},
+      "benchmarks": {"a": {"ns_per_op": 10.0, "ratio_to_anchor": 9.0}}
+    },
+    "arm64/Apple M2": {
+      "captured_at_sha": "aaaaaaaaaaaa",
+      "machine": {"arch":"arm64","cpu_model":"Apple M2"},
+      "anchor": {"ns_per_op": 0.8},
+      "benchmarks": {"a": {"ns_per_op": 4.0, "ratio_to_anchor": 5.0}}
+    }
+  }
+}`
+	dir := t.TempDir()
+	p := write(t, dir, "20260101T000000Z-aaaaaaaaaaaa-multi.json", v2)
+
+	if err := run(dir, true, true, false); err == nil {
+		t.Fatal("verify passed on a corrupt v2 file; it must descend into machines")
+	}
+	if err := run(dir, false, false, false); err != nil {
+		t.Fatal(err)
+	}
+
+	var got struct {
+		Machines map[string]struct {
+			Anchor struct {
+				NSPerOp float64 `json:"ns_per_op"`
+			} `json:"anchor"`
+			Benchmarks map[string]struct {
+				NSPerOp float64 `json:"ns_per_op"`
+				Ratio   float64 `json:"ratio_to_anchor"`
+			} `json:"benchmarks"`
+		} `json:"machines"`
+	}
+	raw, _ := os.ReadFile(p)
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Machines) != 2 {
+		t.Fatalf("want 2 profiles, got %d", len(got.Machines))
+	}
+	// 10.0/1.25 = 8.0 (was 9.0); 4.0/0.8 = 5.0 (already correct, must not move).
+	for key, m := range got.Machines {
+		want := m.Benchmarks["a"].NSPerOp / m.Anchor.NSPerOp
+		if math.Abs(m.Benchmarks["a"].Ratio-want)/want > 1e-12 {
+			t.Errorf("%s: ratio = %g, want %g", key, m.Benchmarks["a"].Ratio, want)
+		}
+	}
+	if err := run(dir, true, true, false); err != nil {
+		t.Errorf("verify after repair: %v", err)
+	}
+}

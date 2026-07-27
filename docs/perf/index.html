@@ -207,6 +207,24 @@ function fmtNS(v) {
   if (v < 1e9)  return `${(v / 1e6).toFixed(2)} ms`;
   return `${(v / 1e9).toFixed(3)} s`;
 }
+// v2 nests one anchor+benchmarks profile per machine under `machines`, so the same
+// commit can hold a snapshot per CPU tier instead of one overwriting the other.
+// The page is per-point, and a v2 file written by the timeline holds exactly one
+// profile, so flatten it back to the v1 shape the rest of this file expects and
+// keep the machine key alongside. A file with several profiles (a hand-merged one,
+// or a future accumulator) would need one point each — take the first and say so
+// rather than silently dropping the rest.
+function flatten(s) {
+  if (!s || !s.machines) return s;                       // already v1
+  const keys = Object.keys(s.machines);
+  if (!keys.length) return s;
+  const prof = s.machines[keys[0]];
+  return Object.assign({}, prof, {
+    version: s.version,
+    machine_key: keys[0],
+    extra_profiles: keys.length - 1,
+  });
+}
 function stampParts(s) {
   return String(s.file || "").match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/);
 }
@@ -256,7 +274,7 @@ function titleFor(s) {
   const sortKey = s => (String(s.file).match(/^\d{8}T\d{6}Z/) || [s.captured_at || ""])[0];
   let snaps = (await Promise.all(files.map(async f => {
       const s = await getJSON("timeline/" + f).catch(() => null);
-      return s && Object.assign(s, { file: f });
+      return s && Object.assign(flatten(s), { file: f });
     })))
     .filter(Boolean)
     .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));

@@ -129,6 +129,7 @@ jobs:
           echo "name=${name}" >> "$GITHUB_OUTPUT"
           echo "out=${out}" >> "$GITHUB_OUTPUT"
 
+
       # Fold the Test262 macro-benchmark into the snapshot as a `test262.total`
       # series. Adds ~4 min/snapshot. Non-fatal: a macro hiccup must never drop
       # the micro snapshot that's already captured above. Backfilling pre-PR#10
@@ -184,25 +185,60 @@ jobs:
             echo "test262.total: no passing tests — skipped"
           fi
 
+      # Convert to the machine-keyed v2 layout. bench-ratchet still writes v1 —
+      # it is shared with perf-pr and baseline.json, and none of that needs to
+      # change — so the timeline wraps its output here instead. That keeps the
+      # format change confined to the corpus that actually has the problem.
+      #
+      # The problem: a v1 filename is "<stamp>-<sha>.json" with no machine in it,
+      # so a re-run on a different CPU tier OVERWRITES the previous tier's
+      # measurement rather than adding to it. That is why the page had to filter
+      # to a modal CPU and hide the rest, and it is what blocks both a local-machine
+      # series and accumulating repeated samples per commit.
+      #
+      # Reuses cmd/perf-migrate rather than reimplementing the rename+wrap: it is
+      # already proven idempotent and verbatim against the live corpus. Run from
+      # the workflow's own commit for the same reason as the ratio verifier —
+      # backfills check out old trees that predate the tool.
+      - name: Convert snapshot to machine-keyed v2
+        id: v2
+        run: |
+          set -euo pipefail
+          stage="${RUNNER_TEMP}/v2stage"
+          rm -rf "$stage" && mkdir -p "$stage"
+          cp "${{ steps.snap.outputs.out }}" "$stage/${{ steps.snap.outputs.name }}"
+
+          tool="${RUNNER_TEMP}/converter"
+          rm -rf "$tool"
+          git worktree add --detach "$tool" "${{ github.sha }}" >/dev/null
+          ( cd "$tool" && go run ./cmd/perf-migrate -dir "$stage" -v )
+
+          converted="$(find "$stage" -maxdepth 1 -name '*.json' | head -1)"
+          [ -n "$converted" ] || { echo "conversion produced no file" >&2; exit 1; }
+          echo "name=$(basename "$converted")" >> "$GITHUB_OUTPUT"
+          echo "out=${converted}" >> "$GITHUB_OUTPUT"
+          echo "converted to $(basename "$converted")"
+
       - name: Render run summary
         run: |
-          src="${{ steps.snap.outputs.out }}"
+          src="${{ steps.v2.outputs.out }}"
           {
-            echo "## Snapshot ${{ steps.snap.outputs.name }}"
+            echo "## Snapshot ${{ steps.v2.outputs.name }}"
             echo
-            echo "anchor \`$(jq -r '.anchor.ns_per_op' "$src")\` ns/op · machine \`$(jq -r '.machine.cpu_model' "$src")\` · go \`$(jq -r '.machine.go_version' "$src")\`"
+            prof="$(jq -c '(.machines[]? // .)' "$src")"
+            echo "anchor \`$(printf '%s' "$prof" | jq -r '.anchor.ns_per_op')\` ns/op · machine \`$(printf '%s' "$prof" | jq -r '.machine.cpu_model')\` · go \`$(printf '%s' "$prof" | jq -r '.machine.go_version')\`"
             echo
             echo "| Benchmark | Anchor× | Wall (ns/op) | Allocs/op |"
             echo "|---|---:|---:|---:|"
-            jq -r '.benchmarks | to_entries | sort_by(-.value.ratio_to_anchor)[]
+            printf '%s' "$prof" | jq -r '.benchmarks | to_entries | sort_by(-.value.ratio_to_anchor)[]
                    | "| \(.key | sub("github.com/nooga/paserati/";"")) | \((.value.ratio_to_anchor*1000|round)/1000) | \(.value.ns_per_op|round) | \(.value.allocs_per_op) |"' "$src"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish to perf-data branch
         run: |
           set -euo pipefail
-          name="${{ steps.snap.outputs.name }}"
-          src="${{ steps.snap.outputs.out }}"
+          name="${{ steps.v2.outputs.name }}"
+          src="${{ steps.v2.outputs.out }}"
           remote="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
           wt="${RUNNER_TEMP}/perf-data"
 

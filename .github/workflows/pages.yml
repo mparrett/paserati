@@ -98,7 +98,11 @@ jobs:
           : > /tmp/ordered.txt
           : > /tmp/tombstone.txt
           while read -r f; do
-            sha="${f#*-}"; sha="${sha%.json}"
+            # "<stamp>-<sha12>.json" (v1) or "<stamp>-<sha12>-<machine-slug>.json"
+            # (v2). Cut the stamp off the front and take the sha field, so the
+            # machine suffix doesn't get swept into the sha the way "everything
+            # after the first dash" would.
+            sha="$(printf '%s' "${f%.json}" | cut -d- -f2)"
             rank="$(awk -v s="$sha" '$1 == s { print $2; exit }' /tmp/rank.txt)"
             if [ -n "$rank" ]; then
               printf '%s\t%s\n' "$rank" "$f" >> /tmp/ordered.txt

@@ -134,7 +134,61 @@ func run(dir string, dryRun, verify, verbose bool) error {
 // repair returns the corrected document and the list of fixes applied. When no
 // fix is needed it returns nil bytes and an empty list, so callers leave the file
 // untouched — which is what makes a second run byte-identical to the first.
+//
+// Handles both layouts. v1 carries anchor+benchmarks at the top level; v2 nests
+// one such profile per machine under `machines`. The invariant is per profile
+// either way — a ratio is normalized against the anchor measured on ITS machine —
+// so v2 is just the same repair applied once per profile.
 func repair(raw []byte) ([]byte, []fix, error) {
+	root, err := perfdata.ParseObject(raw)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if machinesRaw, isV2 := root.Get("machines"); isV2 {
+		machines, err := perfdata.ParseObject(machinesRaw)
+		if err != nil {
+			return nil, nil, fmt.Errorf("machines: %w", err)
+		}
+		var all []fix
+		changed := false
+		for _, key := range machines.Keys {
+			profRaw, _ := machines.Get(key)
+			out, fixes, err := repairProfile(profRaw, "machines["+key+"].")
+			if err != nil {
+				return nil, nil, fmt.Errorf("machines[%q]: %w", key, err)
+			}
+			if len(fixes) > 0 {
+				machines.Set(key, out)
+				all = append(all, fixes...)
+				changed = true
+			}
+		}
+		if !changed {
+			return nil, nil, nil
+		}
+		root.Set("machines", machines.Encode())
+		pretty, err := indent(root.Encode())
+		if err != nil {
+			return nil, nil, err
+		}
+		return pretty, all, nil
+	}
+
+	out, fixes, err := repairProfile(raw, "")
+	if err != nil || len(fixes) == 0 {
+		return nil, nil, err
+	}
+	pretty, err := indent(out)
+	if err != nil {
+		return nil, nil, err
+	}
+	return pretty, fixes, nil
+}
+
+// repairProfile fixes one anchor+benchmarks profile, returning COMPACT JSON (the
+// caller indents once, at whichever level the profile sits).
+func repairProfile(raw []byte, prefix string) ([]byte, []fix, error) {
 	root, err := perfdata.ParseObject(raw)
 	if err != nil {
 		return nil, nil, err
@@ -172,7 +226,7 @@ func repair(raw []byte) ([]byte, []fix, error) {
 		}
 		changed := false
 
-		if f, ok := checkEntry(entry, anchor.NSPerOp, fmt.Sprintf("benchmarks[%q]", name)); ok {
+		if f, ok := checkEntry(entry, anchor.NSPerOp, fmt.Sprintf("%sbenchmarks[%q]", prefix, name)); ok {
 			fixes = append(fixes, f)
 			entry.Set("ratio_to_anchor", mustNum(f.want))
 			changed = true
@@ -192,7 +246,7 @@ func repair(raw []byte) ([]byte, []fix, error) {
 				if err != nil {
 					return nil, nil, fmt.Errorf("benchmarks[%q].samples[%d]: %w", name, i, err)
 				}
-				if f, ok := checkEntry(sample, anchor.NSPerOp, fmt.Sprintf("benchmarks[%q].samples[%d]", name, i)); ok {
+				if f, ok := checkEntry(sample, anchor.NSPerOp, fmt.Sprintf("%sbenchmarks[%q].samples[%d]", prefix, name, i)); ok {
 					fixes = append(fixes, f)
 					sample.Set("ratio_to_anchor", mustNum(f.want))
 					items[i] = sample.Encode()
@@ -215,12 +269,7 @@ func repair(raw []byte) ([]byte, []fix, error) {
 	}
 
 	root.Set("benchmarks", benchmarks.Encode())
-	var pretty []byte
-	pretty, err = indent(root.Encode())
-	if err != nil {
-		return nil, nil, err
-	}
-	return pretty, fixes, nil
+	return root.Encode(), fixes, nil
 }
 
 // checkEntry reports a fix when an object carries a ratio_to_anchor that doesn't

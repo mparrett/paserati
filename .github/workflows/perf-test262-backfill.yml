@@ -110,8 +110,27 @@ jobs:
           remote="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
           wt="${RUNNER_TEMP}/perf-data"
           git clone --depth 1 --branch perf-data "$remote" "$wt"
-          snap="$(find "$wt/timeline" -name "*-${short_sha}.json" | head -1)"
+          # Matches both layouts: "<stamp>-<sha>.json" (v1) and
+          # "<stamp>-<sha>-<machine-slug>.json" (v2).
+          snap="$(find "$wt/timeline" \( -name "*-${short_sha}.json" -o -name "*-${short_sha}-*.json" \) | head -1)"
           [ -n "$snap" ] || { echo "no existing snapshot for ${short_sha} — run the timeline first" >&2; exit 1; }
+
+          # STOP on machine-keyed snapshots. The jq below writes .benchmarks at the
+          # top level, which in v2 is nested per machine profile — so it would add a
+          # stray top-level key and leave the real series untouched, i.e. corrupt
+          # the file while reporting success.
+          #
+          # This workflow is also where the foreign-anchor ratio bug came from: it
+          # computed ratio_to_anchor against an anchor that wasn't the snapshot's
+          # own, and nothing checked the result for a month (see cmd/perf-fixratio).
+          # Failing loudly is the right default until it is either taught v2 and
+          # per-profile anchors, or retired — the forward timeline now captures the
+          # test262 macro unconditionally, which is most of what this existed for.
+          if jq -e '.machines' "$snap" >/dev/null 2>&1; then
+            echo "refusing to edit $(basename "$snap"): machine-keyed (v2) snapshot." >&2
+            echo "This workflow only understands the flat v1 layout and would corrupt it." >&2
+            exit 1
+          fi
 
           jq --argjson m "$mean_ns" --argjson r "$ratio" --argjson p "$passed" --arg h "$set_hash" '
             .benchmarks["test262.total"] = ({
