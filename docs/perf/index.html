@@ -83,6 +83,40 @@
           border-radius: 14px; padding: 18px; }
   .card canvas { height: 380px !important; }
   .empty { color: var(--ink-dim); padding: 48px 20px; text-align: center; }
+  /* ── flagged changes ──────────────────────────────────── */
+  .flags { margin-top: 26px; }
+  .flags h2 { font: 600 12px/1 ui-monospace, monospace; letter-spacing: .18em;
+              text-transform: uppercase; color: var(--amber); margin: 0 0 10px; }
+  .flags h2 span { color: var(--ink-dim); letter-spacing: .04em;
+                   text-transform: none; font-weight: 400; }
+  /* Wide content scrolls in its own box rather than pushing the page sideways. */
+  .flagscroll { overflow-x: auto; border: 1px solid var(--line);
+                border-radius: 12px; background: var(--bg-elev); }
+  .flags table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  .flags th { text-align: left; font: 600 10px/1 ui-monospace, monospace;
+              letter-spacing: .14em; text-transform: uppercase; color: var(--ink-dim);
+              padding: 11px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .flags td { padding: 9px 14px; border-bottom: 1px solid rgba(50,40,23,.5);
+              vertical-align: top; }
+  .flags tr:last-child td { border-bottom: 0; }
+  .flags td.num { text-align: right; font-family: ui-monospace, monospace;
+                  font-weight: 700; white-space: nowrap; }
+  .flags .up   { color: var(--teal); }   /* faster — matches the tagline's legend */
+  .flags .down { color: var(--red); }
+  .flags td.when { font-family: ui-monospace, monospace; color: var(--ink-dim);
+                   white-space: nowrap; }
+  .flags td.sha a { font-family: ui-monospace, monospace; font-weight: 700;
+                    text-decoration: none; }
+  .flags td.sha a:hover { text-decoration: underline; }
+  .flags .subj { display: block; color: var(--ink-dim); font-size: 11.5px;
+                 margin-top: 2px; max-width: 46ch; }
+  .flags .tag { display: inline-block; font: 600 10px/1 ui-monospace, monospace;
+                letter-spacing: .06em; border: 1px solid var(--line); border-radius: 999px;
+                padding: 4px 8px; margin: 0 5px 4px 0; color: var(--ink-dim); }
+  .flags .tag.warn { color: var(--amber); border-color: rgba(242,180,10,.45); }
+  .flagnote { color: #6f5f44; font-size: 11px; font-family: ui-monospace, monospace;
+              margin: 10px 2px 0; max-width: 72ch; line-height: 1.5; }
+
   footer { color: #6f5f44; font-size: 11px; margin-top: 22px;
            font-family: ui-monospace, monospace; }
   a { color: var(--amber); }
@@ -128,6 +162,18 @@
   <div id="empty" class="empty" hidden>No snapshots yet. Once the Perf Timeline
     workflow runs on a commit, its point appears here.</div>
 
+  <section id="flags" class="flags" hidden>
+    <h2>Flagged changes <span id="flagsub"></span></h2>
+    <div class="flagscroll"><table id="flagtable">
+      <thead><tr><th>Commit</th><th>When (UTC)</th><th class="num">Δ</th><th>Why it's flagged</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <p class="flagnote">Flagged for review, not explained. A step here can be a real
+      change, a different machine, a changed benchmark set, or a measurement
+      artifact — the notes say which of those the page can rule out, and the rest
+      needs the diff.</p>
+  </section>
+
   <footer>Source: <code>baseline.json</code> + <code>timeline/*.json</code>.
     Rendered client-side; runs no benchmarks.<span id="cpunote"></span></footer>
 </div>
@@ -168,9 +214,14 @@ function titleFor(s) {
 }
 
 (async function main() {
-  let baseline, files;
+  let baseline, files, tombstoned;
   try { baseline = await getJSON(BASE); } catch { baseline = { benchmarks: {}, machine: {}, anchor: {} }; }
   try { files = await getJSON(MANIFEST); } catch { files = []; }
+  // Snapshots whose commit is no longer reachable from HEAD. pages.yml keeps them
+  // out of the manifest (they aren't points on this branch's history and can't be
+  // re-measured), but they still exist on perf-data — so say how many rather than
+  // letting the series quietly start later than the data does.
+  try { tombstoned = await getJSON("timeline/unreachable.json"); } catch { tombstoned = []; }
 
   if (!files.length) { document.getElementById("empty").hidden = false; renderReadout(baseline, [], null); return; }
 
@@ -226,20 +277,37 @@ function titleFor(s) {
   const allNames = new Set();
   for (const s of snaps) for (const n of Object.keys(s.benchmarks || {})) allNames.add(n);
 
-  // Reference ratio per benchmark: the baseline's, else the first snapshot's.
-  // But only trust the baseline when it was captured on the tier being shown. The
-  // baseline anchor carries the same cross-tier drift we filter snapshots for
-  // (its ratio_to_anchor is off by the anchor's error), so an off-tier baseline
-  // would rebase every series by that artifact — the very thing this page hides.
-  // When off-tier, fall through to the first shown snapshot as the reference.
+  // Reference ratio, PER BENCHMARK AND PER TIER.
+  //
+  // ratio_to_anchor only normalizes within a CPU model: the anchor is a pure-ALU
+  // loop, so across tiers it drifts relative to the mixed/memory workloads it is
+  // meant to cancel. A single global reference therefore divides every off-tier
+  // point by an on-tier one and manufactures a step. Measured on this corpus, all
+  // seven 9V74 snapshots collapsed to 0.79–0.87 while every 7763 snapshot sat at
+  // 0.93–1.08 — and both of 9V74's own anchor sub-classes (~1.09 and ~1.41)
+  // collapsed the same way, so it is not a simple anchor offset that could be
+  // divided out.
+  //
+  // Referencing each tier to its own first point makes every tier a comparable
+  // 1.0-centred trend. It costs nothing real: cross-tier LEVELS were never
+  // meaningful, only shapes. With a single tier shown this is identical to a
+  // global reference, so the default view is unaffected.
   const shownCpus = new Set(snaps.map(cpuOf));
-  const baselineOnTier = shownCpus.size === 1 && shownCpus.has(baseline.machine?.cpu_model || "?");
-  const ref = {};
-  for (const n of allNames) {
-    const b = baselineOnTier ? baseline.benchmarks?.[n]?.ratio_to_anchor : 0;
-    if (b > 0) { ref[n] = b; continue; }
-    const first = snaps.find(s => s.benchmarks?.[n]?.ratio_to_anchor > 0);
-    ref[n] = first ? first.benchmarks[n].ratio_to_anchor : 0;
+  const baselineCpu = baseline.machine?.cpu_model || "?";
+  // Nested map rather than a joined string key: CPU model strings and benchmark
+  // names both contain spaces and punctuation, so any delimiter is a guess.
+  const ref = new Map();                                   // cpu -> (name -> ratio)
+  for (const cpu of shownCpus) {
+    const perName = new Map();
+    for (const n of allNames) {
+      // The committed baseline is only a valid reference for its own tier — its
+      // ratio carries that tier's anchor error like any other snapshot.
+      const b = cpu === baselineCpu ? baseline.benchmarks?.[n]?.ratio_to_anchor : 0;
+      if (b > 0) { perName.set(n, b); continue; }
+      const first = snaps.find(s => cpuOf(s) === cpu && s.benchmarks?.[n]?.ratio_to_anchor > 0);
+      perName.set(n, first ? first.benchmarks[n].ratio_to_anchor : 0);
+    }
+    ref.set(cpu, perName);
   }
 
   const names = [...allNames].sort();
@@ -247,7 +315,8 @@ function titleFor(s) {
     label: n.replace(/^.*?\.Benchmark/, ""),  // drop "<pkg>.Benchmark" noise
     data: snaps.map(s => {
       const r = s.benchmarks?.[n]?.ratio_to_anchor;
-      return (r && ref[n]) ? r / ref[n] : null;
+      const base = ref.get(cpuOf(s))?.get(n);
+      return (r && base) ? r / base : null;
     }),
     borderColor: SERIES[i % SERIES.length],
     backgroundColor: SERIES[i % SERIES.length],
@@ -334,7 +403,17 @@ function titleFor(s) {
   }
   const groupCount = m => m === "All" ? names.length : m === "Overall" ? micro.length : (members[m] || []).length;
 
-  return { labels, snaps, datasetsFor, groupCount, anySetChange, setChangedAt };
+  // The mean the flagged-changes table measures deltas against — same series the
+  // chart draws for that mode, so the table can never disagree with the picture.
+  function meanFor(mode) {
+    if (mode === "All") return meanBand(series).mean;
+    return meanBand(mode === "Overall" ? micro : (members[mode] || [])).mean;
+  }
+  const benchCount = snaps.map(s =>
+    Object.keys(s.benchmarks || {}).filter(n => !n.startsWith("test262")).length);
+
+  return { labels, snaps, datasetsFor, groupCount, anySetChange, setChangedAt,
+           meanFor, benchCount, t262Hash };
   }
 
   let view = buildView(modalCpu ? allSnaps.filter(s => cpuOf(s) === modalCpu) : allSnaps);
@@ -389,6 +468,88 @@ function titleFor(s) {
     const c = view.groupCount(mode), lead = mode === "All" ? "" : "mean of ";
     countEl.textContent = `${lead}${c} benchmark${c === 1 ? "" : "s"} · ${view.snaps.length} snapshots`;
     if (mode === "Test262" && view.anySetChange) countEl.textContent += " · △ = contributing test set changed";
+    renderFlags(mode);
+  }
+
+  // ---- Flagged changes ----------------------------------------------------
+  // Point-to-point movement large enough to be worth a look, with whatever the
+  // page can say about *why*. The threshold is above the observed run-to-run
+  // scatter on this pipeline (micro ~2-5%) so ordinary noise doesn't fill the
+  // table; it is not a significance test.
+  //
+  // Deliberately a POINTER, not a filter: the chart still plots every snapshot.
+  // That matters because large movers here skew toward measurement artifacts —
+  // two of the biggest on this corpus (976a3faa, c989b254) move ~24% on commits
+  // that touch no engine code at all — so a table that quietly replaced the chart
+  // would be mostly artifacts presented as findings.
+  const FLAG_THRESHOLD = 0.05;   // 5% point-to-point
+  const FLAG_LIMIT = 12;
+  const REPO_URL = "https://github.com/mparrett/paserati";
+
+  function renderFlags(mode) {
+    const el = document.getElementById("flags");
+    const body = el.querySelector("tbody");
+    const mean = view.meanFor(mode);
+    const snaps = view.snaps;
+
+    const rows = [];
+    for (let j = 1; j < snaps.length; j++) {
+      const a = mean[j - 1], b = mean[j];
+      if (a == null || b == null || !a) continue;
+      const delta = (b - a) / a;
+
+      // Reasons the page can establish from the data it already has. These don't
+      // explain a move, they rule things in — a tier change means the comparison
+      // itself is invalid, which is different from "this commit was slower".
+      const tags = [];
+      const prevCpu = snaps[j - 1].machine?.cpu_model, curCpu = snaps[j].machine?.cpu_model;
+      if (prevCpu && curCpu && prevCpu !== curCpu) tags.push(["warn", "different machine"]);
+      if (view.benchCount[j] !== view.benchCount[j - 1]) {
+        tags.push(["warn", `suite changed ${view.benchCount[j - 1]}→${view.benchCount[j]}`]);
+      }
+      if (mode === "Test262" && view.setChangedAt(j)) tags.push(["warn", "test set changed"]);
+
+      if (Math.abs(delta) < FLAG_THRESHOLD && !tags.length) continue;
+      rows.push({ j, delta, tags });
+    }
+
+    if (!rows.length) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    rows.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
+    const shown = rows.slice(0, FLAG_LIMIT);
+
+    // Say what was dropped rather than silently truncating — a short table would
+    // otherwise read as "this is everything".
+    document.getElementById("flagsub").textContent =
+      rows.length > shown.length
+        ? `· ${shown.length} of ${rows.length}, largest first`
+        : `· ${rows.length} in this view`;
+
+    body.innerHTML = shown.map(({ j, delta, tags }) => {
+      const s = snaps[j];
+      const sha = (s.captured_at_sha || "").slice(0, 8);
+      const m = stampParts(s);
+      const when = m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}` : (s.captured_at || "").slice(0, 16);
+      const pct = (delta * 100).toFixed(1);
+      // Lower ratio = less time = faster, so a negative delta is the good one.
+      const cls = delta < 0 ? "up" : "down";
+      const sign = delta > 0 ? "+" : "";
+      const link = sha
+        ? `<a href="${REPO_URL}/commit/${s.captured_at_sha}" target="_blank" rel="noopener">${sha}</a>`
+        : "(unknown)";
+      // Commit subjects aren't in the snapshot payload; adding them at capture
+      // time would make this column self-explanatory instead of a click away.
+      const tagHTML = tags.map(([k, t]) => `<span class="tag ${k}">${t}</span>`).join("");
+      return `<tr>
+        <td class="sha">${link}</td>
+        <td class="when">${when}</td>
+        <td class="num ${cls}">${sign}${pct}%</td>
+        <td>${tagHTML || '<span class="tag">no known cause — check the diff</span>'}</td>
+      </tr>`;
+    }).join("");
   }
   for (const m of MODES) {
     const b = document.createElement("button");
@@ -423,14 +584,19 @@ function titleFor(s) {
     }
     renderReadout(baseline, view.snaps, cpuSel === CPU_ALL ? null : cpuSel);
     if (note) {
+      let t;
       if (cpuSel === CPU_ALL) {
-        note.textContent = ` · showing all ${cpus.length} CPU tiers — ratios normalize only WITHIN a tier, so cross-tier steps are artifacts, not engine moves`;
+        // Each tier is referenced to its own first point, so tiers are comparable
+        // as trends. Levels still aren't — say that rather than implying they are.
+        t = ` · all ${cpus.length} CPU tiers, each referenced to its own first snapshot — compare shapes, not levels`;
       } else {
         const off = allSnaps.length - subset.length;
-        note.textContent = off
-          ? ` · ${off} point${off === 1 ? "" : "s"} on other tiers hidden (anchor unreliable off ${cpuShort(cpuSel)})`
-          : "";
+        t = off ? ` · ${off} point${off === 1 ? "" : "s"} on other tiers hidden (anchor unreliable off ${cpuShort(cpuSel)})` : "";
       }
+      if (tombstoned.length) {
+        t += ` · ${tombstoned.length} snapshot${tombstoned.length === 1 ? "" : "s"} excluded: commit unreachable from HEAD (kept on perf-data, see unreachable.json)`;
+      }
+      note.textContent = t;
     }
     setMode(mode);   // re-render the current tab against the new view
   }

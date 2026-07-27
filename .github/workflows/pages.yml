@@ -84,14 +84,33 @@ jobs:
           git rev-list --topo-order --reverse HEAD \
             | awk '{ print substr($0, 1, 12), NR }' > /tmp/rank.txt
 
-          # Filename is "<stamp>-<sha12>.json"; join on the sha, defaulting to a
-          # rank past the end so unknown commits sort last rather than first.
-          unknown="$(( $(wc -l < /tmp/rank.txt) + 1 ))"
+          # Filename is "<stamp>-<sha12>.json"; join on the sha. A snapshot whose
+          # commit is UNREACHABLE from HEAD is tombstoned rather than plotted: it
+          # measured a commit that is no longer part of this branch's history
+          # (rebased away, force-pushed, a deleted branch), so it isn't a point on
+          # the timeline the page claims to show, and it can't be re-measured
+          # either — perf-timeline checks out the target ref, which fails outright
+          # for an unreachable object.
+          #
+          # Tombstoned, not deleted: the files stay on perf-data untouched and are
+          # listed in unreachable.json, because they are the only record of those
+          # measurements and are unreproducible by definition.
+          : > /tmp/ordered.txt
+          : > /tmp/tombstone.txt
           while read -r f; do
             sha="${f#*-}"; sha="${sha%.json}"
-            rank="$(awk -v s="$sha" '$1 == s { print $2; found=1; exit } END { if (!found) print "'"$unknown"'" }' /tmp/rank.txt)"
-            printf '%s\t%s\n' "$rank" "$f"
-          done < /tmp/snaps.txt | sort -k1,1n -k2,2 | cut -f2 \
+            rank="$(awk -v s="$sha" '$1 == s { print $2; exit }' /tmp/rank.txt)"
+            if [ -n "$rank" ]; then
+              printf '%s\t%s\n' "$rank" "$f" >> /tmp/ordered.txt
+            else
+              printf '%s\n' "$f" >> /tmp/tombstone.txt
+            fi
+          done < /tmp/snaps.txt
+
+          jq -R . < /tmp/tombstone.txt | jq -s . > docs/perf/timeline/unreachable.json
+          echo "tombstoned $(wc -l < /tmp/tombstone.txt) snapshot(s) on unreachable commits"
+
+          sort -k1,1n -k2,2 /tmp/ordered.txt | cut -f2 \
             | jq -R . | jq -s . > docs/perf/timeline/index.json
 
           [ -s docs/perf/timeline/index.json ] || echo "[]" > docs/perf/timeline/index.json
