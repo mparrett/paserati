@@ -147,16 +147,31 @@ jobs:
           go build -o ./paserati-test262 ./cmd/paserati-test262
           ./paserati-test262 -path ./test262 -timeout 1s -subpath 'built-ins/Boolean/**' -json \
             > "${RUNNER_TEMP}/probe.json" 2>/dev/null || true
+          # Field names are the JSON TAGS (lowercase), not the Go identifiers.
+          # pkg/test262.Result tags them path/passed/failed/timedOut/skipped/duration,
+          # and has done unchanged since well before the oldest backfill target.
+          # Probing for .Passed/.Duration instead — the Go field names, which is what
+          # cmd/bench-test262 reads because encoding/json maps them — reports every
+          # engine as mute: 51 results, 0 passed, 0 with a duration. That looked
+          # exactly like the era incompatibility this step exists to catch, and would
+          # have condemned every historical commit as un-backfillable on the strength
+          # of a capital letter.
           n="$(jq '.results | length' "${RUNNER_TEMP}/probe.json" 2>/dev/null || echo 0)"
           [ "${n:-0}" -gt 0 ] || { echo "::error::target engine produced no parseable -json results" >&2; exit 1; }
-          passed="$(jq '[.results[] | select(.Passed == true)] | length' "${RUNNER_TEMP}/probe.json")"
-          timed="$(jq '[.results[] | select(has("TimedOut"))] | length' "${RUNNER_TEMP}/probe.json")"
-          dur="$(jq '[.results[] | select((.Duration // 0) > 0)] | length' "${RUNNER_TEMP}/probe.json")"
-          echo "probe: ${n} results, ${passed} passed, ${dur} with a duration, ${timed} carry TimedOut"
-          [ "$passed" -gt 0 ] || { echo "::error::probe produced no passing tests; the metric would be empty" >&2; exit 1; }
-          [ "$dur"    -gt 0 ] || { echo "::error::probe results carry no Duration; the metric would be zero" >&2; exit 1; }
+          passed="$(jq '[.results[] | select(.passed == true)] | length' "${RUNNER_TEMP}/probe.json")"
+          timed="$(jq '[.results[] | select(has("timedOut"))] | length' "${RUNNER_TEMP}/probe.json")"
+          dur="$(jq '[.results[] | select((.duration // 0) > 0)] | length' "${RUNNER_TEMP}/probe.json")"
+          echo "probe: ${n} results, ${passed} passed, ${dur} with a duration, ${timed} carry timedOut"
+          if [ "$passed" -eq 0 ] || [ "$dur" -eq 0 ]; then
+            # Print a record before dying. Whether the cause is a real schema change
+            # or a wrong path in this probe, the sample answers it in one glance —
+            # which the counts alone conspicuously did not.
+            echo "sample result: $(jq -c '.results[0]' "${RUNNER_TEMP}/probe.json")" >&2
+            [ "$passed" -gt 0 ] || { echo "::error::probe produced no passing tests; the metric would be empty" >&2; exit 1; }
+            echo "::error::probe results carry no duration; the metric would be zero" >&2; exit 1
+          fi
           if [ "$timed" -eq 0 ]; then
-            echo "::warning::this engine's results have no TimedOut field — timed-out tests cannot be excluded from the sum"
+            echo "::warning::this engine's results have no timedOut field — timed-out tests cannot be excluded from the sum"
           fi
 
       - name: Measure macro + fresh anchor, inject into existing snapshot
