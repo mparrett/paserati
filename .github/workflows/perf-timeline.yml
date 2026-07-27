@@ -163,12 +163,23 @@ jobs:
                           files_changed: $fc, engine_files_changed: $ec }
               }' "${out}" > "${out}.tmp" && mv "${out}.tmp" "${out}"
 
-          # Fail rather than publish a snapshot with no protocol recorded: an
-          # unlabelled point is indistinguishable from one measured any other way,
-          # and this is the field the next reducer change will be diagnosed with.
-          jq -e '.method.reducer and .method.count and .method.benchtime' "${out}" >/dev/null \
-            || { echo "::error::bench-ratchet wrote no method provenance" >&2; exit 1; }
-          echo "method: $(jq -c '.method' "${out}")"
+          # A forward snapshot runs MAIN's bench-ratchet, which always writes this,
+          # so a missing method there means something broke and an unlabelled point
+          # is not worth publishing.
+          #
+          # A backfill runs the TARGET COMMIT's bench-ratchet — it has to, that is
+          # the engine being measured — and every commit before the field existed
+          # cannot produce it. Demanding provenance there makes backfill impossible.
+          # This assertion did exactly that on its first night: it measured five
+          # historical commits successfully and then threw all five away.
+          if jq -e '.method.reducer and .method.count and .method.benchtime' "${out}" >/dev/null 2>&1; then
+            echo "method: $(jq -c '.method' "${out}")"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            echo "::error::bench-ratchet wrote no method provenance" >&2
+            exit 1
+          else
+            echo "::warning::no method provenance: ${short_sha} predates the field. Expected for a backfill."
+          fi
 
           echo "name=${name}" >> "$GITHUB_OUTPUT"
           echo "out=${out}" >> "$GITHUB_OUTPUT"
