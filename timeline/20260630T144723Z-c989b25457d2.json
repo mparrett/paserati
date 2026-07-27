@@ -1063,12 +1063,12 @@
       "ns_per_op": 2275483.9181221076,
       "allocs_per_op": 0,
       "bytes_per_op": 0,
-      "ratio_to_anchor": 2083141.2381774676,
+      "ratio_to_anchor": 1819901.827343728,
       "samples": [
         {
           "iterations": 40194,
           "ns_per_op": 2275483.9181221076,
-          "ratio_to_anchor": 2083141.2381774676
+          "ratio_to_anchor": 1819901.827343728
         }
       ]
     }
