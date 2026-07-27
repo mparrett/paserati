@@ -192,6 +192,13 @@ async function getJSON(url) {
 }
 // Snapshot filenames start with the COMMIT stamp in ISO basic UTC; parse it once
 // so both the axis and the tooltip read from commit time rather than capture time.
+// Commit subjects come from the repo and are injected via innerHTML, so they are
+// escaped rather than trusted. Nothing hostile is expected in a commit subject;
+// the point is that "expected" isn't a guarantee.
+function escapeHTML(str) {
+  return String(str).replace(/[&<>"']/g, c => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
 function stampParts(s) {
   return String(s.file || "").match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/);
 }
@@ -509,6 +516,15 @@ function titleFor(s) {
       }
       if (mode === "Test262" && view.setChangedAt(j)) tags.push(["warn", "test set changed"]);
 
+      // The strongest single signal, when present: a large move on a commit that
+      // changed no interpreter code cannot be the commit's doing. Only snapshots
+      // captured after this field was added carry it, so its absence means
+      // "unknown", never "engine code changed".
+      const c = snaps[j].commit;
+      if (c && typeof c.engine_files_changed === "number" && c.engine_files_changed === 0) {
+        tags.push(["warn", "no engine files changed"]);
+      }
+
       if (Math.abs(delta) < FLAG_THRESHOLD && !tags.length) continue;
       rows.push({ j, delta, tags });
     }
@@ -540,11 +556,13 @@ function titleFor(s) {
       const link = sha
         ? `<a href="${REPO_URL}/commit/${s.captured_at_sha}" target="_blank" rel="noopener">${sha}</a>`
         : "(unknown)";
-      // Commit subjects aren't in the snapshot payload; adding them at capture
-      // time would make this column self-explanatory instead of a click away.
+      // Subject is recorded at capture time; snapshots taken before that was added
+      // simply don't show one rather than showing a placeholder.
+      const subj = s.commit?.subject
+        ? `<span class="subj">${escapeHTML(s.commit.subject)}</span>` : "";
       const tagHTML = tags.map(([k, t]) => `<span class="tag ${k}">${t}</span>`).join("");
       return `<tr>
-        <td class="sha">${link}</td>
+        <td class="sha">${link}${subj}</td>
         <td class="when">${when}</td>
         <td class="num ${cls}">${sign}${pct}%</td>
         <td>${tagHTML || '<span class="tag">no known cause — check the diff</span>'}</td>

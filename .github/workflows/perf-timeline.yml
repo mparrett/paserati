@@ -79,10 +79,52 @@ jobs:
           name="${stamp}-${short_sha}.json"
           out="${RUNNER_TEMP}/${name}"
 
+          # Kept in shell vars so the recorded provenance below can't drift from
+          # the flags actually used.
+          count=3
+          benchtime=1s
+
           go run ./cmd/bench-ratchet \
-            -count 3 -benchtime 1s -timeout 20m \
+            -count "${count}" -benchtime "${benchtime}" -timeout 20m \
             -baseline "${out}" \
             snapshot
+
+          # Record WHAT WAS MEASURED and HOW, so a later reader can tell a protocol
+          # change from an engine change. Neither was recoverable before: the page
+          # could detect a CPU change and a test-set change, but a benchtime or
+          # reducer change was invisible, and both have shifted over this series.
+          #
+          # engine_files is the one that pays off soonest. Several of the largest
+          # moves on this timeline sit on commits that touch no engine code at all
+          # (976a3faa moved ~24% while only adding workflows and scripts), and that
+          # is the single most diagnostic fact about a suspicious point — but it is
+          # a property of the diff, which a static page can never compute.
+          subject="$(git log -1 --format=%s HEAD)"
+          committed_at="$(git log -1 --format=%cI HEAD)"
+          if git rev-parse --verify -q HEAD^ >/dev/null; then
+            changed="$(git diff --name-only HEAD^ HEAD)"
+          else
+            changed="$(git ls-tree -r --name-only HEAD)"   # root commit
+          fi
+          files_changed="$(printf '%s\n' "$changed" | grep -c . || true)"
+          # "Engine" = the interpreter itself, excluding the perf tooling that lives
+          # beside it — a change to bench-ratchet or perf-* is not a change to what
+          # is being measured.
+          engine_changed="$(printf '%s\n' "$changed" \
+            | grep -E '^(pkg|cmd)/' \
+            | grep -vE '^(pkg/perfdata/|cmd/(bench-|perf-))' \
+            | grep -c . || true)"
+
+          jq --arg s "$subject" --arg ca "$committed_at" \
+             --argjson fc "${files_changed:-0}" --argjson ec "${engine_changed:-0}" \
+             --arg bt "$benchtime" --argjson ct "$count" \
+             '. + {
+                commit: { subject: $s, committed_at: $ca,
+                          files_changed: $fc, engine_files_changed: $ec },
+                method: { benchtime: $bt, count: $ct, reducer: "min" }
+              }' "${out}" > "${out}.tmp" && mv "${out}.tmp" "${out}"
+          # reducer is bench-ratchet's contract (aggregateFromFile, locked by
+          # TestAggregateFromFileUsesMin). If that ever changes, change it here too.
 
           echo "name=${name}" >> "$GITHUB_OUTPUT"
           echo "out=${out}" >> "$GITHUB_OUTPUT"
