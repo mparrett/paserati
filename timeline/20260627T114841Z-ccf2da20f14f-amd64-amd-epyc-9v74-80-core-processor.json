@@ -1062,17 +1062,17 @@
           ]
         },
         "test262.total": {
-          "ns_per_op": 2941887.293714656,
+          "ns_per_op": 2960334.1961834533,
           "allocs_per_op": 0,
           "bytes_per_op": 0,
-          "ratio_to_anchor": 2090893.5989443185,
-          "anchor_ns_per_op": 1.407000,
+          "ratio_to_anchor": 2096059.6376233178,
+          "anchor_ns_per_op": 1.412333,
           "samples": [
             {
               "iterations": 40141,
-              "ns_per_op": 2941887.293714656,
-              "ratio_to_anchor": 2090893.5989443185,
-              "anchor_ns_per_op": 1.407000
+              "ns_per_op": 2960334.1961834533,
+              "ratio_to_anchor": 2096059.6376233178,
+              "anchor_ns_per_op": 1.412333
             }
           ],
           "set_hash": "9812300bd970d4b1"
