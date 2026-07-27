@@ -199,6 +199,14 @@ function escapeHTML(str) {
   return String(str).replace(/[&<>"']/g, c => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+// Benchmarks on this page span ~1ns (the anchor) to ~3s (the test262 macro), so a
+// fixed unit is unreadable at one end or the other.
+function fmtNS(v) {
+  if (v < 1000) return `${v.toFixed(3)} ns`;
+  if (v < 1e6)  return `${(v / 1e3).toFixed(2)} µs`;
+  if (v < 1e9)  return `${(v / 1e6).toFixed(2)} ms`;
+  return `${(v / 1e9).toFixed(3)} s`;
+}
 function stampParts(s) {
   return String(s.file || "").match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/);
 }
@@ -320,6 +328,7 @@ function titleFor(s) {
   const names = [...allNames].sort();
   const series = names.map((n, i) => ({
     label: n.replace(/^.*?\.Benchmark/, ""),  // drop "<pkg>.Benchmark" noise
+    benchName: n,                             // full key, so the tooltip can find ns_per_op
     data: snaps.map(s => {
       const r = s.benchmarks?.[n]?.ratio_to_anchor;
       const base = ref.get(cpuOf(s))?.get(n);
@@ -443,7 +452,26 @@ function titleFor(s) {
           filter: it => !it.dataset.label.startsWith("_"),
           callbacks: {
             title: items => titleFor(view.snaps[items[0]?.dataIndex]),
-            label: c => c.parsed.y == null ? null : `${c.dataset.label}: ${c.parsed.y.toFixed(3)}×`,
+            // The axis is doubly normalized (ratio_to_anchor, then ÷ baseline), so
+            // "0.98×" is all it can say. The absolute time is stored on every
+            // snapshot and was simply never surfaced — without it you can't answer
+            // "is this fast?", only "is this faster than it was".
+            label: c => {
+              if (c.parsed.y == null) return null;
+              const rel = `${c.dataset.label}: ${c.parsed.y.toFixed(3)}×`;
+              const n = c.dataset.benchName;
+              if (!n) return rel;   // mean/band datasets: an absolute mean across
+                                    // benchmarks of different scales is meaningless
+              const abs = view.snaps[c.dataIndex]?.benchmarks?.[n]?.ns_per_op;
+              return abs ? `${rel}  ·  ${fmtNS(abs)}` : rel;
+            },
+            // The anchor's absolute time is the only tell for a uniform shift: if
+            // the whole suite and the anchor slowed together, the ratio axis would
+            // not move at all.
+            footer: items => {
+              const a = view.snaps[items[0]?.dataIndex]?.anchor?.ns_per_op;
+              return a ? `anchor ${fmtNS(a)}` : "";
+            },
             afterLabel: c => (c.dataset.label === "Test262 mean" && setChangedAt(c.dataIndex))
               ? "△ test set changed here — slope isn't a pure engine delta" : "",
           },
