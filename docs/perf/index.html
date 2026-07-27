@@ -71,6 +71,8 @@
   .seg:hover { color: var(--ink); }
   .seg.on { background: var(--amber); color: #1a1206; }
   .seg:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  .seg[disabled] { opacity: .35; cursor: not-allowed; }
+  .seg[disabled]:hover { color: var(--ink-dim); }
   .controls .count { margin-left: auto; font: 11px/1 ui-monospace, monospace;
                      color: var(--ink-dim); }
   /* The tier row is secondary to the family tabs — same control, quieter weight. */
@@ -196,6 +198,7 @@
 </div>
 
 <script>
+const MIXED = "Micro+Test262";   // the combined scope; see scopeOf
 const BASE = "baseline.json";
 const MANIFEST = "timeline/index.json";
 // Series colours drawn from the sticker, kept quiet so the amber baseline line
@@ -439,6 +442,27 @@ function titleFor(s) {
   }
   const meanBand = sub => bandOver(sub.map(d => [d]));
 
+  // The y-range a mode needs to show EITHER detail level without rescaling.
+  //
+  // Chart.js fits the axis to whatever is currently plotted, so toggling
+  // Aggregate -> Breakdown rescaled the chart under the reader: a mean sitting in
+  // 0.85-1.05 became a spread of 0.1-1.4, and the two views could not be compared
+  // by eye even though they describe the same data. Take the union up front and
+  // pin it, so the toggle changes what is drawn and nothing else.
+  //
+  // Covers the raw member series (what Breakdown draws) and the band bounds (which
+  // can exceed them when a small bucket has a wide sd), plus 1.0 so the baseline
+  // guide is always on screen.
+  function yRangeFor(mode) {
+    const vals = [1];
+    for (const d of scopeOf(mode)) for (const v of d.data) if (v != null) vals.push(v);
+    const { lo, hi } = bandFor(mode);
+    for (const arr of [lo, hi]) for (const v of arr) if (v != null) vals.push(v);
+    if (vals.length < 2) return { min: 0.85, max: 1.15 };
+    const min = Math.min(...vals), max = Math.max(...vals), pad = (max - min) * 0.06 || 0.05;
+    return { min: Math.max(0, min - pad), max: max + pad };
+  }
+
   // Which benchmarks moved the aggregate, and by how much of it.
   //
   // The mean is a weighted sum, so its point-to-point change decomposes exactly:
@@ -455,7 +479,7 @@ function titleFor(s) {
   function contributionsAt(mode, j) {
     if (j < 1) return null;
     const buckets = mode === "Overall" ? microFamilies
-                  : mode === "All" ? series.map(d => [d])
+                  : mode === MIXED ? series.map(d => [d])
                   : (members[mode] || []).map(d => [d]);
     const both = buckets
       .map(b => b.filter(d => d.data[j] != null && d.data[j - 1] != null))
@@ -485,7 +509,7 @@ function titleFor(s) {
   // One definition of each mode's band, shared by the chart and the flagged-changes
   // table so the two can't disagree.
   const bandFor = mode => mode === "Overall" ? bandOver(microFamilies)
-                        : meanBand(mode === "All" ? series : (members[mode] || []));
+                        : meanBand(mode === MIXED ? series : (members[mode] || []));
   // Aggregating "All" mixes the micro suite with the Test262 macro, which are
   // different kinds of measurement. It is offered because a reader may want it,
   // and labelled where it is shown rather than quietly presented as one score.
@@ -493,7 +517,11 @@ function titleFor(s) {
   // Datasets for a mode: "Overall" (mean of all) · a group (that family's faint
   // members behind a bold mean + ±σ band) · "All" (every raw line).
   // The series a mode is *about*, independent of how they're drawn.
-  const scopeOf = m => m === "All" ? series : m === "Overall" ? micro : (members[m] || []);
+  // The combined scope, named for what it holds. "All" said nothing about the one
+  // fact a reader needs — that it is the micro suite PLUS a macro-benchmark, two
+  // different kinds of measurement on one axis. The codebase has always used this
+  // vocabulary ("the Test262 macro", "the micro suite"); the tab now matches it.
+  const scopeOf = m => m === MIXED ? series : m === "Overall" ? micro : (members[m] || []);
 
   // mode = WHICH benchmarks, detail = HOW they're drawn. These used to be tangled:
   // "All" differed from "Overall" in both dimensions at once (every series vs
@@ -549,7 +577,7 @@ function titleFor(s) {
         backgroundColor: "rgba(236,224,200,0.12)", fill: "-1" },
       meanDS ];
   }
-  const groupCount = m => m === "All" ? names.length : m === "Overall" ? micro.length : (members[m] || []).length;
+  const groupCount = m => m === MIXED ? names.length : m === "Overall" ? micro.length : (members[m] || []).length;
 
   // The mean the flagged-changes table measures deltas against — same series the
   // chart draws for that mode, so the table can never disagree with the picture.
@@ -561,7 +589,7 @@ function titleFor(s) {
 
   return { labels, snaps, datasetsFor, groupCount, anySetChange, setChangedAt,
            meanFor, benchCount, t262Hash, familyCount: microFamilies.length,
-           contributionsAt, scopeOf };
+           contributionsAt, scopeOf, yRangeFor };
   }
 
   let view = buildView(modalCpu ? allSnaps.filter(s => cpuOf(s) === modalCpu) : allSnaps);
@@ -620,7 +648,7 @@ function titleFor(s) {
 
   const countEl = document.getElementById("count");
   const modesEl = document.getElementById("modes");
-  const MODES = ["Overall", ...GROUPS, "All"];
+  const MODES = ["Overall", ...GROUPS, MIXED];
   const btns = {};
   let mode = "Overall";
   // Detail is orthogonal to mode: it says how to DRAW the selected scope, not
@@ -640,12 +668,27 @@ function titleFor(s) {
   }
   function setMode(m0) {
     mode = MODES.includes(m0) ? m0 : "Overall";
+    // A one-series scope has nothing to break down — Breakdown and Aggregate would
+    // draw the same line, minus the band. Disable it rather than offering a no-op.
+    // The PREFERENCE survives: leaving Test262 restores whatever was chosen, so the
+    // toggle doesn't silently reset every time you pass through a single-series tab.
+    const canBreak = view.scopeOf(mode).length > 1;
+    const effective = canBreak ? detail : "agg";
     for (const [k] of DETAILS) {
-      const on = k === detail;
+      const on = k === effective;
       detailBtns[k].setAttribute("aria-pressed", on);
       detailBtns[k].classList.toggle("on", on);
+      const off = k === "breakdown" && !canBreak;
+      detailBtns[k].disabled = off;
+      detailBtns[k].title = off
+        ? `${mode} is a single series — there is nothing to break down`
+        : (k === "agg" ? "One mean line, with the spread of its members"
+                       : "Every benchmark in this tab, drawn separately");
     }
-    chart.data.datasets = view.datasetsFor(mode, detail);
+    chart.data.datasets = view.datasetsFor(mode, effective);
+    const yr = view.yRangeFor(mode);
+    chart.options.scales.y.min = yr.min;
+    chart.options.scales.y.max = yr.max;
     chart.update();
     for (const m of MODES) {
       const on = m === mode;
@@ -653,7 +696,7 @@ function titleFor(s) {
       btns[m].classList.toggle("on", on);
     }
     const c = view.scopeOf(mode).length;
-    if (detail === "breakdown") {
+    if (effective === "breakdown") {
       countEl.textContent = `${c} benchmark${c === 1 ? "" : "s"}, drawn separately · ${view.snaps.length} snapshots`;
     } else if (mode === "Overall") {
       // Say that Overall is weighted by family. Without it the tab reads as a flat
@@ -661,7 +704,7 @@ function titleFor(s) {
       // still suggests on its own.
       countEl.textContent = `family-balanced mean · ${c} benchmarks in ` +
         `${view.familyCount} families · ${view.snaps.length} snapshots`;
-    } else if (mode === "All") {
+    } else if (mode === MIXED) {
       // Aggregating All averages the micro suite together with the Test262 macro.
       // Offered, but never presented as a single clean score.
       countEl.textContent = `mean of ${c} benchmarks · mixes micro + Test262 macro · ${view.snaps.length} snapshots`;
@@ -865,7 +908,11 @@ function titleFor(s) {
   // Match the ?mode= param case-insensitively: the tab names are capitalized now,
   // but old links used lowercase (?mode=all / ?mode=overall) — honor those.
   const want = (new URLSearchParams(location.search).get("mode") || "").toLowerCase();
-  mode = MODES.find(m => m.toLowerCase() === want) || "Overall";
+  // "all" is kept as an alias: it was this tab's name until it was renamed to say
+  // what it contains, and links to ?mode=all are already out there.
+  mode = MODES.find(m => m.toLowerCase() === want)
+      || (want === "all" ? MIXED : null)
+      || "Overall";
   const wantDetail = (new URLSearchParams(location.search).get("detail") || "").toLowerCase();
   if (DETAILS.some(([k]) => k === wantDetail)) detail = wantDetail;
 
