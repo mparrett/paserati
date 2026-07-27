@@ -112,17 +112,26 @@ for sha in "$@"; do
   prefix="$(snap_prefix "$sha")" || { log "[$n/$total] ${sha:0:12} UNKNOWN COMMIT — skipped"; failed+=("$sha"); continue; }
   log "[$n/$total] ${sha:0:12}  $(git show -s --format=%s "$sha" | cut -c1-60)"
 
-  landed=""
+  # Report why we are retrying, rather than assuming. This said "off-tier"
+  # unconditionally, so a night of workflow FAILURES was logged as twenty
+  # tier-lottery misses — which is the wrong diagnosis, points at the runner pool
+  # instead of at the code, and is exactly the sort of confident-but-wrong log
+  # line that costs an hour at 3am.
+  landed=""; reason=""
   for try in $(seq 1 "$MAX_TRIES"); do
-    [ "$try" -gt 1 ] && log "  retry $try/$MAX_TRIES (last attempt was off-tier)"
-    dispatch_and_wait "$sha" || { log "  ! workflow failed"; continue; }
+    [ "$try" -gt 1 ] && log "  retry $try/$MAX_TRIES (last attempt: $reason)"
+    if ! dispatch_and_wait "$sha"; then
+      log "  ! workflow failed"; reason="workflow failed"; continue
+    fi
     cpus="$(snap_cpus "$prefix")"
     if [ -z "$cpus" ]; then
       log "  ! no snapshot matching timeline/${prefix}*"
+      reason="ran green but wrote no snapshot"
       continue
     fi
     log "  cpu(s): $(printf '%s' "$cpus" | paste -sd'; ' -)"
     case "$cpus" in *"$REF_CPU"*) landed="$REF_CPU"; break ;; esac
+    reason="off-tier"
   done
 
   if [ -n "$landed" ]; then
