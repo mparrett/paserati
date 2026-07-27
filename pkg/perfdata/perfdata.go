@@ -31,12 +31,12 @@ type Anchor struct {
 
 // BenchmarkEntry is one benchmark's current summary plus optional raw samples.
 type BenchmarkEntry struct {
-	NSPerOp       float64           `json:"ns_per_op"`
-	AllocsPerOp   int64             `json:"allocs_per_op"`
-	BytesPerOp    int64             `json:"bytes_per_op"`
-	RatioToAnchor float64           `json:"ratio_to_anchor"`
-	BestSinceSHA  string            `json:"best_since_sha,omitempty"`
-	BestSinceAt   string            `json:"best_since_at,omitempty"`
+	NSPerOp       float64 `json:"ns_per_op"`
+	AllocsPerOp   int64   `json:"allocs_per_op"`
+	BytesPerOp    int64   `json:"bytes_per_op"`
+	RatioToAnchor float64 `json:"ratio_to_anchor"`
+	BestSinceSHA  string  `json:"best_since_sha,omitempty"`
+	BestSinceAt   string  `json:"best_since_at,omitempty"`
 	// SetHash fingerprints the set of operations aggregated into this measurement,
 	// for records whose metric sums over a variable set (e.g. the test262 macro
 	// sums per-test times over the passing, non-timed-out tests). Two captures
