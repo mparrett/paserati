@@ -209,11 +209,14 @@
 
   <footer>Source: <code>baseline.json</code> + <code>timeline/*.json</code>.
     Rendered client-side; runs no benchmarks.<span id="cpunote"></span>
-    <br>The shaded band is how much the plotted benchmarks <b class="bar">disagree with
-    each other</b> at that commit — not run-to-run error bars. There is one capture per
-    commit, so this page cannot show measurement uncertainty at all. The band therefore
-    also moves when the suite's composition changes, independently of anything the
-    engine did.</footer>
+    <br>The shaded band means one of two things, and the legend says which. On the micro
+    tabs it is how much the plotted benchmarks <b class="bar">disagree with each other</b>
+    at that commit — not error bars, and it moves when the suite's composition changes
+    independently of anything the engine did. On <b class="bar">Test262</b> it is
+    <b class="bar">min..max across the three runs</b> behind that point, which is real
+    measurement uncertainty; the macro is measured three times per snapshot and the
+    median plotted. Points before 2026-07-27 kept only the winning run, so they have no
+    band to draw.</footer>
 </div>
 
 <script>
@@ -410,7 +413,20 @@ function titleFor(s) {
   // Surface those boundaries so the line isn't read as one continuous series.
   const t262Hash = snaps.map(s => s.benchmarks?.["test262.total"]?.set_hash || null);
   const setChangedAt = j => j > 0 && !!t262Hash[j] && !!t262Hash[j - 1] && t262Hash[j] !== t262Hash[j - 1];
-  const anySetChange = labels.some((_, j) => setChangedAt(j));
+
+  // The same argument applies to HOW the point was reduced, not just to what it was
+  // measured over. The macro's reducer changed from min-of-3 to median-of-3 on
+  // 2026-07-27, which shifts every point that follows relative to those before it —
+  // min sits at the fast edge of the reps, median in the middle. Each entry records
+  // its own reducer (older points were stamped retroactively), so the boundary is
+  // readable from the data rather than from a date in a commit message.
+  const t262Reducer = snaps.map(s => s.benchmarks?.["test262.total"]?.method?.reducer || null);
+  const reducerChangedAt = j => j > 0 && !!t262Reducer[j] && !!t262Reducer[j - 1] && t262Reducer[j] !== t262Reducer[j - 1];
+
+  // Both are "the number either side of this step does not mean the same thing", so
+  // both get the same mark; the flagged-changes table says which one it was.
+  const breakAt = j => setChangedAt(j) || reducerChangedAt(j);
+  const anyBreak = labels.some((_, j) => breakAt(j));
 
   // The baseline bar: a dashed amber guide at 1.0× — the "redline" of this gauge.
   const baseDS = () => ({ label: "baseline (1.0×)", data: labels.map(() => 1),
@@ -428,6 +444,15 @@ function titleFor(s) {
   }
   const members = {};                                      // group -> [series]
   names.forEach((n, i) => (members[groupOf(n)] ||= []).push(series[i]));
+
+  // The Test262 family is not a set of peers: test262.total IS test262.built-ins
+  // plus test262.language, by construction. Averaging all three counts every test
+  // twice and calls the result a mean. The aggregate is the total alone — which is
+  // also what keeps the aggregate series continuous across the snapshot where the
+  // per-suite records first appear, since every earlier point has only the total.
+  // Breakdown still draws all three; that is what a breakdown is for.
+  const t262Total = (members["Test262"] || []).find(d => d.benchName === "test262.total");
+  const t262Agg = t262Total ? [t262Total] : (members["Test262"] || []);
 
   // Overall is the CONTINUOUS micro suite only — Test262 is opt-in and sparse
   // (present on a subset of snapshots), so folding it into Overall's mean would
@@ -462,6 +487,40 @@ function titleFor(s) {
   }
   const meanBand = sub => bandOver(sub.map(d => [d]));
 
+  // Run-to-run spread, from the reps the reducer keeps in samples[].
+  //
+  // Every other band on this page is the spread of a mean's own members — how much
+  // the benchmarks disagree — which is a statement about composition, not about
+  // measurement. This one is the real thing: the macro is measured three times per
+  // snapshot and the median is plotted, so min..max of those reps is how much the
+  // number would have moved had a different rep won. Only points carrying more than
+  // one sample get a band; the whole corpus before 2026-07-27 kept only the winning
+  // rep, so those points honestly have no uncertainty to draw.
+  function sampleBand(name) {
+    const lo = [], hi = [];
+    for (const s of snaps) {
+      const base = ref.get(cpuOf(s))?.get(name);
+      const vs = (s.benchmarks?.[name]?.samples || [])
+        .map(x => x.ratio_to_anchor).filter(v => v != null);
+      if (!base || vs.length < 2) { lo.push(null); hi.push(null); continue; }
+      lo.push(Math.min(...vs) / base);
+      hi.push(Math.max(...vs) / base);
+    }
+    return { lo, hi, any: hi.some(v => v != null) };
+  }
+
+  // What a mode actually draws as its band: measurement spread where the data
+  // supports it, composition spread otherwise. Shared with yRangeFor so the axis
+  // is fitted to the band that gets drawn rather than to a different one.
+  function drawnBandFor(mode) {
+    const { mean, lo, hi } = bandFor(mode);
+    if (mode === "Test262" && t262Total) {
+      const sb = sampleBand("test262.total");
+      if (sb.any) return { mean, lo: sb.lo, hi: sb.hi, kind: "runs" };
+    }
+    return { mean, lo, hi, kind: "members" };
+  }
+
   // The y-range a mode needs to show EITHER detail level without rescaling.
   //
   // Chart.js fits the axis to whatever is currently plotted, so toggling
@@ -476,7 +535,7 @@ function titleFor(s) {
   function yRangeFor(mode) {
     const vals = [1];
     for (const d of scopeOf(mode)) for (const v of d.data) if (v != null) vals.push(v);
-    const { lo, hi } = bandFor(mode);
+    const { lo, hi } = drawnBandFor(mode);
     for (const arr of [lo, hi]) for (const v of arr) if (v != null) vals.push(v);
     if (vals.length < 2) return { min: 0.85, max: 1.15 };
     const min = Math.min(...vals), max = Math.max(...vals), pad = (max - min) * 0.06 || 0.05;
@@ -498,9 +557,10 @@ function titleFor(s) {
   // rather than quietly attributing a composition change to whichever case remains.
   function contributionsAt(mode, j) {
     if (j < 1) return null;
-    const buckets = mode === MICRO ? microFamilies
-                  : mode === MIXED ? series.map(d => [d])
-                  : (members[mode] || []).map(d => [d]);
+    // The same buckets the band uses. These used to be derived twice and disagreed
+    // for Micro+Test262 — the chart weighted by family, the table by case — so the
+    // contributions did not sum to the move being decomposed.
+    const buckets = bucketsFor(mode);
     const both = buckets
       .map(b => b.filter(d => d.data[j] != null && d.data[j - 1] != null))
       .filter(b => b.length);
@@ -534,9 +594,16 @@ function titleFor(s) {
   // fixed out of, and no label said so. Now scope is the only difference between
   // them, which is what the two names claim. Test262 joins as its own family: one
   // macro-benchmark should not carry 1/36 of a score it is half the point of.
-  const bandFor = mode => mode === MICRO ? bandOver(microFamilies)
-                        : mode === MIXED ? bandOver([...microFamilies, members["Test262"] || []].filter(b => b.length))
-                        : meanBand(members[mode] || []);
+  // ONE definition of what a mode averages, used by the chart, the y-range and the
+  // flagged-changes table. Test262 contributes its total rather than its members
+  // wherever it is aggregated, for the double-counting reason above.
+  function bucketsFor(mode) {
+    if (mode === MICRO) return microFamilies;
+    if (mode === MIXED) return [...microFamilies, t262Agg].filter(b => b.length);
+    if (mode === "Test262") return t262Agg.length ? [t262Agg] : [];
+    return (members[mode] || []).map(d => [d]);
+  }
+  const bandFor = mode => bandOver(bucketsFor(mode));
   // Aggregating "All" mixes the micro suite with the Test262 macro, which are
   // different kinds of measurement. It is offered because a reader may want it,
   // and labelled where it is shown rather than quietly presented as one score.
@@ -559,7 +626,7 @@ function titleFor(s) {
   function datasetsFor(mode, detail) {
     if (detail === "breakdown") return [baseDS(), ...scopeOf(mode)];
     const sub = scopeOf(mode);
-    const { mean, lo, hi } = bandFor(mode);
+    const { mean, lo, hi, kind } = drawnBandFor(mode);
     // Overall's faint lines are the three FAMILY means rather than the 35 individual
     // cases. That is what the bold line is actually averaging now, and drawing them
     // makes the weighting auditable: you can see which family is moving Overall
@@ -578,25 +645,29 @@ function titleFor(s) {
     // On the Test262 tab, dash the span into a set-changed point and flag it with a
     // triangle, so a jump caused by the workload changing reads differently from a
     // real engine move. (Amber, matching the baseline guide's "watch this" hue.)
-    if (mode === "Test262" && anySetChange) {
+    if (mode === "Test262" && anyBreak) {
       const amber = "#d08a3c";
       meanDS.segment = {
-        borderColor: c => setChangedAt(c.p1DataIndex) ? amber : undefined,
-        borderDash:  c => setChangedAt(c.p1DataIndex) ? [4, 3] : undefined,
+        borderColor: c => breakAt(c.p1DataIndex) ? amber : undefined,
+        borderDash:  c => breakAt(c.p1DataIndex) ? [4, 3] : undefined,
       };
-      meanDS.pointStyle           = labels.map((_, j) => setChangedAt(j) ? "triangle" : "circle");
-      meanDS.pointRadius          = labels.map((_, j) => setChangedAt(j) ? 5 : 2.5);
-      meanDS.pointBackgroundColor = labels.map((_, j) => setChangedAt(j) ? amber : "#ece0c8");
-      meanDS.pointBorderColor     = labels.map((_, j) => setChangedAt(j) ? amber : "#ece0c8");
+      meanDS.pointStyle           = labels.map((_, j) => breakAt(j) ? "triangle" : "circle");
+      meanDS.pointRadius          = labels.map((_, j) => breakAt(j) ? 5 : 2.5);
+      meanDS.pointBackgroundColor = labels.map((_, j) => breakAt(j) ? amber : "#ece0c8");
+      meanDS.pointBorderColor     = labels.map((_, j) => breakAt(j) ? amber : "#ece0c8");
     }
-    // Name the band for what it measures. It is the spread of the mean's own
-    // members at each snapshot — how much the benchmarks disagree — NOT run-to-run
-    // measurement uncertainty, which this page never captures (one capture per
-    // commit). The distinction is load-bearing: the band visibly widens at
-    // 24f6f817 only because the suite grew 30 -> 35 cases, which is composition,
-    // and a reader who takes it for error bars reads that as the pipeline getting
-    // noisier. See the footer note.
-    const bandLabel = (mode === MICRO || mode === MIXED) ? "± spread across families"
+    // Name the band for what it measures, because the page now draws two different
+    // things under one shape. On the micro tabs it is the spread of the mean's own
+    // members at each snapshot — how much the benchmarks disagree, i.e. composition,
+    // not error bars. The distinction is load-bearing: that band visibly widens at
+    // 24f6f817 only because the suite grew 30 -> 35 cases, and a reader who takes it
+    // for measurement uncertainty reads that as the pipeline getting noisier.
+    //
+    // On Test262 it IS measurement uncertainty — min..max over the three reps behind
+    // each point, which the corpus only started keeping on 2026-07-27. Labelled
+    // differently for that reason. See the footer note.
+    const bandLabel = kind === "runs" ? "min..max across runs"
+                    : (mode === MICRO || mode === MIXED) ? "± spread across families"
                                          : "± spread across benchmarks";
     return [ baseDS(), ...faint,
       { label: "_band", data: lo, borderColor: "transparent", pointRadius: 0, fill: false },
@@ -604,7 +675,12 @@ function titleFor(s) {
         backgroundColor: "rgba(236,224,200,0.12)", fill: "-1" },
       meanDS ];
   }
-  const groupCount = m => m === MIXED ? names.length : m === MICRO ? micro.length : (members[m] || []).length;
+  // How many series the mode's mean is actually taken over — derived from the same
+  // buckets that produce the mean, so the headline count cannot drift from it. This
+  // replaces a groupCount() that was exported and never read, and that counted every
+  // series in scope: on Micro+Test262 that would now advertise 38 benchmarks for a
+  // mean over 36, because test262's two per-suite records live inside its total.
+  const aggCount = m => bucketsFor(m).flat().length;
 
   // The mean the flagged-changes table measures deltas against — same series the
   // chart draws for that mode, so the table can never disagree with the picture.
@@ -614,13 +690,14 @@ function titleFor(s) {
   const benchCount = snaps.map(s =>
     Object.keys(s.benchmarks || {}).filter(n => !n.startsWith("test262")).length);
 
-  return { labels, snaps, datasetsFor, groupCount, anySetChange, setChangedAt,
+  return { labels, snaps, datasetsFor, aggCount, anyBreak, breakAt, setChangedAt, reducerChangedAt,
+           t262SuiteCount: Math.max(0, (members["Test262"] || []).length - (t262Total ? 1 : 0)),
            meanFor, benchCount, t262Hash, familyCount: microFamilies.length,
            contributionsAt, scopeOf, yRangeFor };
   }
 
   let view = buildView(modalCpu ? allSnaps.filter(s => cpuOf(s) === modalCpu) : allSnaps);
-  const setChangedAt = j => view.setChangedAt(j);
+  const breakAt = j => view.breakAt(j);
 
   const ink = "#a3906c", grid = "#2a2114";
   const chart = new Chart(document.getElementById("chart"), {
@@ -754,23 +831,31 @@ function titleFor(s) {
       btns[m].setAttribute("aria-pressed", on);
       btns[m].classList.toggle("on", on);
     }
-    const c = view.scopeOf(mode).length;
+    // Breakdown draws every series in scope; the aggregate branches describe a mean
+    // over the buckets, which is a different — and on Test262, smaller — number.
+    const c = view.scopeOf(mode).length, agg = view.aggCount(mode);
     if (effective === "breakdown") {
       countEl.textContent = `${c} benchmark${c === 1 ? "" : "s"}, drawn separately · ${view.snaps.length} snapshots`;
     } else if (mode === MICRO) {
       // Say that Overall is weighted by family. Without it the tab reads as a flat
       // average over cases, which is what it used to be and what the case count
       // still suggests on its own.
-      countEl.textContent = `family-balanced mean · ${c} benchmarks in ` +
+      countEl.textContent = `family-balanced mean · ${agg} benchmarks in ` +
         `${view.familyCount} families · ${view.snaps.length} snapshots`;
     } else if (mode === MIXED) {
       // Aggregating All averages the micro suite together with the Test262 macro.
       // Offered, but never presented as a single clean score.
-      countEl.textContent = `family-balanced mean · ${c} benchmarks in ${view.familyCount + 1} families incl. Test262 macro · ${view.snaps.length} snapshots`;
+      countEl.textContent = `family-balanced mean · ${agg} benchmarks in ${view.familyCount + 1} families incl. Test262 macro · ${view.snaps.length} snapshots`;
+    } else if (mode === "Test262" && view.t262SuiteCount) {
+      // "mean of 3 benchmarks" would be a lie here: the total is not averaged with
+      // built-ins and language, it IS them. Say what the line is and what Breakdown
+      // adds.
+      countEl.textContent = `test262.total · ${view.t262SuiteCount} suites in breakdown · ` +
+        `${view.snaps.length} snapshots`;
     } else {
-      countEl.textContent = `mean of ${c} benchmark${c === 1 ? "" : "s"} · ${view.snaps.length} snapshots`;
+      countEl.textContent = `mean of ${agg} benchmark${agg === 1 ? "" : "s"} · ${view.snaps.length} snapshots`;
     }
-    if (mode === "Test262" && view.anySetChange) countEl.textContent += " · △ = contributing test set changed";
+    if (mode === "Test262" && view.anyBreak) countEl.textContent += " · △ = test set or reducer changed";
     renderFlags(mode);
   }
 
@@ -805,12 +890,19 @@ function titleFor(s) {
       // explain a move, they rule things in — a tier change means the comparison
       // itself is invalid, which is different from "this commit was slower".
       const tags = [];
+      // Steps where the number changes MEANING rather than value. They are kept in
+      // the table regardless of how they rank by size — see the slice below.
+      let pinned = false;
       const prevCpu = snaps[j - 1].machine?.cpu_model, curCpu = snaps[j].machine?.cpu_model;
       if (prevCpu && curCpu && prevCpu !== curCpu) tags.push(["warn", "different machine"]);
       if (view.benchCount[j] !== view.benchCount[j - 1]) {
         tags.push(["warn", `suite changed ${view.benchCount[j - 1]}→${view.benchCount[j]}`]);
       }
-      if (mode === "Test262" && view.setChangedAt(j)) tags.push(["warn", "test set changed"]);
+      if (mode === "Test262" && view.setChangedAt(j)) { tags.push(["warn", "test set changed"]); pinned = true; }
+      // A reducer change moves every following point relative to every earlier one,
+      // independently of the engine: min sits at the fast edge of the reps, median
+      // in the middle. That is a step in the measurement, not in the code.
+      if (mode === "Test262" && view.reducerChangedAt(j)) { tags.push(["warn", "macro reducer changed"]); pinned = true; }
 
       // The strongest single signal, when present: a large move on a commit that
       // changed no interpreter code cannot be the commit's doing. Only snapshots
@@ -857,7 +949,7 @@ function titleFor(s) {
       }
 
       if (Math.abs(delta) < FLAG_THRESHOLD && !tags.length) continue;
-      rows.push({ j, delta, tags });
+      rows.push({ j, delta, tags, pinned });
     }
 
     if (!rows.length) {
@@ -866,7 +958,15 @@ function titleFor(s) {
     }
     el.hidden = false;
     rows.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
-    const shown = rows.slice(0, FLAG_LIMIT);
+    // Ranking by size would drop exactly the rows that must not be dropped. A test
+    // set or reducer change matters BECAUSE a reader would otherwise compare across
+    // it, and such a step is usually small — the reducer change of 2026-07-27 moved
+    // the mean by well under the flag threshold and fell outside the top ten. Keep
+    // those, then fill the remaining slots by size.
+    const pinnedRows = rows.filter(r => r.pinned);
+    const shown = [...pinnedRows,
+                   ...rows.filter(r => !r.pinned).slice(0, Math.max(0, FLAG_LIMIT - pinnedRows.length))]
+      .sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
 
     // Say what was dropped rather than silently truncating — a short table would
     // otherwise read as "this is everything".
@@ -997,6 +1097,19 @@ function renderReadout(baseline, snaps, selectedCpu) {
     chips.push(`CPU tier <b>mixed — ${n} tiers</b>`);
   } else if (selectedCpu || m.cpu_model) {
     chips.push(`reference CPU <b>${selectedCpu || m.cpu_model}</b>`);
+  }
+  // Conformance, from the newest snapshot that carries it. The macro has always
+  // published its passing count as test262.total's `iterations` — the numerator —
+  // while the denominator sat in a stats file the timeline discarded, so a rate
+  // could never be formed. Snapshots from 2026-07-27 carry both. Read back to front
+  // rather than off `latest`, because the field is younger than the corpus and the
+  // newest snapshot on a filtered tier may predate it.
+  const conf = [...snaps].reverse()
+    .map(s => s.benchmarks?.["test262.total"]?.stats)
+    .find(st => st && st.total > 0);
+  if (conf) {
+    chips.push(`test262 <b>${(conf.passed / conf.total * 100).toFixed(1)}%</b> ` +
+               `(${conf.passed.toLocaleString()} / ${conf.total.toLocaleString()})`);
   }
   if (baseline.anchor?.ns_per_op) chips.push(`anchor <b>${baseline.anchor.ns_per_op.toFixed(2)} ns</b>`);
   if (latest?.anchor?.ns_per_op)  chips.push(`latest anchor <b>${latest.anchor.ns_per_op.toFixed(2)} ns</b>`);
