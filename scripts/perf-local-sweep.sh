@@ -59,12 +59,16 @@ capture() {           # capture <sha> <destfile>
   engine="$(printf '%s\n' "$changed" | grep -E '^(pkg|cmd)/' \
             | grep -vE '^(pkg/perfdata/|cmd/(bench-|perf-))' | grep -c . || true)"
 
+  # MERGE into method, don't replace it. bench-ratchet writes reducer/count/
+  # benchtime itself now, from the code that reduces and the flags it was given;
+  # rebuilding the object here would drop that and reinstate the literal
+  # reducer:"min" that goes stale the moment nooga#22 lands. Only `host` is ours
+  # to add — it is the one fact bench-ratchet cannot know.
   jq --arg s "$subject" --arg ca "$committed" \
      --argjson fc "${files:-0}" --argjson ec "${engine:-0}" \
-     --arg bt "$BENCHTIME" --argjson ct "$COUNT" \
      '. + { commit: { subject: $s, committed_at: $ca,
-                      files_changed: $fc, engine_files_changed: $ec },
-            method: { benchtime: $bt, count: $ct, reducer: "min", host: "local" } }' \
+                      files_changed: $fc, engine_files_changed: $ec } }
+        | .method = ((.method // {}) + { host: "local" })' \
      "$dest" > "$dest.tmp" && mv "$dest.tmp" "$dest"
 
   printf '%s-%s.json' "$stamp" "$short"
