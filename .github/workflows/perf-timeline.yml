@@ -263,7 +263,13 @@ jobs:
           echo "out=${converted}" >> "$GITHUB_OUTPUT"
           echo "converted to $(basename "$converted")"
 
+      # Cosmetic. A broken table must never cost a snapshot: the measurement is
+      # already captured and about to be verified, and re-running it is ~17
+      # minutes on a serialized queue. This step failing is exactly how the two
+      # snapshots after the v2 cutover were lost — the publish below is the step
+      # that is allowed to be strict.
       - name: Render run summary
+        continue-on-error: true
         run: |
           src="${{ steps.v2.outputs.out }}"
           {
@@ -274,8 +280,14 @@ jobs:
             echo
             echo "| Benchmark | Anchor× | Wall (ns/op) | Allocs/op |"
             echo "|---|---:|---:|---:|"
+            # No file argument: jq must read $prof from stdin. Passing "$src" too
+            # makes jq read the FILE and ignore the pipe, which was invisible under
+            # v1 (the file and the profile were the same object) and fatal under v2
+            # (.benchmarks lives under .machines[], so the file's top-level
+            # .benchmarks is null and to_entries dies). That is what has blocked
+            # every forward snapshot since the v2 cutover.
             printf '%s' "$prof" | jq -r '.benchmarks | to_entries | sort_by(-.value.ratio_to_anchor)[]
-                   | "| \(.key | sub("github.com/nooga/paserati/";"")) | \((.value.ratio_to_anchor*1000|round)/1000) | \(.value.ns_per_op|round) | \(.value.allocs_per_op) |"' "$src"
+                   | "| \(.key | sub("github.com/nooga/paserati/";"")) | \((.value.ratio_to_anchor*1000|round)/1000) | \(.value.ns_per_op|round) | \(.value.allocs_per_op) |"'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish to perf-data branch
