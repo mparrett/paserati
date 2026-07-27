@@ -59,7 +59,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -775,41 +774,10 @@ func buildCurrentBaseline(results []Result, anchor Result) Baseline {
 	}
 }
 
-func detectMachine() Machine {
-	return Machine{
-		OS:        runtime.GOOS,
-		Arch:      runtime.GOARCH,
-		NumCPU:    runtime.NumCPU(),
-		CPUModel:  detectCPUModel(),
-		GoVersion: runtime.Version(),
-	}
-}
-
-// detectCPUModel returns a human-readable CPU model string (e.g.
-// "Apple M3", "Intel(R) Xeon(R) Platinum 8275CL CPU @ 3.00GHz") or
-// "unknown" if probing fails. macOS uses sysctl; Linux reads
-// /proc/cpuinfo; everything else returns the GOARCH.
-func detectCPUModel() string {
-	switch runtime.GOOS {
-	case "darwin":
-		if out, err := exec.Command("sysctl", "-n", "machdep.cpu.brand_string").Output(); err == nil {
-			if s := strings.TrimSpace(string(out)); s != "" {
-				return s
-			}
-		}
-	case "linux":
-		if body, err := os.ReadFile("/proc/cpuinfo"); err == nil {
-			for _, line := range strings.Split(string(body), "\n") {
-				if strings.HasPrefix(line, "model name") {
-					if idx := strings.Index(line, ":"); idx >= 0 {
-						return strings.TrimSpace(line[idx+1:])
-					}
-				}
-			}
-		}
-	}
-	return "unknown"
-}
+// detectMachine is perfdata.DetectMachine — the detection moved there so the
+// Test262 backfill can ask the same question and get the same answer when it
+// picks which machine profile to write into.
+func detectMachine() Machine { return perfdata.DetectMachine() }
 
 func gitShortSHA() string {
 	out, err := exec.Command("git", "rev-parse", "--short=12", "HEAD").Output()

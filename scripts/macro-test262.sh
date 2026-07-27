@@ -27,6 +27,15 @@
 #                     "built-ins language" — the JS-execution core; intl402,
 #                     staging and annexB are skipped). Accepts deeper paths too,
 #                     e.g. "built-ins/Math" for a quick local run.
+#   BENCH_TEST262_BIN pre-built bench-test262 to use instead of building one from
+#                     this tree. bench-test262 is a pure post-processor — it reads
+#                     the runner's -json output and emits StreamRecords, never
+#                     touching the engine — so it can and should come from a
+#                     different revision than the code under measurement. That is
+#                     what makes backfill work: an old commit's tree cannot build
+#                     today's tool (its pkg/perfdata predates SetHash), but it does
+#                     not need to. Only paserati-test262, the thing being measured,
+#                     must be built here.
 set -euo pipefail
 
 records_out="${1:?usage: macro-test262.sh <records.jsonl> <stats.json>}"
@@ -43,7 +52,14 @@ rm -rf "$shard_dir"
 mkdir -p "$shard_dir"
 
 go build -o ./paserati-test262 ./cmd/paserati-test262
-go build -o ./bench-test262 ./cmd/bench-test262
+bench_bin="${BENCH_TEST262_BIN:-}"
+if [ -n "$bench_bin" ]; then
+  [ -x "$bench_bin" ] || { echo "macro-test262: BENCH_TEST262_BIN=$bench_bin is not executable" >&2; exit 1; }
+  echo "macro-test262: using pre-built post-processor $bench_bin"
+else
+  go build -o ./bench-test262 ./cmd/bench-test262
+  bench_bin=./bench-test262
+fi
 
 # Enumerate shards: each second-level directory under each chapter.
 shards=()
@@ -84,7 +100,7 @@ jq -s '{
   results: (map(.results) | add // [])
 }' "$shard_dir"/*.json > "$merged"
 
-./bench-test262 -in "$merged" -out "$records_out"
+"$bench_bin" -in "$merged" -out "$records_out"
 jq '.stats' "$merged" > "$stats_out"
 
 echo "macro-test262: wrote $records_out and $stats_out"

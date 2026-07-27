@@ -2,6 +2,10 @@
 //
 //	ratio_to_anchor == ns_per_op / anchor.ns_per_op
 //
+// or, where an entry records the calibration it was actually measured against,
+//
+//	ratio_to_anchor == ns_per_op / anchor_ns_per_op
+//
 // The invariant is the whole point of the field — ratios exist so measurements
 // normalize against that snapshot's own calibration run. Where it doesn't hold,
 // the number is normalized against something else and is not comparable to
@@ -235,6 +239,12 @@ func repairProfile(raw []byte, prefix string) ([]byte, []fix, error) {
 		// samples[] carry their own ratio and were injected by the same step, so
 		// they carry the same error; leaving them would make the file internally
 		// inconsistent in a new way.
+		//
+		// They inherit from the ENTRY, not the profile: if the entry was normalized
+		// against its own anchor, so were the samples that produced it. Falling back
+		// to the profile's anchor here would flag every sample of an off-run entry
+		// and "repair" it to the wrong divisor.
+		entryAnchor := effectiveAnchor(entry, anchor.NSPerOp)
 		if samplesRaw, has := entry.Get("samples"); has {
 			items, err := perfdata.ParseArray(samplesRaw)
 			if err != nil {
@@ -246,7 +256,7 @@ func repairProfile(raw []byte, prefix string) ([]byte, []fix, error) {
 				if err != nil {
 					return nil, nil, fmt.Errorf("benchmarks[%q].samples[%d]: %w", name, i, err)
 				}
-				if f, ok := checkEntry(sample, anchor.NSPerOp, fmt.Sprintf("%sbenchmarks[%q].samples[%d]", prefix, name, i)); ok {
+				if f, ok := checkEntry(sample, entryAnchor, fmt.Sprintf("%sbenchmarks[%q].samples[%d]", prefix, name, i)); ok {
 					fixes = append(fixes, f)
 					sample.Set("ratio_to_anchor", mustNum(f.want))
 					items[i] = sample.Encode()
@@ -275,6 +285,15 @@ func repairProfile(raw []byte, prefix string) ([]byte, []fix, error) {
 // checkEntry reports a fix when an object carries a ratio_to_anchor that doesn't
 // match its own ns_per_op over the anchor. Absent ratio (omitempty) is not a
 // violation — there's nothing claiming to be normalized.
+//
+// The divisor is the object's OWN anchor_ns_per_op when it carries one, and the
+// profile's anchor otherwise. That is not a loophole in the invariant, it is the
+// invariant stated precisely: a ratio must equal ns_per_op over the calibration
+// the measurement was actually taken against. An entry captured in a different
+// run from the rest of its profile (the Test262 macro backfill) has a different
+// such calibration, and repairing it against the profile's anchor would rewrite a
+// correct number into exactly the foreign-anchor error this command exists to
+// remove — with the verifier's blessing, which is worse than the original bug.
 func checkEntry(o *perfdata.OrderedObject, anchorNS float64, path string) (fix, bool) {
 	ratioRaw, hasRatio := o.Get("ratio_to_anchor")
 	nsRaw, hasNS := o.Get("ns_per_op")
@@ -285,11 +304,28 @@ func checkEntry(o *perfdata.OrderedObject, anchorNS float64, path string) (fix, 
 	if json.Unmarshal(ratioRaw, &stored) != nil || json.Unmarshal(nsRaw, &ns) != nil {
 		return fix{}, false
 	}
-	want := ns / anchorNS
+	want := ns / effectiveAnchor(o, anchorNS)
 	if want == 0 || math.Abs(stored-want)/math.Abs(want) <= tol {
 		return fix{}, false
 	}
 	return fix{path: path + ".ratio_to_anchor", stored: stored, want: want}, true
+}
+
+// effectiveAnchor is the divisor an object's ratio must be checked against: its
+// own anchor_ns_per_op when it carries one, else the inherited (profile, or for a
+// sample, entry) anchor. A non-positive or unparseable override is ignored rather
+// than trusted — it would divide by zero or garbage, and the inherited anchor is
+// the safe reading.
+func effectiveAnchor(o *perfdata.OrderedObject, inherited float64) float64 {
+	raw, has := o.Get("anchor_ns_per_op")
+	if !has {
+		return inherited
+	}
+	var own float64
+	if json.Unmarshal(raw, &own) != nil || !(own > 0) {
+		return inherited
+	}
+	return own
 }
 
 func mustNum(v float64) json.RawMessage {

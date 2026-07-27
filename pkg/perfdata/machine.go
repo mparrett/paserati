@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 )
 
@@ -33,6 +36,51 @@ type MachineBaseline struct {
 type BaselineV2 struct {
 	Version  int                        `json:"version"`
 	Machines map[string]MachineBaseline `json:"machines"`
+}
+
+// DetectMachine fingerprints the host running right now.
+//
+// This lives here rather than in bench-ratchet because it is no longer only the
+// writer's business: the Test262 backfill has to find the profile inside an
+// existing snapshot that corresponds to the runner it is measuring on, which is
+// the same question answered by the same rule. Two implementations of "which
+// machine is this" would be two chances to disagree, and a disagreement means
+// writing a measurement into another CPU tier's profile — precisely what the
+// machine-keyed layout exists to prevent.
+func DetectMachine() Machine {
+	return Machine{
+		OS:        runtime.GOOS,
+		Arch:      runtime.GOARCH,
+		NumCPU:    runtime.NumCPU(),
+		CPUModel:  detectCPUModel(),
+		GoVersion: runtime.Version(),
+	}
+}
+
+// detectCPUModel returns a human-readable CPU model string (e.g.
+// "Apple M3", "Intel(R) Xeon(R) Platinum 8275CL CPU @ 3.00GHz") or
+// "unknown" if probing fails. macOS uses sysctl; Linux reads
+// /proc/cpuinfo; everything else returns "unknown".
+func detectCPUModel() string {
+	switch runtime.GOOS {
+	case "darwin":
+		if out, err := exec.Command("sysctl", "-n", "machdep.cpu.brand_string").Output(); err == nil {
+			if s := strings.TrimSpace(string(out)); s != "" {
+				return s
+			}
+		}
+	case "linux":
+		if body, err := os.ReadFile("/proc/cpuinfo"); err == nil {
+			for _, line := range strings.Split(string(body), "\n") {
+				if strings.HasPrefix(line, "model name") {
+					if idx := strings.Index(line, ":"); idx >= 0 {
+						return strings.TrimSpace(line[idx+1:])
+					}
+				}
+			}
+		}
+	}
+	return "unknown"
 }
 
 // MachineKey is the partition key for a machine profile: architecture plus CPU

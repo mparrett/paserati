@@ -43,8 +43,22 @@ type BenchmarkEntry struct {
 	// with equal counts but different sets get different hashes, so a consumer can
 	// tell whether the number is comparable across snapshots. Empty for ordinary
 	// single-op benchmarks, where the op is fixed and the count is the sample size.
-	SetHash string            `json:"set_hash,omitempty"`
-	Samples []BenchmarkSample `json:"samples,omitempty"`
+	SetHash string `json:"set_hash,omitempty"`
+	// AnchorNSPerOp overrides the profile's anchor as this entry's normalization
+	// divisor. Present only when the measurement was NOT captured in the same run
+	// as the rest of the profile — currently just the Test262 macro backfill, which
+	// measures an old commit's engine on today's runner and folds the result into a
+	// snapshot whose micro benchmarks came from a different run.
+	//
+	// Without it that entry is unrepresentable honestly. Normalizing against the
+	// profile's anchor is the foreign-anchor bug that cmd/perf-fixratio exists to
+	// repair — a run-2 measurement divided by a run-1 calibration. Normalizing
+	// against its own fresh anchor is correct but silently violates the invariant
+	// the profile advertises. Carrying the divisor makes the second option checkable
+	// instead of merely defensible: the ratio still means "times the anchor", and a
+	// reader (or the verifier) can see WHICH anchor without trusting a convention.
+	AnchorNSPerOp float64           `json:"anchor_ns_per_op,omitempty"`
+	Samples       []BenchmarkSample `json:"samples,omitempty"`
 }
 
 // BenchmarkSample is one raw benchmark measurement retained for statistics.
@@ -54,6 +68,10 @@ type BenchmarkSample struct {
 	BytesPerOp    int64   `json:"bytes_per_op"`
 	AllocsPerOp   int64   `json:"allocs_per_op"`
 	RatioToAnchor float64 `json:"ratio_to_anchor,omitempty"`
+	// AnchorNSPerOp: see BenchmarkEntry.AnchorNSPerOp. Per-sample because samples
+	// accumulated across runs each carry their own calibration — the case the entry
+	// field generalizes to.
+	AnchorNSPerOp float64 `json:"anchor_ns_per_op,omitempty"`
 	CapturedAt    string  `json:"captured_at,omitempty"`
 }
 

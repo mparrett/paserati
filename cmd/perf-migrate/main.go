@@ -14,6 +14,7 @@
 //	perf-migrate -dir timeline            # convert in place
 //	perf-migrate -dir timeline -dry-run   # report what would change
 //	perf-migrate -dir timeline -verify    # exit non-zero unless already converged
+//	perf-migrate -print-key               # this host's machine key, for lookups
 package main
 
 import (
@@ -40,9 +41,18 @@ func main() {
 		dryRun  = flag.Bool("dry-run", false, "report changes without writing")
 		verify  = flag.Bool("verify", false, "exit non-zero if any file would change; implies -dry-run")
 		verbose = flag.Bool("v", false, "list every file, not just the summary")
+		// Which profile key does THIS host write under? A shell script cannot
+		// answer that without reimplementing CPU detection and key formatting, and
+		// a reimplementation that drifts by one character silently selects the
+		// wrong machine profile. Expose the real function instead.
+		printKey = flag.Bool("print-key", false, "print this host's machine key and exit")
 	)
 	flag.Parse()
 
+	if *printKey {
+		fmt.Println(perfdata.MachineKey(perfdata.DetectMachine()))
+		return
+	}
 	if *dir == "" {
 		fmt.Fprintln(os.Stderr, "perf-migrate: -dir is required")
 		os.Exit(2)

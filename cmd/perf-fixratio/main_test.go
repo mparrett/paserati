@@ -272,3 +272,124 @@ func TestRepairsV2PerMachineProfile(t *testing.T) {
 		t.Errorf("verify after repair: %v", err)
 	}
 }
+
+// A snapshot whose test262 entry was measured in a DIFFERENT run from its micro
+// benchmarks, and says so: anchor_ns_per_op records the calibration that ran
+// beside it. Its ratio is correct against that anchor (3016513.72893052/1.9042)
+// and would look ~53% wrong against the profile's (1.2467).
+const offRunAnchor = `{
+  "version": 1,
+  "captured_at": "2026-06-28T02:40:00Z",
+  "captured_at_sha": "976a3faa12f3",
+  "machine": {"os":"linux","arch":"amd64","num_cpu":4,"cpu_model":"AMD EPYC 7763 64-Core Processor","go_version":"go1.26.0"},
+  "anchor": {"name":"BenchmarkRatchetAnchor","package":"pkg/vm","ns_per_op":1.2467},
+  "benchmarks": {
+    "test262.total": {
+      "ns_per_op": 3016513.72893052,
+      "ratio_to_anchor": 1584137.028111816,
+      "anchor_ns_per_op": 1.9042,
+      "samples": [{"iterations": 40141, "ns_per_op": 3016513.72893052, "ratio_to_anchor": 1584137.028111816}]
+    }
+  }
+}`
+
+// An entry normalized against its own recorded anchor is CORRECT, not corrupt.
+// Without this the backfill's output would fail the publish gate, and -fix would
+// "repair" it into the foreign-anchor error the command exists to remove.
+func TestOwnAnchorIsHonoured(t *testing.T) {
+	dir := t.TempDir()
+	p := write(t, dir, "20260628T023641Z-976a3faa12f3.json", offRunAnchor)
+	before, _ := os.ReadFile(p)
+	if err := run(dir, true, true, false); err != nil {
+		t.Fatalf("verify rejected a correctly self-anchored entry: %v", err)
+	}
+	if err := run(dir, false, false, false); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadFile(p)
+	if !reflect.DeepEqual(before, after) {
+		t.Error("repair rewrote a correct self-anchored entry")
+	}
+}
+
+// The override must be enforced, not merely tolerated: a ratio that matches the
+// PROFILE's anchor while the entry declares its own is a violation.
+func TestOwnAnchorIsEnforcedNotIgnored(t *testing.T) {
+	dir := t.TempDir()
+	bad := `{
+  "version": 1,
+  "machine": {"os":"linux","arch":"amd64","num_cpu":4,"cpu_model":"c","go_version":"go1.26.0"},
+  "anchor": {"ns_per_op":1.2467},
+  "benchmarks": {
+    "test262.total": {
+      "ns_per_op": 3016513.72893052,
+      "ratio_to_anchor": 2419598.7237751824,
+      "anchor_ns_per_op": 1.9042
+    }
+  }
+}`
+	p := write(t, dir, "20260628T023641Z-aaaaaaaaaaaa.json", bad)
+	if err := run(dir, true, true, false); err == nil {
+		t.Fatal("verify accepted a ratio normalized against the profile anchor " +
+			"while the entry declared its own")
+	}
+	if err := run(dir, false, false, false); err != nil {
+		t.Fatal(err)
+	}
+	got := ratioOf(t, readJSON(t, p), "test262.total")
+	if want := 3016513.72893052 / 1.9042; math.Abs(got-want)/want > 1e-12 {
+		t.Errorf("repaired against the wrong anchor: got %v, want %v", got, want)
+	}
+}
+
+// A sample inherits its ENTRY's anchor, not the profile's. Otherwise every
+// sample under an off-run entry is flagged and rewritten to the wrong divisor.
+func TestSamplesInheritTheEntryAnchor(t *testing.T) {
+	dir := t.TempDir()
+	body := `{
+  "version": 1,
+  "machine": {"os":"linux","arch":"amd64","num_cpu":4,"cpu_model":"c","go_version":"go1.26.0"},
+  "anchor": {"ns_per_op":1.2467},
+  "benchmarks": {
+    "test262.total": {
+      "ns_per_op": 3016513.72893052,
+      "ratio_to_anchor": 1584137.028111816,
+      "anchor_ns_per_op": 1.9042,
+      "samples": [{"iterations": 40141, "ns_per_op": 3016513.72893052, "ratio_to_anchor": 2419598.7237751824}]
+    }
+  }
+}`
+	p := write(t, dir, "20260628T023641Z-bbbbbbbbbbbb.json", body)
+	if err := run(dir, true, true, false); err == nil {
+		t.Fatal("verify accepted a sample normalized against the profile anchor")
+	}
+	if err := run(dir, false, false, false); err != nil {
+		t.Fatal(err)
+	}
+	doc := readJSON(t, p)
+	s := doc["benchmarks"].(map[string]any)["test262.total"].(map[string]any)["samples"].([]any)[0].(map[string]any)
+	got := s["ratio_to_anchor"].(float64)
+	if want := 3016513.72893052 / 1.9042; math.Abs(got-want)/want > 1e-12 {
+		t.Errorf("sample repaired against the wrong anchor: got %v, want %v", got, want)
+	}
+}
+
+// A malformed or non-positive override must fall back to the inherited anchor
+// rather than dividing by it.
+func TestBadOwnAnchorFallsBack(t *testing.T) {
+	for _, bad := range []string{`0`, `-1.5`, `"1.9"`, `null`} {
+		dir := t.TempDir()
+		body := `{
+  "version": 1,
+  "machine": {"os":"linux","arch":"amd64","num_cpu":4,"cpu_model":"c","go_version":"go1.26.0"},
+  "anchor": {"ns_per_op":1.2467},
+  "benchmarks": {
+    "b": {"ns_per_op": 8.109, "ratio_to_anchor": 6.504371540867892, "anchor_ns_per_op": ` + bad + `}
+  }
+}`
+		write(t, dir, "20260628T023641Z-cccccccccccc.json", body)
+		if err := run(dir, true, true, false); err != nil {
+			t.Errorf("anchor_ns_per_op=%s: expected fallback to the profile anchor, got %v", bad, err)
+		}
+	}
+}

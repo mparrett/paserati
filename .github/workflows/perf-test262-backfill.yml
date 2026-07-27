@@ -5,11 +5,22 @@ name: Perf Test262 Backfill
 # touching its historical micro-benchmarks (so an existing spike/dip stays visible
 # to overlay against).
 #
-# Pre-PR#10 commits lack cmd/bench-test262, so the macro tooling is grafted from
-# main; the engine measured stays the target commit's. Normalization uses a FRESH
-# anchor measured on the same runner as the macro (run-to-run anchor drift is
-# exactly what the ratio cancels), so backfilled points stay comparable to the
-# forward ones.
+# TOOLING AND ENGINE ARE SEPARATE REVISIONS. The engine measured is the target
+# commit's: `paserati-test262` is built from its tree, which is the whole point.
+# The post-processor (`cmd/bench-test262`) and the driver script are built from
+# THIS WORKFLOW's commit in a git worktree, because they are tools, not subjects.
+#
+# The previous form source-grafted `cmd/bench-test262` into the target tree, which
+# stopped working the moment the tool grew a dependency the old tree didn't have:
+#
+#     cmd/bench-test262/main.go:99:4: unknown field SetHash in struct literal
+#         of type perfdata.StreamRecord
+#
+# Grafting the missing `pkg/perfdata` too would just move the boundary — the fix
+# is not to graft at all. bench-test262 only reads the runner's -json output and
+# emits StreamRecords; it never touches the engine, so nothing about it needs to
+# come from the target commit. Same pattern as the ratio verifier in
+# perf-timeline.yml, for the same reason.
 on:
   workflow_dispatch:
     inputs:
@@ -22,6 +33,9 @@ permissions:
 
 concurrency:
   # Share the perf-data writer lock with the timeline so snapshots don't collide.
+  # NOTE: this serializes writers but does NOT queue them — GitHub keeps one
+  # pending run per group, so a second dispatch evicts the first's pending run.
+  # Dispatch one target at a time and wait. See scripts/perf-dispatch.sh.
   group: perf-timeline-main
   cancel-in-progress: false
 
@@ -37,20 +51,46 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check out target ref + graft macro tooling from main
+      # Fail here, with the reason, rather than halfway through a 40-minute job.
+      # Orphan fork-CI commits are not reachable from any remote ref, so
+      # checkout@v4 never fetched them and `git checkout` dies with an opaque
+      # "unable to read tree <sha>". 14 of the 47 existing snapshots sit on such
+      # commits. The fix is a temporary `backfill/*` ref; say so.
+      - name: Preflight — target must be reachable
         env:
           TARGET_REF: ${{ github.event.inputs.ref }}
         run: |
           set -euo pipefail
-          main_sha="$(git rev-parse origin/main)"
-          # Orphan fork-CI commits aren't ref-reachable, so checkout@v4 didn't fetch
-          # them; fetch the target explicitly (it must be pushed to a ref to be
-          # fetchable — see the backfill/* temp branches).
-          git fetch --no-tags origin "$TARGET_REF"
-          git checkout --force FETCH_HEAD
-          # Graft just the macro tooling (absent or older on pre-PR#10 commits) so
-          # the methodology matches the forward snapshots. Engine stays the target's.
-          git checkout "$main_sha" -- cmd/bench-test262 scripts/macro-test262.sh
+          if git rev-parse --verify -q "${TARGET_REF}^{commit}" >/dev/null; then
+            echo "target ${TARGET_REF} is present locally"
+            exit 0
+          fi
+          echo "::group::fetching ${TARGET_REF} explicitly"
+          git fetch --no-tags origin "$TARGET_REF" 2>&1 || true
+          echo "::endgroup::"
+          if git rev-parse --verify -q 'FETCH_HEAD^{commit}' >/dev/null; then
+            echo "target ${TARGET_REF} fetched"
+            exit 0
+          fi
+          cat >&2 <<MSG
+          ::error::target ${TARGET_REF} is not reachable from any ref on origin.
+
+          The commit exists in someone's local clone but nothing on the remote
+          points at it, so the runner cannot fetch it. Publish a temporary ref
+          first, then re-dispatch:
+
+              git push origin ${TARGET_REF}:refs/heads/backfill/${TARGET_REF}
+
+          Delete it only after the snapshot and the page have been verified.
+          MSG
+          exit 1
+
+      - name: Check out target ref
+        env:
+          TARGET_REF: ${{ github.event.inputs.ref }}
+        run: |
+          set -euo pipefail
+          git checkout --force "$TARGET_REF" 2>/dev/null || git checkout --force FETCH_HEAD
 
       - name: Cache Test262 corpus
         uses: actions/cache@v4
@@ -63,17 +103,60 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # The tool half of the tool/engine split. Built from the workflow's own
+      # commit, where its dependencies are consistent by construction.
+      - name: Build macro tooling from this workflow's commit
+        id: tools
+        run: |
+          set -euo pipefail
+          tool="${RUNNER_TEMP}/tooling"
+          rm -rf "$tool"
+          git worktree add --detach "$tool" "${{ github.sha }}" >/dev/null
+          ( cd "$tool" && go build -o "${RUNNER_TEMP}/bench-test262" ./cmd/bench-test262 )
+          # The driver is a shell script with no build graph, so copying it into the
+          # target tree is safe in a way that copying Go source is not — it shells
+          # out to two binaries whose provenance we now control explicitly.
+          cp "$tool/scripts/macro-test262.sh" ./scripts/macro-test262.sh
+          echo "bench=${RUNNER_TEMP}/bench-test262" >> "$GITHUB_OUTPUT"
+
+      # An old engine's -json output has to be readable by today's post-processor.
+      # It normally is (Path/Passed/TimedOut/Duration are long-standing fields),
+      # but "normally" is how the ratio bug survived a month. Prove it on one cheap
+      # directory before spending 30 minutes on the full corpus: a schema drift
+      # would otherwise surface as a plausible-looking number, not as an error.
+      - name: Preflight — target engine speaks the expected JSON
+        run: |
+          set -euo pipefail
+          ./setup-test262.sh
+          go build -o ./paserati-test262 ./cmd/paserati-test262
+          ./paserati-test262 -path ./test262 -timeout 1s -subpath 'built-ins/Boolean/**' -json \
+            > "${RUNNER_TEMP}/probe.json" 2>/dev/null || true
+          n="$(jq '.results | length' "${RUNNER_TEMP}/probe.json" 2>/dev/null || echo 0)"
+          [ "${n:-0}" -gt 0 ] || { echo "::error::target engine produced no parseable -json results" >&2; exit 1; }
+          passed="$(jq '[.results[] | select(.Passed == true)] | length' "${RUNNER_TEMP}/probe.json")"
+          timed="$(jq '[.results[] | select(has("TimedOut"))] | length' "${RUNNER_TEMP}/probe.json")"
+          dur="$(jq '[.results[] | select((.Duration // 0) > 0)] | length' "${RUNNER_TEMP}/probe.json")"
+          echo "probe: ${n} results, ${passed} passed, ${dur} with a duration, ${timed} carry TimedOut"
+          [ "$passed" -gt 0 ] || { echo "::error::probe produced no passing tests; the metric would be empty" >&2; exit 1; }
+          [ "$dur"    -gt 0 ] || { echo "::error::probe results carry no Duration; the metric would be zero" >&2; exit 1; }
+          if [ "$timed" -eq 0 ]; then
+            echo "::warning::this engine's results have no TimedOut field — timed-out tests cannot be excluded from the sum"
+          fi
+
       - name: Measure macro + fresh anchor, inject into existing snapshot
+        env:
+          BENCH_TEST262_BIN: ${{ steps.tools.outputs.bench }}
         run: |
           set -euo pipefail
           short_sha="$(git rev-parse --short=12 HEAD)"
 
-          # Fresh anchor on THIS runner, same run as the macro → comparable ratio.
+          # Fresh anchor on THIS runner, in the same run as the macro. It is NOT the
+          # anchor stored on the target's snapshot — that one calibrated a different
+          # run on a different host — so it is recorded alongside the measurement as
+          # anchor_ns_per_op rather than left implicit. See the injection step.
           anchor_ns="$(go test -run '^$' -bench '^BenchmarkRatchetAnchor$' -count 3 ./pkg/vm 2>/dev/null \
             | awk '/BenchmarkRatchetAnchor/ { sum += $3; n++ } END { if (n) printf "%.6f", sum/n }')"
           [ -n "$anchor_ns" ] || { echo "failed to measure anchor" >&2; exit 1; }
-
-          ./setup-test262.sh
 
           # Run the macro MACRO_COUNT times and keep the MIN summed-ns total. A single
           # suite run is heavily contaminated by one-directional runner noise (GC, CPU
@@ -100,13 +183,11 @@ jobs:
           # Metric MUST match the forward timeline (perf-timeline.yml, da8af1c): the
           # MEAN per-test ns (summed_ns / passing_count), not the sum. The sum conflates
           # per-test speed with pass-count (#26), so a sum-era backfill point would be
-          # incomparable to the mean-era forward points on the same series. set_hash is
-          # soft — absent until bench-test262 (#24) is on main, in which case it's omitted.
+          # incomparable to the mean-era forward points on the same series.
           mean_ns="$(jq -n --argjson n "$total_ns" --argjson p "$passed" '$n / $p')"
           ratio="$(jq -n --argjson m "$mean_ns" --argjson a "$anchor_ns" '$m / $a')"
           echo "anchor=${anchor_ns} ns/op · mean=${mean_ns} ns/test over ${passed} passing (set ${set_hash:-none}) · ratio=${ratio}"
 
-          # Update THIS commit's existing snapshot on perf-data (micro untouched).
           remote="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
           wt="${RUNNER_TEMP}/perf-data"
           git clone --depth 1 --branch perf-data "$remote" "$wt"
@@ -115,32 +196,59 @@ jobs:
           snap="$(find "$wt/timeline" \( -name "*-${short_sha}.json" -o -name "*-${short_sha}-*.json" \) | head -1)"
           [ -n "$snap" ] || { echo "no existing snapshot for ${short_sha} — run the timeline first" >&2; exit 1; }
 
-          # STOP on machine-keyed snapshots. The jq below writes .benchmarks at the
-          # top level, which in v2 is nested per machine profile — so it would add a
-          # stray top-level key and leave the real series untouched, i.e. corrupt
-          # the file while reporting success.
-          #
-          # This workflow is also where the foreign-anchor ratio bug came from: it
-          # computed ratio_to_anchor against an anchor that wasn't the snapshot's
-          # own, and nothing checked the result for a month (see cmd/perf-fixratio).
-          # Failing loudly is the right default until it is either taught v2 and
-          # per-profile anchors, or retired — the forward timeline now captures the
-          # test262 macro unconditionally, which is most of what this existed for.
+          # Which profile inside the file gets the entry. v1 has exactly one, at the
+          # top level. v2 has one per machine, and the ONLY correct target is the one
+          # matching the runner that just measured: ratios normalize within a CPU
+          # model, so folding this runner's number into another tier's profile merges
+          # two things the format exists to keep apart.
+          # Asked of the same function bench-ratchet writes with, from the tool
+          # worktree — deriving it in shell would be a second implementation of
+          # "which machine is this", and one character of drift picks the wrong
+          # profile without saying so.
+          this_key="$( cd "${RUNNER_TEMP}/tooling" && go run ./cmd/perf-migrate -print-key )"
+          echo "this runner is ${this_key}"
+
           if jq -e '.machines' "$snap" >/dev/null 2>&1; then
-            echo "refusing to edit $(basename "$snap"): machine-keyed (v2) snapshot." >&2
-            echo "This workflow only understands the flat v1 layout and would corrupt it." >&2
-            exit 1
+            if ! jq -e --arg k "$this_key" '.machines[$k]' "$snap" >/dev/null 2>&1; then
+              echo "::error::snapshot $(basename "$snap") has no profile for this runner (${this_key})." >&2
+              echo "Profiles present: $(jq -r '.machines | keys | join(", ")' "$snap")" >&2
+              echo "This is the off-tier case (~27% of dispatches). Re-dispatch; do not merge across tiers." >&2
+              exit 1
+            fi
+            # shellcheck disable=SC2016  # $k is jq's parameter, bound by --arg below
+            target='.machines[$k].benchmarks["test262.total"]'
+          else
+            target='.benchmarks["test262.total"]'
           fi
 
-          jq --argjson m "$mean_ns" --argjson r "$ratio" --argjson p "$passed" --arg h "$set_hash" '
-            .benchmarks["test262.total"] = ({
-              ns_per_op: $m, allocs_per_op: 0, bytes_per_op: 0, ratio_to_anchor: $r,
-              samples: [{ iterations: $p, ns_per_op: $m, ratio_to_anchor: $r }]
-            } + (if $h == "" then {} else { set_hash: $h } end))' "$snap" > "$snap.tmp"
+          # anchor_ns_per_op is what makes this injection honest. The measurement was
+          # taken in a different run from the profile's micro benchmarks, so neither
+          # available convention works on its own: normalizing against the profile's
+          # anchor IS the foreign-anchor bug (a month undetected, see cmd/perf-fixratio),
+          # and normalizing against the fresh one silently breaks the invariant the
+          # profile advertises. Recording the divisor makes the correct choice
+          # checkable — perf-fixratio -verify reads this field and holds the entry to
+          # its own anchor.
+          jq --arg k "$this_key" --argjson m "$mean_ns" --argjson r "$ratio" \
+             --argjson a "$anchor_ns" --argjson p "$passed" --arg h "$set_hash" \
+             "${target} = ({
+               ns_per_op: \$m, allocs_per_op: 0, bytes_per_op: 0, ratio_to_anchor: \$r,
+               anchor_ns_per_op: \$a,
+               samples: [{ iterations: \$p, ns_per_op: \$m, ratio_to_anchor: \$r, anchor_ns_per_op: \$a }]
+             } + (if \$h == \"\" then {} else { set_hash: \$h } end))" "$snap" > "$snap.tmp"
           mv "$snap.tmp" "$snap"
+
+          # Same gate the forward timeline publishes behind, run from the workflow's
+          # commit for the same reason: the target tree predates the tool.
+          tool="${RUNNER_TEMP}/tooling"
+          ( cd "$tool" && go run ./cmd/perf-fixratio -dir "$wt/timeline" -verify -v )
 
           git -C "$wt" config user.name "github-actions[bot]"
           git -C "$wt" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git -C "$wt" add timeline
+          if git -C "$wt" diff --cached --quiet; then
+            echo "nothing changed — entry already present and identical"
+            exit 0
+          fi
           git -C "$wt" commit -m "perf: backfill test262.total into $(basename "$snap")"
           git -C "$wt" push "$remote" HEAD:perf-data
