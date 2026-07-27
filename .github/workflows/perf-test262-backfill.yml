@@ -124,7 +124,15 @@ jobs:
           # The driver is a shell script with no build graph, so copying it into the
           # target tree is safe in a way that copying Go source is not — it shells
           # out to two binaries whose provenance we now control explicitly.
+          #
+          # mkdir first: targets old enough to need this workflow can predate the
+          # scripts/ directory entirely. ccf2da20f14f (2026-06-27) has no scripts/
+          # at all, so the copy failed on the destination rather than the source —
+          # a distinction the error message ("No such file or directory") does not
+          # make, and which cost a run to see.
+          mkdir -p ./scripts
           cp "$tool/scripts/macro-test262.sh" ./scripts/macro-test262.sh
+          chmod +x ./scripts/macro-test262.sh
           echo "bench=${RUNNER_TEMP}/bench-test262" >> "$GITHUB_OUTPUT"
 
       # An old engine's -json output has to be readable by today's post-processor.
