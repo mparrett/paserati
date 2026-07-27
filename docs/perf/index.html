@@ -114,6 +114,9 @@
                 letter-spacing: .06em; border: 1px solid var(--line); border-radius: 999px;
                 padding: 4px 8px; margin: 0 5px 4px 0; color: var(--ink-dim); }
   .flags .tag.warn { color: var(--amber); border-color: rgba(242,180,10,.45); }
+  /* Attribution, not a warning: it says what moved, which is as useful on a
+     speedup as on a regression, so it must not borrow the amber alarm colour. */
+  .flags .tag.info { color: var(--ink); border-color: rgba(236,224,200,.30); }
   .flagnote { color: #6f5f44; font-size: 11px; font-family: ui-monospace, monospace;
               margin: 10px 2px 0; max-width: 72ch; line-height: 1.5; }
 
@@ -168,10 +171,15 @@
       <thead><tr><th>Commit</th><th>When (UTC)</th><th class="num">Δ</th><th>Why it's flagged</th></tr></thead>
       <tbody></tbody>
     </table></div>
-    <p class="flagnote">Flagged for review, not explained. A step here can be a real
-      change, a different machine, a changed benchmark set, or a measurement
-      artifact — the notes say which of those the page can rule out, and the rest
-      needs the diff.</p>
+    <p class="flagnote">Flagged for review, not explained. Δ is the step in this tab's
+      mean between consecutive snapshots <em>in the current view</em>, so changing the
+      machine filter changes which points are adjacent. Negative is faster. The notes
+      say what the data can establish — which benchmarks moved it, and whether a
+      different machine, a changed suite, or a commit touching no engine code makes
+      the comparison unsafe. <b>“led by”</b> is weighted by the mean's own weights;
+      <b>“biggest mover”</b> is the largest single change, unweighted. A broad move on
+      a commit that changed no engine files is the signature of a measurement artifact,
+      not a finding.</p>
   </section>
 
   <footer>Source: <code>baseline.json</code> + <code>timeline/*.json</code>.
@@ -203,6 +211,12 @@ async function getJSON(url) {
 function escapeHTML(str) {
   return String(str).replace(/[&<>"']/g, c => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+// Percentage POINTS of an aggregate move, signed. Distinct from a percent: "-5.8 pp
+// of -14.9%" says this benchmark supplied 5.8 of the 14.9, which is the weighted
+// share a reader cannot compute from the benchmark's own percentage alone.
+function fmtPP(v) {
+  return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)} pp`;
 }
 // Benchmarks on this page span ~1ns (the anchor) to ~3s (the test262 macro), so a
 // fixed unit is unreadable at one end or the other.
@@ -420,6 +434,50 @@ function titleFor(s) {
     return { mean, lo, hi };
   }
   const meanBand = sub => bandOver(sub.map(d => [d]));
+
+  // Which benchmarks moved the aggregate, and by how much of it.
+  //
+  // The mean is a weighted sum, so its point-to-point change decomposes exactly:
+  // each series contributes w * (v[j] - v[j-1]) / agg[j-1], and those contributions
+  // sum to the total delta. Reporting them in PERCENTAGE POINTS OF THAT DELTA is
+  // what makes the table answer "what pulled it" instead of just "it moved" — a
+  // benchmark can swing 90% and matter little if it is one case of thirty-five,
+  // and the weight is precisely what the reader cannot do in their head.
+  //
+  // Weights follow the mode: one vote per family under Overall (see microFamilies),
+  // one per case elsewhere. Only series present at BOTH points are decomposed; when
+  // membership differs the sum is no longer the whole move, and the caller says so
+  // rather than quietly attributing a composition change to whichever case remains.
+  function contributionsAt(mode, j) {
+    if (j < 1) return null;
+    const buckets = mode === "Overall" ? microFamilies
+                  : mode === "All" ? series.map(d => [d])
+                  : (members[mode] || []).map(d => [d]);
+    const both = buckets
+      .map(b => b.filter(d => d.data[j] != null && d.data[j - 1] != null))
+      .filter(b => b.length);
+    if (!both.length) return null;
+    const prev = bandOver(both).mean[j - 1];
+    if (!prev) return null;
+    const items = [];
+    let dropped = 0;
+    for (const b of buckets) {
+      dropped += b.filter(d => d.data[j] == null || d.data[j - 1] == null).length;
+    }
+    for (const b of both) {
+      for (const d of b) {
+        const w = 1 / (both.length * b.length);
+        items.push({
+          label: d.label,
+          pp: w * (d.data[j] - d.data[j - 1]) / prev * 100,   // percentage points of the total
+          own: (d.data[j] / d.data[j - 1] - 1) * 100,          // that benchmark's own move
+        });
+      }
+    }
+    items.sort((a, b) => Math.abs(b.pp) - Math.abs(a.pp));
+    const total = items.reduce((a, it) => a + it.pp, 0);
+    return { items, total, exact: dropped === 0 };
+  }
   // One definition of each mode's band, shared by the chart and the flagged-changes
   // table so the two can't disagree.
   const bandFor = mode => mode === "Overall" ? bandOver(microFamilies)
@@ -486,7 +544,8 @@ function titleFor(s) {
     Object.keys(s.benchmarks || {}).filter(n => !n.startsWith("test262")).length);
 
   return { labels, snaps, datasetsFor, groupCount, anySetChange, setChangedAt,
-           meanFor, benchCount, t262Hash, familyCount: microFamilies.length };
+           meanFor, benchCount, t262Hash, familyCount: microFamilies.length,
+           contributionsAt };
   }
 
   let view = buildView(modalCpu ? allSnaps.filter(s => cpuOf(s) === modalCpu) : allSnaps);
@@ -617,6 +676,41 @@ function titleFor(s) {
         tags.push(["warn", "no engine files changed"]);
       }
 
+      // What actually moved the aggregate. This is a statement about the data, not
+      // a guess about the diff, so it belongs next to the warnings rather than in
+      // place of them — a tier change still invalidates the comparison even when
+      // one benchmark obviously dominates it.
+      // Two different questions, and the table needs both because their answers
+      // routinely disagree:
+      //
+      //   what moved the AGGREGATE — weighted, so a huge swing in one of 21 votes
+      //     stays small, which is the honest accounting of the number shown;
+      //   what moved MOST — unweighted, which is usually the actual finding.
+      //
+      // On 1c6c7f66 the aggregate answer is "broad" (true: 34 of 35 got faster)
+      // while the useful answer is BenchmarkIsObject at -90%, the exact thing the
+      // commit rewrote. Reporting only the first buries the cause; only the second
+      // would imply one case carried a move it did not.
+      const contrib = view.contributionsAt(mode, j);
+      if (contrib && contrib.items.length > 1) {
+        const top = contrib.items[0];
+        const share = Math.abs(top.pp) / Math.abs(contrib.total || 1);
+        if (share >= 0.33 && Math.abs(top.pp) >= 0.5) {
+          tags.push(["info", `led by ${top.label} (${fmtPP(top.pp)} of ${fmtPP(contrib.total)})`]);
+        } else {
+          const withIt = contrib.items.filter(it => it.own !== 0 && (it.own < 0) === (delta < 0)).length;
+          tags.push(["info",
+            `broad — ${withIt} of ${contrib.items.length} moved ${delta < 0 ? "faster" : "slower"}`]);
+        }
+        // The standout individual mover, when it isn't already named above and the
+        // move is big enough to be a finding rather than scatter.
+        const big = contrib.items.reduce((a, b) => Math.abs(b.own) > Math.abs(a.own) ? b : a);
+        if (Math.abs(big.own) >= 15 && !(share >= 0.33 && big.label === top.label)) {
+          tags.push(["info", `biggest mover ${big.label} ${big.own > 0 ? "+" : "−"}${Math.abs(big.own).toFixed(0)}%`]);
+        }
+        if (!contrib.exact) tags.push(["warn", "attribution partial — membership changed"]);
+      }
+
       if (Math.abs(delta) < FLAG_THRESHOLD && !tags.length) continue;
       rows.push({ j, delta, tags });
     }
@@ -652,12 +746,18 @@ function titleFor(s) {
       // simply don't show one rather than showing a placeholder.
       const subj = s.commit?.subject
         ? `<span class="subj">${escapeHTML(s.commit.subject)}</span>` : "";
-      const tagHTML = tags.map(([k, t]) => `<span class="tag ${k}">${t}</span>`).join("");
+      const tagHTML = tags.map(([k, t]) => `<span class="tag ${k}">${escapeHTML(t)}</span>`).join("");
+      // The old fallback said "no known cause — check the diff" on every untagged
+      // row, including improvements. On 1c6c7f66 that labelled a 15% SPEEDUP as an
+      // unexplained anomaly while the data named its cause outright: BenchmarkIsObject,
+      // the exact thing the commit replaced with a range check. Say which direction
+      // it moved; the attribution tag above supplies the rest.
+      const direction = delta < 0 ? "improvement" : "regression";
       return `<tr>
         <td class="sha">${link}${subj}</td>
         <td class="when">${when}</td>
         <td class="num ${cls}">${sign}${pct}%</td>
-        <td>${tagHTML || '<span class="tag">no known cause — check the diff</span>'}</td>
+        <td>${tagHTML || `<span class="tag">${direction} — nothing else the page can rule in</span>`}</td>
       </tr>`;
     }).join("");
   }
