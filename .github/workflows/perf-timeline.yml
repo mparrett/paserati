@@ -176,6 +176,24 @@ jobs:
           mkdir -p "$wt/timeline"
           cp "$src" "$wt/timeline/$name"
 
+          # Gate on the ratio_to_anchor invariant BEFORE publishing: a ratio must
+          # equal ns_per_op / anchor.ns_per_op for its own snapshot, or it is
+          # normalized against something else and compares to nothing.
+          #
+          # This is not hypothetical. Every snapshot before c4c332f had its
+          # test262.total ratio computed against a foreign anchor — the jq
+          # injection step above reused a global one — and the error read as a
+          # trend rather than as noise (five consecutive commits ~13% low with a
+          # hard boundary at each end), so it survived for a month. See
+          # cmd/perf-fixratio.
+          #
+          # The whole corpus is checked, not just the new file: perf-data is
+          # already cloned here, so covering history costs nothing and catches
+          # hand-edits or a bad backfill as well as a bad forward run. Blocking is
+          # deliberate — publishing a known-wrong number is worse than losing one
+          # snapshot, and the repair is a single command.
+          go run ./cmd/perf-fixratio -dir "$wt/timeline" -verify -v
+
           git -C "$wt" config user.name "github-actions[bot]"
           git -C "$wt" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git -C "$wt" add timeline
