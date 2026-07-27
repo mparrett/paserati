@@ -199,30 +199,50 @@ jobs:
           remote="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
           wt="${RUNNER_TEMP}/perf-data"
           git clone --depth 1 --branch perf-data "$remote" "$wt"
-          # Matches both layouts: "<stamp>-<sha>.json" (v1) and
-          # "<stamp>-<sha>-<machine-slug>.json" (v2).
-          snap="$(find "$wt/timeline" \( -name "*-${short_sha}.json" -o -name "*-${short_sha}-*.json" \) | head -1)"
-          [ -n "$snap" ] || { echo "no existing snapshot for ${short_sha} — run the timeline first" >&2; exit 1; }
-
-          # Which profile inside the file gets the entry. v1 has exactly one, at the
-          # top level. v2 has one per machine, and the ONLY correct target is the one
-          # matching the runner that just measured: ratios normalize within a CPU
-          # model, so folding this runner's number into another tier's profile merges
-          # two things the format exists to keep apart.
-          # Asked of the same function bench-ratchet writes with, from the tool
-          # worktree — deriving it in shell would be a second implementation of
-          # "which machine is this", and one character of drift picks the wrong
-          # profile without saying so.
+          # Which machine is this? Asked of the same function bench-ratchet writes
+          # with, from the tool worktree — deriving it in shell would be a second
+          # implementation of "which machine is this", and one character of drift
+          # picks the wrong profile without saying so.
           this_key="$( cd "${RUNNER_TEMP}/tooling" && go run ./cmd/perf-migrate -print-key )"
           echo "this runner is ${this_key}"
 
-          if jq -e '.machines' "$snap" >/dev/null 2>&1; then
-            if ! jq -e --arg k "$this_key" '.machines[$k]' "$snap" >/dev/null 2>&1; then
-              echo "::error::snapshot $(basename "$snap") has no profile for this runner (${this_key})." >&2
-              echo "Profiles present: $(jq -r '.machines | keys | join(", ")' "$snap")" >&2
-              echo "This is the off-tier case (~27% of dispatches). Re-dispatch; do not merge across tiers." >&2
-              exit 1
+          # Find the snapshot for THIS RUNNER'S TIER, not an arbitrary one.
+          #
+          # A commit holds one FILE per tier under v2 — ccf2da20f14f has four — so
+          # `find | head -1` selected a machine at random and then refused because
+          # it wasn't ours, while the file we should have written sat beside it.
+          # That would have failed nearly every dispatch on any commit measured on
+          # more than one tier, and read as the off-tier lottery rather than as a
+          # bug. Match the file to the runner instead.
+          #
+          # Ratios normalize within a CPU model, so writing this runner's number
+          # into another tier's profile merges two things the format exists to keep
+          # apart; when no file matches, the honest move is to re-dispatch.
+          snap=""; seen=""
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            if jq -e '.machines' "$f" >/dev/null 2>&1; then
+              fk="$(jq -r '.machines | keys[0]' "$f")"
+            else
+              fk="$(jq -r '.machine.arch + "/" + .machine.cpu_model' "$f")"
             fi
+            seen="${seen}${seen:+, }${fk}"
+            if [ "$fk" = "$this_key" ]; then snap="$f"; break; fi
+          done < <(find "$wt/timeline" \( -name "*-${short_sha}.json" -o -name "*-${short_sha}-*.json" \) | sort)
+
+          if [ -z "$seen" ]; then
+            echo "::error::no snapshot at all for ${short_sha} — run the timeline first" >&2
+            exit 1
+          fi
+          if [ -z "$snap" ]; then
+            echo "::error::no snapshot for ${short_sha} on this runner's tier (${this_key})." >&2
+            echo "Tiers present: ${seen}" >&2
+            echo "Off-tier dispatch (~27%). Re-dispatch; do not merge across tiers." >&2
+            exit 1
+          fi
+          echo "target snapshot: $(basename "$snap")"
+
+          if jq -e '.machines' "$snap" >/dev/null 2>&1; then
             # shellcheck disable=SC2016  # $k is jq's parameter, bound by --arg below
             target='.machines[$k].benchmarks["test262.total"]'
           else
