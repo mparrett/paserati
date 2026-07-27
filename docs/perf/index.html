@@ -157,6 +157,10 @@
     <span id="count" class="count"></span>
   </div>
   <div class="controls controls-cpu">
+    <span class="ctl-label">Detail</span>
+    <div id="detail" class="toggle" role="group" aria-label="Detail level"></div>
+  </div>
+  <div class="controls controls-cpu">
     <span class="ctl-label">Machine</span>
     <div id="cpus" class="toggle" role="group" aria-label="Machine tier"></div>
   </div>
@@ -482,12 +486,24 @@ function titleFor(s) {
   // table so the two can't disagree.
   const bandFor = mode => mode === "Overall" ? bandOver(microFamilies)
                         : meanBand(mode === "All" ? series : (members[mode] || []));
+  // Aggregating "All" mixes the micro suite with the Test262 macro, which are
+  // different kinds of measurement. It is offered because a reader may want it,
+  // and labelled where it is shown rather than quietly presented as one score.
 
   // Datasets for a mode: "Overall" (mean of all) · a group (that family's faint
   // members behind a bold mean + ±σ band) · "All" (every raw line).
-  function datasetsFor(mode) {
-    if (mode === "All") return [baseDS(), ...series];
-    const sub = mode === "Overall" ? micro : (members[mode] || []);
+  // The series a mode is *about*, independent of how they're drawn.
+  const scopeOf = m => m === "All" ? series : m === "Overall" ? micro : (members[m] || []);
+
+  // mode = WHICH benchmarks, detail = HOW they're drawn. These used to be tangled:
+  // "All" differed from "Overall" in both dimensions at once (every series vs
+  // micro-only, AND raw lines vs a mean), so the relationship between the two tabs
+  // was unreadable — you could not tell whether Overall was the collapsed form of
+  // All or a different set. Splitting them means every scope can be seen either way,
+  // and "what is in Workloads?" becomes answerable.
+  function datasetsFor(mode, detail) {
+    if (detail === "breakdown") return [baseDS(), ...scopeOf(mode)];
+    const sub = scopeOf(mode);
     const { mean, lo, hi } = bandFor(mode);
     // Overall's faint lines are the three FAMILY means rather than the 35 individual
     // cases. That is what the bold line is actually averaging now, and drawing them
@@ -545,7 +561,7 @@ function titleFor(s) {
 
   return { labels, snaps, datasetsFor, groupCount, anySetChange, setChangedAt,
            meanFor, benchCount, t262Hash, familyCount: microFamilies.length,
-           contributionsAt };
+           contributionsAt, scopeOf };
   }
 
   let view = buildView(modalCpu ? allSnaps.filter(s => cpuOf(s) === modalCpu) : allSnaps);
@@ -607,23 +623,50 @@ function titleFor(s) {
   const MODES = ["Overall", ...GROUPS, "All"];
   const btns = {};
   let mode = "Overall";
+  // Detail is orthogonal to mode: it says how to DRAW the selected scope, not
+  // which benchmarks are in it. Default aggregate — the collapsed view is the one
+  // that answers "is it getting faster"; breakdown answers "what is in here".
+  const DETAILS = [["agg", "Aggregate"], ["breakdown", "Breakdown"]];
+  let detail = "agg";
+  const detailEl = document.getElementById("detail");
+  const detailBtns = {};
+  for (const [k, labelText] of DETAILS) {
+    const b = document.createElement("button");
+    b.className = "seg"; b.textContent = labelText;
+    b.title = k === "agg" ? "One mean line, with the spread of its members"
+                          : "Every benchmark in this tab, drawn separately";
+    b.onclick = () => { detail = k; setMode(mode); };
+    detailEl.appendChild(b); detailBtns[k] = b;
+  }
   function setMode(m0) {
     mode = MODES.includes(m0) ? m0 : "Overall";
-    chart.data.datasets = view.datasetsFor(mode);
+    for (const [k] of DETAILS) {
+      const on = k === detail;
+      detailBtns[k].setAttribute("aria-pressed", on);
+      detailBtns[k].classList.toggle("on", on);
+    }
+    chart.data.datasets = view.datasetsFor(mode, detail);
     chart.update();
     for (const m of MODES) {
       const on = m === mode;
       btns[m].setAttribute("aria-pressed", on);
       btns[m].classList.toggle("on", on);
     }
-    const c = view.groupCount(mode), lead = mode === "All" ? "" : "mean of ";
-    countEl.textContent = `${lead}${c} benchmark${c === 1 ? "" : "s"} · ${view.snaps.length} snapshots`;
-    // Say that Overall is weighted by family. Without it the tab reads as a flat
-    // average over cases, which is what it used to be and what the case count still
-    // suggests on its own.
-    if (mode === "Overall") {
+    const c = view.scopeOf(mode).length;
+    if (detail === "breakdown") {
+      countEl.textContent = `${c} benchmark${c === 1 ? "" : "s"}, drawn separately · ${view.snaps.length} snapshots`;
+    } else if (mode === "Overall") {
+      // Say that Overall is weighted by family. Without it the tab reads as a flat
+      // average over cases, which is what it used to be and what the case count
+      // still suggests on its own.
       countEl.textContent = `family-balanced mean · ${c} benchmarks in ` +
         `${view.familyCount} families · ${view.snaps.length} snapshots`;
+    } else if (mode === "All") {
+      // Aggregating All averages the micro suite together with the Test262 macro.
+      // Offered, but never presented as a single clean score.
+      countEl.textContent = `mean of ${c} benchmarks · mixes micro + Test262 macro · ${view.snaps.length} snapshots`;
+    } else {
+      countEl.textContent = `mean of ${c} benchmark${c === 1 ? "" : "s"} · ${view.snaps.length} snapshots`;
     }
     if (mode === "Test262" && view.anySetChange) countEl.textContent += " · △ = contributing test set changed";
     renderFlags(mode);
@@ -823,6 +866,8 @@ function titleFor(s) {
   // but old links used lowercase (?mode=all / ?mode=overall) — honor those.
   const want = (new URLSearchParams(location.search).get("mode") || "").toLowerCase();
   mode = MODES.find(m => m.toLowerCase() === want) || "Overall";
+  const wantDetail = (new URLSearchParams(location.search).get("detail") || "").toLowerCase();
+  if (DETAILS.some(([k]) => k === wantDetail)) detail = wantDetail;
 
   // ?cpu= selects a tier by substring ("9v74", "xeon") or "all"; default is modal.
   // setCpu builds the view and then calls setMode, so this is the single entry point.
