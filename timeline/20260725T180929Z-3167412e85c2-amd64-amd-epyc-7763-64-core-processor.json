@@ -1236,6 +1236,10 @@
           "allocs_per_op": 0,
           "bytes_per_op": 0,
           "ratio_to_anchor": 2361717.0521538905,
+          "method": {
+            "reducer": "min",
+            "count": 3
+          },
           "samples": [
             {
               "iterations": 40194,
