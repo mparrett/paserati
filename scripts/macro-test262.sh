@@ -7,7 +7,10 @@
 # Writes:
 #   <records-out>.jsonl   StreamRecords: total + per top-level suite, ns_per_op =
 #                         summed execution time over passing, non-timed-out tests
-#   <stats-out>.json      Test262 pass/fail/timeout counts (the correctness signal)
+#   <stats-out>.json      Test262 pass/fail/timeout counts (the correctness signal),
+#                         plus PerTestTimeout — the bound that decided the
+#                         failed/timeout split, recorded by the code that applied
+#                         it so a reader never has to assume which one was in force
 #
 # This is one same-runner A/B half: the caller runs it on the merge-base and the
 # head, then diffs the raw sums. No anchor normalization — both halves run on one
@@ -101,6 +104,6 @@ jq -s '{
 }' "$shard_dir"/*.json > "$merged"
 
 "$bench_bin" -in "$merged" -out "$records_out"
-jq '.stats' "$merged" > "$stats_out"
+jq --arg t "$timeout" '.stats + { PerTestTimeout: $t }' "$merged" > "$stats_out"
 
 echo "macro-test262: wrote $records_out and $stats_out"

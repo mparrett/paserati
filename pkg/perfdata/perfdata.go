@@ -27,6 +27,29 @@ type Method struct {
 	Reducer   string `json:"reducer,omitempty"`
 	Count     int    `json:"count,omitempty"`
 	Benchtime string `json:"benchtime,omitempty"`
+	// PerTestTimeout is the macro's equivalent of Benchtime: the per-test bound the
+	// Test262 run was given. It decides which slow tests are counted as timeouts and
+	// excluded from the timing sum, so two macro measurements taken under different
+	// bounds are not comparable in their failed/timeout split. Recorded by the driver
+	// that applied it (scripts/macro-test262.sh) rather than by whoever reports it.
+	PerTestTimeout string `json:"per_test_timeout,omitempty"`
+}
+
+// Test262Stats is the conformance outcome of the Test262 run that produced a macro
+// measurement: how many tests ran and how they ended, as opposed to how fast they
+// were. The two are kept apart on purpose. test262.total was changed from a summed
+// to a mean per-test time because the sum moved when the pass count moved, which
+// made a conformance change read as a speed change; folding the pass count back
+// into the speed series would undo that. This is the other half — the conformance
+// signal in its own right, and the denominator that turns the entry's passing count
+// into a rate.
+type Test262Stats struct {
+	Total      int   `json:"total"`
+	Passed     int   `json:"passed"`
+	Failed     int   `json:"failed"`
+	Timeouts   int   `json:"timeouts"`
+	Skipped    int   `json:"skipped"`
+	DurationNS int64 `json:"duration_ns,omitempty"`
 }
 
 // Machine fingerprints the host that captured a baseline.
@@ -84,7 +107,12 @@ type BenchmarkEntry struct {
 	// — the macro's reducer changed from min to median partway through the corpus
 	// (see scripts/macro-test262-reduce.sh for why), and an unrecorded reducer change
 	// is exactly the invisible protocol shift Method exists to prevent.
-	Method  *Method           `json:"method,omitempty"`
+	Method *Method `json:"method,omitempty"`
+	// Stats is the conformance outcome of the run behind this entry. Present only on
+	// the Test262 macro, where the measurement is taken over a set whose membership
+	// is itself a signal; an ordinary benchmark measures a fixed op and has nothing
+	// to report here.
+	Stats   *Test262Stats     `json:"stats,omitempty"`
 	Samples []BenchmarkSample `json:"samples,omitempty"`
 }
 
