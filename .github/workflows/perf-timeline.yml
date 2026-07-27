@@ -192,7 +192,16 @@ jobs:
           # hand-edits or a bad backfill as well as a bad forward run. Blocking is
           # deliberate — publishing a known-wrong number is worse than losing one
           # snapshot, and the repair is a single command.
-          go run ./cmd/perf-fixratio -dir "$wt/timeline" -verify -v
+          #
+          # Run the tool from THIS WORKFLOW's commit, not the checked-out tree. A
+          # backfill checks out the target ref (see "Check out target ref"), and
+          # old commits predate cmd/perf-fixratio — invoking it from the tree would
+          # fail the publish step for every backfill, which is the opposite of a
+          # safety net. The worktree gives us the tool at a known-good revision
+          # while the target tree stays as the benchmarks measured it.
+          tool="${RUNNER_TEMP}/verifier"
+          git worktree add --detach "$tool" "${{ github.sha }}" >/dev/null
+          ( cd "$tool" && go run ./cmd/perf-fixratio -dir "$wt/timeline" -verify -v )
 
           git -C "$wt" config user.name "github-actions[bot]"
           git -C "$wt" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
