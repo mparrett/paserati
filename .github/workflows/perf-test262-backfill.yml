@@ -134,6 +134,12 @@ jobs:
           cp "$tool/scripts/macro-test262.sh" ./scripts/macro-test262.sh
           chmod +x ./scripts/macro-test262.sh
           echo "bench=${RUNNER_TEMP}/bench-test262" >> "$GITHUB_OUTPUT"
+          # The reducer runs FROM the tool worktree rather than being copied in: it
+          # only post-processes the driver's output, so nothing about it belongs to
+          # the target tree. Same script the forward timeline uses, so the two cannot
+          # reduce differently.
+          chmod +x "$tool/scripts/macro-test262-reduce.sh"
+          echo "reduce=$tool/scripts/macro-test262-reduce.sh" >> "$GITHUB_OUTPUT"
 
       # An old engine's -json output has to be readable by today's post-processor.
       # It normally is (Path/Passed/TimedOut/Duration are long-standing fields),
@@ -189,35 +195,20 @@ jobs:
             | awk '/BenchmarkRatchetAnchor/ { sum += $3; n++ } END { if (n) printf "%.6f", sum/n }')"
           [ -n "$anchor_ns" ] || { echo "failed to measure anchor" >&2; exit 1; }
 
-          # Run the macro MACRO_COUNT times and keep the MIN summed-ns total. A single
-          # suite run is heavily contaminated by one-directional runner noise (GC, CPU
-          # migration, co-tenancy); the timeline showed ~6% run-to-run scatter that
-          # swamped the engine-change signal (#28). Min selects the least-contaminated
-          # run — same rationale as the bench-ratchet A/B reducer (#22). passing count
-          # and set_hash are run-invariant; carry them from the winning run.
-          count="${MACRO_COUNT:-3}"
-          total_ns=""; passed=""; set_hash=""
-          for rep in $(seq 1 "$count"); do
-            ./scripts/macro-test262.sh "${RUNNER_TEMP}/t262.jsonl" "${RUNNER_TEMP}/t262.stats.json"
-            rep_ns="$(jq 'select(.name=="total") | .ns_per_op' "${RUNNER_TEMP}/t262.jsonl")"
-            echo "  macro rep ${rep}/${count}: total=${rep_ns} ns"
-            if [ -z "$total_ns" ] || jq -n --argjson a "$rep_ns" --argjson b "$total_ns" -e '$a < $b' >/dev/null; then
-              total_ns="$rep_ns"
-              passed="$(jq  'select(.name=="total") | .iterations'  "${RUNNER_TEMP}/t262.jsonl")"
-              set_hash="$(jq -r 'select(.name=="total") | .set_hash // ""' "${RUNNER_TEMP}/t262.jsonl")"
-            fi
-          done
-
-          # Mean over an empty passing set is undefined — nothing meaningful to inject.
-          [ "${passed:-0}" -gt 0 ] || { echo "no passing tests for ${short_sha} — skipping" >&2; exit 1; }
-
-          # Metric MUST match the forward timeline (perf-timeline.yml, da8af1c): the
-          # MEAN per-test ns (summed_ns / passing_count), not the sum. The sum conflates
-          # per-test speed with pass-count (#26), so a sum-era backfill point would be
-          # incomparable to the mean-era forward points on the same series.
-          mean_ns="$(jq -n --argjson n "$total_ns" --argjson p "$passed" '$n / $p')"
-          ratio="$(jq -n --argjson m "$mean_ns" --argjson a "$anchor_ns" '$m / $a')"
-          echo "anchor=${anchor_ns} ns/op · mean=${mean_ns} ns/test over ${passed} passing (set ${set_hash:-none}) · ratio=${ratio}"
+          # Reduce the reps with the SAME script the forward timeline uses, so a
+          # backfilled point and a forward point on one series cannot have been
+          # reduced differently — they were, for as long as the loop lived in both
+          # YAMLs as a copy. Median of the per-rep means, all reps in samples[], and
+          # a refusal if the reps disagree about which tests they timed; see
+          # scripts/macro-test262-reduce.sh for why median rather than min.
+          #
+          # MACRO_RECORD_ANCHOR=1: this measurement is taken in a different run from
+          # the profile's micro benchmarks, so it carries its own divisor. That is the
+          # whole reason the field exists — see the injection step below.
+          entry="${RUNNER_TEMP}/t262.entry.json"
+          MACRO_RECORD_ANCHOR=1 "${{ steps.tools.outputs.reduce }}" \
+            "${MACRO_COUNT:-3}" "$anchor_ns" "$entry" >/dev/null
+          echo "target ${short_sha}: $(jq -c '{ns_per_op, ratio_to_anchor, set_hash, method}' "$entry")"
 
           remote="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
           wt="${RUNNER_TEMP}/perf-data"
@@ -280,13 +271,8 @@ jobs:
           # profile advertises. Recording the divisor makes the correct choice
           # checkable — perf-fixratio -verify reads this field and holds the entry to
           # its own anchor.
-          jq --arg k "$this_key" --argjson m "$mean_ns" --argjson r "$ratio" \
-             --argjson a "$anchor_ns" --argjson p "$passed" --arg h "$set_hash" \
-             "${target} = ({
-               ns_per_op: \$m, allocs_per_op: 0, bytes_per_op: 0, ratio_to_anchor: \$r,
-               anchor_ns_per_op: \$a,
-               samples: [{ iterations: \$p, ns_per_op: \$m, ratio_to_anchor: \$r, anchor_ns_per_op: \$a }]
-             } + (if \$h == \"\" then {} else { set_hash: \$h } end))" "$snap" > "$snap.tmp"
+          jq --arg k "$this_key" --slurpfile e "$entry" \
+             "${target} = \$e[0]" "$snap" > "$snap.tmp"
           mv "$snap.tmp" "$snap"
 
           # Same gate the forward timeline publishes behind, run from the workflow's

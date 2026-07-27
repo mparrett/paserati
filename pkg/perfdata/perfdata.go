@@ -75,8 +75,17 @@ type BenchmarkEntry struct {
 	// the profile advertises. Carrying the divisor makes the second option checkable
 	// instead of merely defensible: the ratio still means "times the anchor", and a
 	// reader (or the verifier) can see WHICH anchor without trusting a convention.
-	AnchorNSPerOp float64           `json:"anchor_ns_per_op,omitempty"`
-	Samples       []BenchmarkSample `json:"samples,omitempty"`
+	AnchorNSPerOp float64 `json:"anchor_ns_per_op,omitempty"`
+	// Method overrides the snapshot's Method for this entry, for entries not reduced
+	// by bench-ratchet. The Test262 macro is one: the workflow runs it N times and
+	// reduces the reps itself, so the snapshot-level "how was this measured" is
+	// simply not the answer for this series. It carries reducer:"median" where the
+	// micro benchmarks carry bench-ratchet's, and that difference has to be readable
+	// — the macro's reducer changed from min to median partway through the corpus
+	// (see scripts/macro-test262-reduce.sh for why), and an unrecorded reducer change
+	// is exactly the invisible protocol shift Method exists to prevent.
+	Method  *Method           `json:"method,omitempty"`
+	Samples []BenchmarkSample `json:"samples,omitempty"`
 }
 
 // BenchmarkSample is one raw benchmark measurement retained for statistics.

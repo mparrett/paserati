@@ -57,6 +57,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/perf-writer-queue-check.sh "${{ github.repository }}"
 
+      # Also before the target checkout, and for the same reason. The reducer is
+      # post-processing — it turns N driver runs into one benchmark entry and never
+      # touches the engine — so it belongs to this workflow's commit, not to the tree
+      # being measured, exactly like bench-test262. Staging it here is what lets a
+      # dispatch against an older commit reduce the same way a forward run does.
+      - name: Stage the macro reducer from this workflow's commit
+        id: reducer
+        run: |
+          set -euo pipefail
+          cp scripts/macro-test262-reduce.sh "${RUNNER_TEMP}/macro-test262-reduce.sh"
+          chmod +x "${RUNNER_TEMP}/macro-test262-reduce.sh"
+          echo "path=${RUNNER_TEMP}/macro-test262-reduce.sh" >> "$GITHUB_OUTPUT"
+
       - name: Check out target ref
         env:
           TARGET_REF: ${{ github.event.inputs.ref || github.sha }}
@@ -198,47 +211,33 @@ jobs:
           set -euo pipefail
           out="${{ steps.snap.outputs.out }}"
           ./setup-test262.sh
-
-          # Run the macro MACRO_COUNT times and keep the MIN summed-ns total: a single
-          # suite run is heavily contaminated by one-directional runner noise (GC, CPU
-          # migration, co-tenancy); min selects the least-contaminated run (#28), same
-          # rationale as the bench-ratchet A/B reducer (#22). passing count and set_hash
-          # are run-invariant; carry them from the winning run.
-          count="${MACRO_COUNT:-3}"
-          total_ns=""; passed=""; set_hash=""
-          for rep in $(seq 1 "$count"); do
-            ./scripts/macro-test262.sh "${RUNNER_TEMP}/t262.jsonl" "${RUNNER_TEMP}/t262.stats.json"
-            rep_ns="$(jq 'select(.name=="total") | .ns_per_op' "${RUNNER_TEMP}/t262.jsonl")"
-            echo "  macro rep ${rep}/${count}: total=${rep_ns} ns"
-            if [ -z "$total_ns" ] || jq -n --argjson a "$rep_ns" --argjson b "$total_ns" -e '$a < $b' >/dev/null; then
-              total_ns="$rep_ns"
-              passed="$(jq 'select(.name=="total") | .iterations' "${RUNNER_TEMP}/t262.jsonl")"
-              set_hash="$(jq -r 'select(.name=="total") | .set_hash // ""' "${RUNNER_TEMP}/t262.jsonl")"
-            fi
-          done
           anchor_ns="$(jq -r '.anchor.ns_per_op' "$out")"
 
-          # Mean over an empty passing set is undefined — skip the fold.
-          if [ "${passed:-0}" -gt 0 ]; then
-          # Metric is the MEAN per-test ns (summed_ns / passing_count), not the sum: the
-          # sum conflates per-test speed with pass-count (#26); the mean removes that
-          # count-inflation. set_hash fingerprints the contributing set (#24) so a residual
-          # composition shift the mean can't cancel stays visible — soft, omitted until
-          # #24's tooling lands. Anchor-normalized; the page plots each series self-relative.
-          mean_ns="$(jq -n --argjson n "$total_ns" --argjson p "$passed" '$n / $p')"
-          jq --argjson m "$mean_ns" --argjson a "$anchor_ns" --argjson p "$passed" --arg h "$set_hash" '
-            .benchmarks["test262.total"] = ({
-              ns_per_op: $m, allocs_per_op: 0, bytes_per_op: 0,
-              ratio_to_anchor: ($m / $a),
-              samples: [{ iterations: $p, ns_per_op: $m, ratio_to_anchor: ($m / $a) }]
-            } + (if $h == "" then {} else { set_hash: $h } end))' "$out" > "${out}.tmp"
-          mv "${out}.tmp" "$out"
-          echo "test262.total: mean $(jq -r '.benchmarks["test262.total"].ns_per_op' "$out") ns/test" \
-               "over ${passed} passing (set ${set_hash:-none}, min of ${count} runs," \
-               "ratio $(jq -r '.benchmarks["test262.total"].ratio_to_anchor' "$out"))"
-          else
+          # The reps are run and reduced by scripts/macro-test262-reduce.sh, which the
+          # backfill workflow calls too — the loop lived in both YAMLs as a copy and the
+          # copies had already started to differ. It emits the finished entry: median of
+          # the per-rep means, every rep in samples[], and a refusal if the reps disagree
+          # about which tests they timed. See the script for why median and not min.
+          #
+          # No anchor_ns_per_op: micro and macro are measured in the same run here, so
+          # the profile's own anchor is the correct divisor. The backfill is the case
+          # that isn't, and it passes MACRO_RECORD_ANCHOR=1.
+          entry="${RUNNER_TEMP}/t262.entry.json"
+          rc=0
+          "${{ steps.reducer.outputs.path }}" "${MACRO_COUNT:-3}" "$anchor_ns" "$entry" >/dev/null || rc=$?
+          # 3 is "this engine passes nothing", a real answer about an old tree rather
+          # than a failure of the measurement. Everything else stops the fold: this step
+          # is continue-on-error so the micro snapshot still publishes, and the missing
+          # macro point shows up in perf-gaps.sh section [2].
+          if [ "$rc" -eq 3 ]; then
             echo "test262.total: no passing tests — skipped"
+            exit 0
+          elif [ "$rc" -ne 0 ]; then
+            exit "$rc"
           fi
+
+          jq --slurpfile e "$entry" '.benchmarks["test262.total"] = $e[0]' "$out" > "${out}.tmp"
+          mv "${out}.tmp" "$out"
 
       # Convert to the machine-keyed v2 layout. bench-ratchet still writes v1 —
       # it is shared with perf-pr and baseline.json, and none of that needs to
