@@ -215,16 +215,17 @@ jobs:
 
           # The reps are run and reduced by scripts/macro-test262-reduce.sh, which the
           # backfill workflow calls too — the loop lived in both YAMLs as a copy and the
-          # copies had already started to differ. It emits the finished entry: median of
-          # the per-rep means, every rep in samples[], and a refusal if the reps disagree
-          # about which tests they timed. See the script for why median and not min.
+          # copies had already started to differ. It emits one entry per series (the
+          # total plus one per top-level suite): median of the per-rep means, every rep
+          # in samples[], and a refusal if the reps disagree about which tests they
+          # timed. See the script for why median and not min.
           #
           # No anchor_ns_per_op: micro and macro are measured in the same run here, so
           # the profile's own anchor is the correct divisor. The backfill is the case
           # that isn't, and it passes MACRO_RECORD_ANCHOR=1.
-          entry="${RUNNER_TEMP}/t262.entry.json"
+          entries="${RUNNER_TEMP}/t262.entries.json"
           rc=0
-          "${{ steps.reducer.outputs.path }}" "${MACRO_COUNT:-3}" "$anchor_ns" "$entry" >/dev/null || rc=$?
+          "${{ steps.reducer.outputs.path }}" "${MACRO_COUNT:-3}" "$anchor_ns" "$entries" >/dev/null || rc=$?
           # 3 is "this engine passes nothing", a real answer about an old tree rather
           # than a failure of the measurement. Everything else stops the fold: this step
           # is continue-on-error so the micro snapshot still publishes, and the missing
@@ -236,7 +237,7 @@ jobs:
             exit "$rc"
           fi
 
-          jq --slurpfile e "$entry" '.benchmarks["test262.total"] = $e[0]' "$out" > "${out}.tmp"
+          jq --slurpfile e "$entries" '.benchmarks += $e[0]' "$out" > "${out}.tmp"
           mv "${out}.tmp" "$out"
 
       # Convert to the machine-keyed v2 layout. bench-ratchet still writes v1 —

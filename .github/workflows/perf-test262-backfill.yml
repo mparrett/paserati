@@ -205,10 +205,10 @@ jobs:
           # MACRO_RECORD_ANCHOR=1: this measurement is taken in a different run from
           # the profile's micro benchmarks, so it carries its own divisor. That is the
           # whole reason the field exists — see the injection step below.
-          entry="${RUNNER_TEMP}/t262.entry.json"
+          entries="${RUNNER_TEMP}/t262.entries.json"
           MACRO_RECORD_ANCHOR=1 "${{ steps.tools.outputs.reduce }}" \
-            "${MACRO_COUNT:-3}" "$anchor_ns" "$entry" >/dev/null
-          echo "target ${short_sha}: $(jq -c '{ns_per_op, ratio_to_anchor, set_hash, method}' "$entry")"
+            "${MACRO_COUNT:-3}" "$anchor_ns" "$entries" >/dev/null
+          echo "target ${short_sha}: $(jq -c 'map_values({ns_per_op, ratio_to_anchor, set_hash})' "$entries")"
 
           remote="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
           wt="${RUNNER_TEMP}/perf-data"
@@ -258,9 +258,9 @@ jobs:
 
           if jq -e '.machines' "$snap" >/dev/null 2>&1; then
             # shellcheck disable=SC2016  # $k is jq's parameter, bound by --arg below
-            target='.machines[$k].benchmarks["test262.total"]'
+            target='.machines[$k].benchmarks'
           else
-            target='.benchmarks["test262.total"]'
+            target='.benchmarks'
           fi
 
           # anchor_ns_per_op is what makes this injection honest. The measurement was
@@ -271,8 +271,8 @@ jobs:
           # profile advertises. Recording the divisor makes the correct choice
           # checkable — perf-fixratio -verify reads this field and holds the entry to
           # its own anchor.
-          jq --arg k "$this_key" --slurpfile e "$entry" \
-             "${target} = \$e[0]" "$snap" > "$snap.tmp"
+          jq --arg k "$this_key" --slurpfile e "$entries" \
+             "${target} += \$e[0]" "$snap" > "$snap.tmp"
           mv "$snap.tmp" "$snap"
 
           # Same gate the forward timeline publishes behind, run from the workflow's
