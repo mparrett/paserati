@@ -46,12 +46,47 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Before the target checkout, while the tree is still this workflow's own
+      # commit — a backfill target predates this script. Surfaces siblings that
+      # are about to be evicted rather than queued; never fails the job. See the
+      # script's header for why detection is the most a workflow can do, and why
+      # prevention belongs to the dispatcher.
+      - name: Check the perf-data writer queue
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/perf-writer-queue-check.sh "${{ github.repository }}"
+
       - name: Check out target ref
         env:
           TARGET_REF: ${{ github.event.inputs.ref || github.sha }}
         run: |
+          set -euo pipefail
+          # fetch-depth:0 pulls everything REACHABLE FROM A REF, which is not the
+          # same as everything. Orphan fork-CI commits are reachable from nothing
+          # on the remote, so `git checkout` fails with "unable to read tree
+          # <sha>" — accurate but unhelpful, a third of the way into a 30-minute
+          # job. 14 of the 47 existing snapshots sit on such commits. Name the
+          # cause and the remedy instead.
+          if ! git rev-parse --verify -q "${TARGET_REF}^{commit}" >/dev/null; then
+            git fetch --no-tags origin "$TARGET_REF" 2>/dev/null || true
+            if git rev-parse --verify -q 'FETCH_HEAD^{commit}' >/dev/null; then
+              git checkout --force FETCH_HEAD
+              exit 0
+            fi
+            cat >&2 <<MSG
+          ::error::target ${TARGET_REF} is not reachable from any ref on origin.
+
+          Nothing on the remote points at this commit, so the runner cannot fetch
+          it. Publish a temporary ref, re-dispatch, and delete it only after the
+          snapshot and the page have been verified:
+
+              git push origin ${TARGET_REF}:refs/heads/backfill/${TARGET_REF}
+          MSG
+            exit 1
+          fi
           # A short SHA is read by actions/checkout as a branch name and fails;
-          # fetch-depth:0 pulled everything, so resolve any committish locally.
+          # resolve any committish locally instead.
           git checkout --force "$TARGET_REF"
 
       # Corpus for the Test262 macro series (see "Add Test262 macro" below).
@@ -79,8 +114,6 @@ jobs:
           name="${stamp}-${short_sha}.json"
           out="${RUNNER_TEMP}/${name}"
 
-          # Kept in shell vars so the recorded provenance below can't drift from
-          # the flags actually used.
           count=3
           benchtime=1s
 
@@ -89,10 +122,18 @@ jobs:
             -baseline "${out}" \
             snapshot
 
-          # Record WHAT WAS MEASURED and HOW, so a later reader can tell a protocol
-          # change from an engine change. Neither was recoverable before: the page
-          # could detect a CPU change and a test-set change, but a benchtime or
-          # reducer change was invisible, and both have shifted over this series.
+          # Record WHAT WAS MEASURED, so a later reader can tell a diff-shaped
+          # cause from an engine change.
+          #
+          # HOW it was measured (method.reducer/count/benchtime) is no longer
+          # written here: bench-ratchet writes it itself, from the code that does
+          # the reducing and the flags it was actually given. This step used to
+          # assert reducer:"min" as a literal, which was true only for as long as
+          # bench-ratchet's unconditional min survived — nooga#22 makes mean the
+          # default with min opt-in, and on that day the literal would have gone
+          # on claiming "min" for snapshots reduced by mean. Provenance that can
+          # disagree with the thing it describes is worse than none, because it
+          # gets trusted.
           #
           # engine_files is the one that pays off soonest. Several of the largest
           # moves on this timeline sit on commits that touch no engine code at all
@@ -117,14 +158,17 @@ jobs:
 
           jq --arg s "$subject" --arg ca "$committed_at" \
              --argjson fc "${files_changed:-0}" --argjson ec "${engine_changed:-0}" \
-             --arg bt "$benchtime" --argjson ct "$count" \
              '. + {
                 commit: { subject: $s, committed_at: $ca,
-                          files_changed: $fc, engine_files_changed: $ec },
-                method: { benchtime: $bt, count: $ct, reducer: "min" }
+                          files_changed: $fc, engine_files_changed: $ec }
               }' "${out}" > "${out}.tmp" && mv "${out}.tmp" "${out}"
-          # reducer is bench-ratchet's contract (aggregateFromFile, locked by
-          # TestAggregateFromFileUsesMin). If that ever changes, change it here too.
+
+          # Fail rather than publish a snapshot with no protocol recorded: an
+          # unlabelled point is indistinguishable from one measured any other way,
+          # and this is the field the next reducer change will be diagnosed with.
+          jq -e '.method.reducer and .method.count and .method.benchtime' "${out}" >/dev/null \
+            || { echo "::error::bench-ratchet wrote no method provenance" >&2; exit 1; }
+          echo "method: $(jq -c '.method' "${out}")"
 
           echo "name=${name}" >> "$GITHUB_OUTPUT"
           echo "out=${out}" >> "$GITHUB_OUTPUT"

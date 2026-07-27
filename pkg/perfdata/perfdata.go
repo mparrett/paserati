@@ -7,8 +7,26 @@ type Baseline struct {
 	CapturedAt    string                    `json:"captured_at"`
 	CapturedAtSHA string                    `json:"captured_at_sha"`
 	Machine       Machine                   `json:"machine"`
+	Method        Method                    `json:"method,omitempty"`
 	Anchor        Anchor                    `json:"anchor"`
 	Benchmarks    map[string]BenchmarkEntry `json:"benchmarks"`
+}
+
+// Method records HOW a snapshot was measured, so a later reader can tell a
+// protocol change from an engine change. Both have moved over this series and
+// neither was recoverable: the page could detect a CPU change and a test-set
+// change, but a benchtime or reducer change was invisible.
+//
+// Reducer especially. It is written by the code that does the reducing rather
+// than asserted by whoever calls it, because the two drift: the timeline
+// workflow carried reducer:"min" as a literal that happened to match
+// bench-ratchet, and would have kept claiming "min" unchanged if the default
+// moved to mean. Provenance that can disagree with the thing it describes is
+// worse than none — it is trusted.
+type Method struct {
+	Reducer   string `json:"reducer,omitempty"`
+	Count     int    `json:"count,omitempty"`
+	Benchtime string `json:"benchtime,omitempty"`
 }
 
 // Machine fingerprints the host that captured a baseline.

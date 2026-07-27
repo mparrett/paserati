@@ -51,6 +51,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Runs before the target checkout, while the tree is still this workflow's
+      # commit — a backfill target predates this script.
+      - name: Check the perf-data writer queue
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/perf-writer-queue-check.sh "${{ github.repository }}"
+
       # Fail here, with the reason, rather than halfway through a 40-minute job.
       # Orphan fork-CI commits are not reachable from any remote ref, so
       # checkout@v4 never fetched them and `git checkout` dies with an opaque

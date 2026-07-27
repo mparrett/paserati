@@ -78,6 +78,11 @@ const (
 	anchorName          = "BenchmarkRatchetAnchor"
 	anchorPackage       = "github.com/nooga/paserati/pkg/vm"
 	schemaVersion       = 1
+	// reducerName names what aggregateFromFile actually does across -count
+	// repetitions, and is written into every snapshot's method.reducer. It lives
+	// next to the reduction so the two cannot drift; changing one without the
+	// other should be visibly wrong in review. Locked by TestAggregateFromFileUsesMin.
+	reducerName = "min"
 )
 
 // defaultPackages is the scope when no -packages flag is given.
@@ -162,6 +167,9 @@ func main() {
 		if err != nil {
 			die("aggregate: %v", err)
 		}
+		// Kept beside every other write so a snapshot's recorded protocol can't
+		// disagree with the flags that produced it.
+		current.Method.Count, current.Method.Benchtime = *count, *benchtime
 		if *shaOverride != "" {
 			current.CapturedAtSHA = *shaOverride
 		}
@@ -217,6 +225,7 @@ func main() {
 	if err != nil {
 		die("aggregate: %v", err)
 	}
+	current.Method.Count, current.Method.Benchtime = *count, *benchtime
 	if *shaOverride != "" {
 		current.CapturedAtSHA = *shaOverride
 	}
@@ -763,6 +772,9 @@ func buildCurrentBaseline(results []Result, anchor Result) Baseline {
 		CapturedAt:    time.Now().UTC().Format(time.RFC3339),
 		CapturedAtSHA: gitShortSHA(),
 		Machine:       m,
+		// Count/Benchtime are filled in by main from the flags actually passed;
+		// this function only knows how it reduced.
+		Method: perfdata.Method{Reducer: reducerName},
 		Anchor: AnchorRecord{
 			Name:       anchor.Name,
 			Package:    anchor.Package,

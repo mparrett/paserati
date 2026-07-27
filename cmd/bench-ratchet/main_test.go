@@ -95,6 +95,14 @@ func TestAggregateFromFileUsesMin(t *testing.T) {
 	if e.RatioToAnchor != 100.0 {
 		t.Errorf("RatioToAnchor = %.1f, want 100.0", e.RatioToAnchor)
 	}
+	// The snapshot must SAY it reduced by min, and say so because the reducer
+	// said it. This is the half that keeps provenance honest: the timeline
+	// workflow used to assert reducer:"min" itself, so changing the reduction
+	// above would have left every snapshot still claiming the old one.
+	if base.Method.Reducer != "min" {
+		t.Errorf("method.reducer = %q, want %q — the recorded provenance no longer "+
+			"matches the reduction this test just verified", base.Method.Reducer, "min")
+	}
 	if e.AllocsPerOp != 2 || e.BytesPerOp != 8 {
 		t.Errorf("allocs/bytes = %d/%d, want 2/8", e.AllocsPerOp, e.BytesPerOp)
 	}
