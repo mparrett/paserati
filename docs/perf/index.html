@@ -175,7 +175,12 @@
   </section>
 
   <footer>Source: <code>baseline.json</code> + <code>timeline/*.json</code>.
-    Rendered client-side; runs no benchmarks.<span id="cpunote"></span></footer>
+    Rendered client-side; runs no benchmarks.<span id="cpunote"></span>
+    <br>The shaded band is how much the plotted benchmarks <b class="bar">disagree with
+    each other</b> at that commit — not run-to-run error bars. There is one capture per
+    commit, so this page cannot show measurement uncertainty at all. The band therefore
+    also moves when the suite's composition changes, independently of anything the
+    engine did.</footer>
 </div>
 
 <script>
@@ -388,12 +393,25 @@ function titleFor(s) {
   // change the composition at exactly the snapshots where it appears, moving the
   // line for a reason unrelated to the engine. Test262 keeps its own tab.
   const micro = GROUPS.filter(g => g !== "Test262").flatMap(g => members[g] || []);
+  // ...and weight it by FAMILY, not by case. The suite is lopsided — GetOwn carries
+  // 18 of the 35 micro cases — so a flat mean over cases is a GetOwn index wearing a
+  // neutral name, and adding cases to one family silently re-weights every point in
+  // history. Averaging within a family first gives each family one vote, which is
+  // what a reader takes "Overall" to promise.
+  const microFamilyNames = GROUPS.filter(g => g !== "Test262").filter(g => (members[g] || []).length);
+  const microFamilies = microFamilyNames.map(g => members[g]);
 
-  // mean + ±1σ band across an arbitrary subset of series, per snapshot.
-  function meanBand(sub) {
+  // mean + ±1σ band across equally-weighted BUCKETS, per snapshot. Each bucket is
+  // averaged internally first, so weight follows the bucket rather than the number
+  // of cases inside it; one series per bucket gives a plain per-case mean.
+  function bandOver(buckets) {
     const mean = [], lo = [], hi = [];
     for (let j = 0; j < snaps.length; j++) {
-      const vals = sub.map(d => d.data[j]).filter(v => v != null);
+      const vals = [];
+      for (const b of buckets) {
+        const vs = b.map(d => d.data[j]).filter(v => v != null);
+        if (vs.length) vals.push(vs.reduce((a, c) => a + c, 0) / vs.length);
+      }
       if (!vals.length) { mean.push(null); lo.push(null); hi.push(null); continue; }
       const m = vals.reduce((a, b) => a + b, 0) / vals.length;
       const sd = Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / vals.length);
@@ -401,17 +419,30 @@ function titleFor(s) {
     }
     return { mean, lo, hi };
   }
+  const meanBand = sub => bandOver(sub.map(d => [d]));
+  // One definition of each mode's band, shared by the chart and the flagged-changes
+  // table so the two can't disagree.
+  const bandFor = mode => mode === "Overall" ? bandOver(microFamilies)
+                        : meanBand(mode === "All" ? series : (members[mode] || []));
 
   // Datasets for a mode: "Overall" (mean of all) · a group (that family's faint
   // members behind a bold mean + ±σ band) · "All" (every raw line).
   function datasetsFor(mode) {
     if (mode === "All") return [baseDS(), ...series];
     const sub = mode === "Overall" ? micro : (members[mode] || []);
-    const { mean, lo, hi } = meanBand(sub);
-    const faint = mode === "Overall" ? [] : sub.map(d => ({ ...d,
+    const { mean, lo, hi } = bandFor(mode);
+    // Overall's faint lines are the three FAMILY means rather than the 35 individual
+    // cases. That is what the bold line is actually averaging now, and drawing them
+    // makes the weighting auditable: you can see which family is moving Overall
+    // instead of having to trust the label. (A ±σ over three numbers is a crude
+    // statistic to read off a band; three lines are not.)
+    const faintSrc = mode === "Overall"
+      ? microFamilyNames.map(g => ({ label: g + " mean", data: bandOver([members[g]]).mean }))
+      : sub;
+    const faint = faintSrc.map(d => ({ ...d,
       label: "_" + d.label,   // hidden from legend/tooltip — visual context only
       borderColor: "rgba(150,170,190,0.22)", backgroundColor: "transparent",
-      borderWidth: 0.8, pointRadius: 0, pointHoverRadius: 0 }));
+      borderWidth: mode === "Overall" ? 1.4 : 0.8, pointRadius: 0, pointHoverRadius: 0 }));
     const meanDS = { label: mode === "Overall" ? "mean" : mode + " mean", data: mean,
       borderColor: "#ece0c8", backgroundColor: "#ece0c8", borderWidth: 2.5,
       pointRadius: 2.5, pointHoverRadius: 4, tension: .25 };
@@ -429,9 +460,18 @@ function titleFor(s) {
       meanDS.pointBackgroundColor = labels.map((_, j) => setChangedAt(j) ? amber : "#ece0c8");
       meanDS.pointBorderColor     = labels.map((_, j) => setChangedAt(j) ? amber : "#ece0c8");
     }
+    // Name the band for what it measures. It is the spread of the mean's own
+    // members at each snapshot — how much the benchmarks disagree — NOT run-to-run
+    // measurement uncertainty, which this page never captures (one capture per
+    // commit). The distinction is load-bearing: the band visibly widens at
+    // 24f6f817 only because the suite grew 30 -> 35 cases, which is composition,
+    // and a reader who takes it for error bars reads that as the pipeline getting
+    // noisier. See the footer note.
+    const bandLabel = mode === "Overall" ? "± spread across families"
+                                         : "± spread across benchmarks";
     return [ baseDS(), ...faint,
       { label: "_band", data: lo, borderColor: "transparent", pointRadius: 0, fill: false },
-      { label: "± std dev", data: hi, borderColor: "transparent", pointRadius: 0,
+      { label: bandLabel, data: hi, borderColor: "transparent", pointRadius: 0,
         backgroundColor: "rgba(236,224,200,0.12)", fill: "-1" },
       meanDS ];
   }
@@ -440,14 +480,13 @@ function titleFor(s) {
   // The mean the flagged-changes table measures deltas against — same series the
   // chart draws for that mode, so the table can never disagree with the picture.
   function meanFor(mode) {
-    if (mode === "All") return meanBand(series).mean;
-    return meanBand(mode === "Overall" ? micro : (members[mode] || [])).mean;
+    return bandFor(mode).mean;
   }
   const benchCount = snaps.map(s =>
     Object.keys(s.benchmarks || {}).filter(n => !n.startsWith("test262")).length);
 
   return { labels, snaps, datasetsFor, groupCount, anySetChange, setChangedAt,
-           meanFor, benchCount, t262Hash };
+           meanFor, benchCount, t262Hash, familyCount: microFamilies.length };
   }
 
   let view = buildView(modalCpu ? allSnaps.filter(s => cpuOf(s) === modalCpu) : allSnaps);
@@ -520,6 +559,13 @@ function titleFor(s) {
     }
     const c = view.groupCount(mode), lead = mode === "All" ? "" : "mean of ";
     countEl.textContent = `${lead}${c} benchmark${c === 1 ? "" : "s"} · ${view.snaps.length} snapshots`;
+    // Say that Overall is weighted by family. Without it the tab reads as a flat
+    // average over cases, which is what it used to be and what the case count still
+    // suggests on its own.
+    if (mode === "Overall") {
+      countEl.textContent = `family-balanced mean · ${c} benchmarks in ` +
+        `${view.familyCount} families · ${view.snaps.length} snapshots`;
+    }
     if (mode === "Test262" && view.anySetChange) countEl.textContent += " · △ = contributing test set changed";
     renderFlags(mode);
   }
