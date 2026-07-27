@@ -100,13 +100,18 @@ jobs:
           BUDGET: ${{ github.event.inputs.budget || '10' }}
         run: |
           set -euo pipefail
+          # --gate none is explicit, not a default we're inheriting: this job
+          # REPORTS a verdict and must not fail the PR on it. The evidence for
+          # gating is two captured no-op fixtures at zero false positives, which
+          # justifies the design but not yet other people's red builds. Flip to
+          # --gate median when a maintainer decides to make it authoritative.
           python3 scripts/ab_repeat.py \
             --base ../wt-base --head ../wt-head \
             --n "$N" --count 3 --benchtime 500ms \
-            --budget "$BUDGET" --confirm-k 2 \
+            --budget "$BUDGET" --confirm-k 2 --gate none \
             --out "${RUNNER_TEMP}/ab-out" | tee "${RUNNER_TEMP}/ab-report.txt"
           {
-            echo '## Repeat A/B (variance-reduced) — same-code probe'
+            echo '## Repeat A/B (variance-reduced) — same-code probe · informational, does not gate'
             echo
             echo '```'
             cat "${RUNNER_TEMP}/ab-report.txt"

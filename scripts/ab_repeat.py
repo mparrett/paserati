@@ -4,8 +4,21 @@
 Runs N interleaved base/head benchmark snapshots across two pre-built worktrees
 and aggregates per-family deltas two ways:
 
-  strategy 1 (median-of-N): gate if |median delta| > budget
+  strategy 1 (median-of-N): gate if median delta > budget
   strategy 2 (confirm):     gate if >= K of N runs exceed +budget
+
+Both are ONE-DIRECTIONAL: only regressions (head slower than base) gate. An
+improvement never fails a PR, and benchmark noise on shared runners is itself
+one-directional-slower, so a two-sided test would spend its false-positive
+budget on the side where nothing can go wrong.
+
+GATING IS OPT-IN, and off by default: `--gate none` (the default) reports the
+verdict and exits 0. The evidence for the gate is two captured no-op fixtures
+showing zero false positives (scripts/test_ab_repeat.py) — enough to justify
+the design, not enough to fail other people's PRs on. Pass --gate median (or
+confirm/either) once a maintainer decides to make it authoritative. To override
+a suspected false positive, re-run with a larger --n, or with --gate none to
+land on the report alone.
 
 Motivation (nooga/paserati#21): a single-shot base-vs-head A/B on shared CI
 runners is too heavy-tailed to gate on — the register-only BenchmarkRatchetAnchor
@@ -21,7 +34,7 @@ code.
 Each side is snapshotted with `bench-ratchet ... snapshot`, which emits
 ratio_to_anchor per benchmark; delta = head_ratio / base_ratio - 1.
 """
-import argparse, json, os, statistics, subprocess
+import argparse, json, os, statistics, subprocess, sys
 
 
 def _read_snapshot(path):
@@ -49,7 +62,10 @@ def _summarize(deltas, budget, confirm_k, strip="github.com/nooga/paserati/"):
     """Per-family gate rows from {family: [delta% per cycle]}: the median-of-N
     gate (gate_median = median > budget) and the confirm-K-of-N gate. This is the
     real gate decision — scripts/test_ab_repeat.py drives it on captured samples
-    to prove single-shot phantoms vanish under median-of-N."""
+    to prove single-shot phantoms vanish under median-of-N.
+
+    Both comparisons are `> budget`, not `abs(...) > budget`: see the module
+    docstring on why only regressions gate."""
     rows = []
     for fam, ds in deltas.items():
         med = statistics.median(ds)
@@ -84,6 +100,14 @@ def main():
                     help="runs that must exceed budget to gate (strategy 2)")
     ap.add_argument("--timeout", default="15m")
     ap.add_argument("--out", default="ab-out")
+    # Which verdict, if any, controls the exit status. Default off: the script has
+    # always computed these verdicts and always exited 0, so a workflow could not
+    # fail a PR on a detected regression and the name "gate" was a promise the code
+    # did not keep. Making it selectable fixes the contract without silently turning
+    # on a gate that two no-op fixtures do not yet justify.
+    ap.add_argument("--gate", choices=("none", "median", "confirm", "either"),
+                    default="none",
+                    help="which strategy sets a non-zero exit (default none: report only)")
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
 
@@ -92,6 +116,11 @@ def main():
 
     deltas = {}          # family -> [delta% per cycle]
     anchors = []         # (base_anchor, head_anchor) per cycle
+    # Families that appeared on only one side. `set(b) & set(h)` below silently
+    # drops them, which is the right arithmetic (there's no pair to difference) but
+    # the wrong silence: a PR that renames or removes a benchmark then shows a clean
+    # report for a suite that no longer covers what it used to.
+    base_only, head_only = set(), set()
     for i in range(1, args.n + 1):
         print(f"::group::cycle {i}/{args.n}", flush=True)
         # Counterbalance the measurement order (ABBA): odd cycles bench base
@@ -106,6 +135,8 @@ def main():
             h, ha = snapshot(args.head, bench_args, f"{args.out}/head_{i}.json", args.timeout)
             b, ba = snapshot(args.base, bench_args, f"{args.out}/base_{i}.json", args.timeout)
         anchors.append((ba, ha))
+        base_only |= set(b) - set(h)
+        head_only |= set(h) - set(b)
         for fam in set(b) & set(h):
             if b[fam]:
                 deltas.setdefault(fam, []).append((h[fam] / b[fam] - 1.0) * 100)
@@ -113,8 +144,13 @@ def main():
 
     rows = _summarize(deltas, args.budget, args.confirm_k)
 
+    strip = "github.com/nooga/paserati/"
+    mismatch = {"base_only": sorted(f.replace(strip, "") for f in base_only),
+                "head_only": sorted(f.replace(strip, "") for f in head_only)}
+
     json.dump({"budget": args.budget, "confirm_k": args.confirm_k,
-               "count": args.count, "n": args.n,
+               "count": args.count, "n": args.n, "gate": args.gate,
+               "benchmark_set_mismatch": mismatch,
                "anchors": anchors, "rows": rows},
               open(f"{args.out}/aggregate.json", "w"), indent=2)
 
@@ -142,6 +178,28 @@ def main():
           f"median={len(med_hits)}  confirm={len(conf_hits)}  "
           f"(both should be 0 on a no-op PR)")
 
+    # A changed benchmark set makes the comparison partial, whichever way the
+    # deltas came out — report it next to the verdict rather than in the artifact
+    # only, since the table above cannot show a family it never paired.
+    if mismatch["base_only"] or mismatch["head_only"]:
+        print(f"\nBENCHMARK SET MISMATCH — compared {len(rows)} paired families")
+        for side, fams in (("base only (dropped in head)", mismatch["base_only"]),
+                           ("head only (added in head)", mismatch["head_only"])):
+            if fams:
+                print(f"  {side}: {', '.join(fams)}")
+
+    fired = {"none": [], "median": med_hits, "confirm": conf_hits,
+             "either": sorted(set(med_hits) | set(conf_hits))}[args.gate]
+    if args.gate == "none":
+        print(f"\nverdict: informational (--gate none) — "
+              f"{len(set(med_hits) | set(conf_hits))} families would gate under some strategy")
+        return 0
+    if fired:
+        print(f"\nverdict: FAIL under --gate {args.gate} — {len(fired)} families: {fired}")
+        return 1
+    print(f"\nverdict: pass under --gate {args.gate}")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

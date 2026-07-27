@@ -52,6 +52,44 @@ def test_single_shot_would_false_positive():
         assert phantoms, f"{os.path.basename(path)}: expected a single-shot phantom, got none"
 
 
+def _drive_main(tmpdir, gate, head_delta_pct):
+    """Run ab_repeat.main() end-to-end with the benchmarking stubbed out, and
+    return its exit status. head_delta_pct is applied to every family on the head
+    side, so the verdict is known in advance and only the wiring is under test."""
+    import ab_repeat
+
+    def fake_snapshot(worktree, bench_args, out, timeout):
+        scale = 1.0 + head_delta_pct / 100.0 if "head" in worktree else 1.0
+        return {"github.com/nooga/paserati/pkg/vm.BenchmarkFake": 2.0 * scale}, 1.0
+
+    argv = ["ab_repeat.py", "--base", "/tmp/wt-base", "--head", "/tmp/wt-head",
+            "--n", "3", "--budget", "10", "--gate", gate, "--out", tmpdir]
+    real_snapshot, real_argv = ab_repeat.snapshot, sys.argv
+    try:
+        ab_repeat.snapshot, sys.argv = fake_snapshot, argv
+        return ab_repeat.main()
+    finally:
+        ab_repeat.snapshot, sys.argv = real_snapshot, real_argv
+
+
+def test_gate_none_never_fails():
+    """The default must report a regression and still exit 0 — a workflow that
+    only wants the report cannot be failed by turning the budget down."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        assert _drive_main(d, "none", head_delta_pct=50.0) == 0
+
+
+def test_gate_median_fails_on_regression():
+    """--gate median must actually set the exit status. This is the blocker the
+    flag exists to close: the verdict was computed and then discarded, so no
+    workflow could fail a PR on it."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        assert _drive_main(d, "median", head_delta_pct=50.0) == 1
+        assert _drive_main(d, "median", head_delta_pct=0.0) == 0
+
+
 def _main():
     for path in FIXTURES:
         d, deltas = _load(path)
@@ -65,8 +103,11 @@ def _main():
         print(f"  median-of-N false positives: {len(mfp):2d}  {mfp}")
     test_median_of_n_gates_zero_false_positives()
     test_single_shot_would_false_positive()
+    test_gate_none_never_fails()
+    test_gate_median_fails_on_regression()
     print("\nPASS: single-shot trips the budget on real no-op data; "
-          "median-of-N gates 0 on every captured run.")
+          "median-of-N gates 0 on every captured run; --gate none exits 0 on a "
+          "regression and --gate median exits 1.")
 
 
 if __name__ == "__main__":
