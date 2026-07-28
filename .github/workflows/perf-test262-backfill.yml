@@ -28,6 +28,10 @@ on:
       ref:
         description: 'Commit SHA to backfill the test262 macro into (must already have a snapshot)'
         required: true
+      only_tiers:
+        description: 'Optional: comma-separated CPU-model substrings (e.g. "7763"). Abort in seconds unless this runner matches one. Empty = accept any tier.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -49,6 +53,42 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
+      # Which CPU tier this dispatch drew is not decided until the inject step
+      # runs `perf-migrate -print-key` — roughly nine minutes in, after the macro.
+      # That is the authoritative answer and it stays where it is. But runner
+      # assignment is a lottery weighted hard toward EPYC-7763 (53 of 67 snapshots;
+      # the two Intel tiers are 3 between them), so filling a named tier means
+      # re-dispatching until it comes up, and every miss currently costs a full
+      # measurement to discover.
+      #
+      # This is a PREFILTER, not a second implementation of the machine key. On
+      # linux `perfdata.detectCPUModel` returns the first `model name` line of
+      # /proc/cpuinfo verbatim, which is the same string read here — and unlike a
+      # shell re-derivation of the key, a wrong answer here cannot mis-file a
+      # measurement into another tier's profile. It can only abort before anything
+      # is measured or written, or let a run proceed to the real check.
+      #
+      # Runs before checkout deliberately: /proc/cpuinfo needs no repo.
+      - name: Fast-fail unless this runner is a wanted tier
+        if: github.event.inputs.only_tiers != ''
+        env:
+          ONLY_TIERS: ${{ github.event.inputs.only_tiers }}
+        run: |
+          set -euo pipefail
+          model="$(awk -F': ' '/^model name/ {print $2; exit}' /proc/cpuinfo)"
+          echo "runner CPU: ${model:-unknown}"
+          IFS=',' read -ra want <<< "$ONLY_TIERS"
+          for w in "${want[@]}"; do
+            w="${w//[[:space:]]/}"
+            [ -n "$w" ] || continue
+            if printf '%s' "$model" | grep -qiF -- "$w"; then
+              echo "matches wanted tier '${w}' — continuing"
+              exit 0
+            fi
+          done
+          echo "::error::runner tier '${model}' is not in {${ONLY_TIERS}}. Aborted before the macro; nothing measured, nothing written. Re-dispatch." >&2
+          exit 1
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
