@@ -3,7 +3,7 @@
 # entries the timeline stores. Emits a {name: entry} object to merge into a
 # snapshot's `benchmarks`.
 #
-# Usage: scripts/macro-test262-reduce.sh <count> <anchor_ns> [entries-out.json]
+# Usage: scripts/macro-test262-reduce.sh <anchor_ns> [entries-out.json]
 #
 # Emits on stdout (and to <entries-out.json> if given). Everything else — driver
 # output, per-rep lines, annotations — goes to stderr.
@@ -66,6 +66,8 @@
 # main, so on main that detection is a thing you can run, not a thing that runs.
 #
 # Env:
+#   MACRO_COUNT          reps to run and reduce over (default 3). Both callers used
+#                        to spell this default themselves and pass it positionally.
 #   MACRO_DRIVER         driver run once per rep (default ./scripts/macro-test262.sh).
 #                        The driver must come from the tree being MEASURED; this
 #                        reducer is post-processing and should come from the
@@ -78,9 +80,9 @@
 #                        timeline measures both in one run and must leave it unset.
 set -euo pipefail
 
-count="${1:?usage: macro-test262-reduce.sh <count> <anchor_ns> [entry-out.json]}"
-anchor_ns="${2:?usage: macro-test262-reduce.sh <count> <anchor_ns> [entry-out.json]}"
-entry_out="${3:-}"
+anchor_ns="${1:?usage: macro-test262-reduce.sh <anchor_ns> [entries-out.json]}"
+entries_out="${2:-}"
+count="${MACRO_COUNT:-3}"
 
 driver="${MACRO_DRIVER:-./scripts/macro-test262.sh}"
 work="${MACRO_WORK:-${RUNNER_TEMP:-/tmp}}"
@@ -116,70 +118,74 @@ for rep in $(seq 1 "$count"); do
   echo "  macro rep ${rep}/${count}: $(jq -c '{stats: .stats, series: (.series | map_values(.passed))}' <<<"$(tail -n 1 "$reps")")" >&2
 done
 
-n="$(grep -c . "$reps" || true)"
-[ "$n" -eq "$count" ] || { echo "::error::expected ${count} macro reps, got ${n}" >&2; exit 1; }
+# Each guard refuses the whole reduction rather than reduce across reps that
+# measured different things, and dumps the reps first: by this point ~9 minutes of
+# suite time has produced exactly the evidence needed to diagnose the disagreement,
+# and it dies with the runner otherwise.
+refuse() {
+  echo "::error::macro reps disagree on $1 — refusing to reduce across them" >&2
+  cat "$reps" >&2
+  exit 2
+}
+# Distinct values of a jq expression across the reps. The idiom was written out
+# three times with slight variation, which is the copy-paste-with-drift this script
+# exists to remove from the workflows.
+distinct() { jq -r "$1" "$reps" | sort -u | wc -l | tr -d ' '; }
 
 # Zero passing is a real outcome for an old or broken engine, not a fault here.
-max_passed="$(jq -s 'map(.series["test262.total"].passed // 0) | max' "$reps")"
-[ "${max_passed:-0}" -gt 0 ] || { echo "no passing tests over ${count} reps" >&2; exit 3; }
+# Checked over EVERY series rather than just the total: the reduction divides per
+# series (ns / passed), so a suite passing nothing divides by zero and jq dies with
+# an internals message instead of taking the graceful exit this code exists for.
+min_passed="$(jq -s '[.[].series[].passed // 0] | min' "$reps")"
+[ "${min_passed:-0}" -gt 0 ] || { echo "no passing tests over ${count} reps" >&2; exit 3; }
 
-# Every rep must report the same set of series. A suite appearing in one rep and
-# not another means the shard enumeration was truncated, and the median would then
-# be taken over a different number of observations per series without saying so.
-if [ "$(jq -c '.series | keys' "$reps" | sort -u | wc -l | tr -d ' ')" -gt 1 ]; then
-  echo "::error::macro reps disagree on which suites ran — refusing to reduce across them" >&2
-  jq -c '.series | keys' "$reps" >&2
-  exit 2
-fi
+# A suite present in one rep and not another means the shard enumeration was
+# truncated; the median would then be over a different number of observations per
+# series without saying so.
+[ "$(distinct '.series | keys | join(",")')" -eq 1 ] || refuse "which suites ran"
 
-# Composition is checked per series, not just on the total. A drift in built-ins
-# offset by one in language would leave the total's count and hash unchanged while
-# both suite series moved, so checking only the total would miss exactly the case
-# the per-suite records were added to expose.
-# Fall back to the pass count when no rep carries a set_hash: a tree predating
-# SetHash gives a weaker check, and a weaker check is still worth making.
-for name in $(jq -r '.series | keys[]' "$reps" | sort -u); do
-  distinct_hashes="$(jq -r --arg n "$name" '.series[$n].set_hash' "$reps" | sort -u | wc -l | tr -d ' ')"
-  named_hashes="$(jq -r --arg n "$name" '.series[$n].set_hash' "$reps" | sort -u | grep -c . || true)"
-  distinct_counts="$(jq -r --arg n "$name" '.series[$n].passed' "$reps" | sort -u | wc -l | tr -d ' ')"
-  if [ "$distinct_hashes" -gt 1 ] || { [ "$named_hashes" -eq 0 ] && [ "$distinct_counts" -gt 1 ]; }; then
-    echo "::error::macro reps disagree on ${name}'s passing set — refusing to reduce across them" >&2
-    jq -c --arg n "$name" '{series: $n, passed: .series[$n].passed, set_hash: .series[$n].set_hash}' "$reps" >&2
-    exit 2
-  fi
-done
+# Total is the corpus size, so a disagreement means the reps ran different corpora
+# — a different .test262-rev, or a truncated enumeration. The pass rate that would
+# produce is not a rate of anything.
+[ "$(distinct '.stats.total')" -eq 1 ] || refuse "the corpus size"
 
-# Total is the corpus size, so a disagreement means the reps ran different suites
-# — a different .test262-rev or a truncated shard enumeration. That is not noise
-# and the pass rate it would produce is not a rate of anything.
-if [ "$(jq -r '.stats.total' "$reps" | sort -u | wc -l | tr -d ' ')" -gt 1 ]; then
-  echo "::error::macro reps disagree on the corpus size — refusing to reduce across them" >&2
-  jq -c '.stats' "$reps" >&2
-  exit 2
-fi
+# Composition, PER SERIES rather than on the total alone: a drift in built-ins
+# offset by one in language leaves the total's count and hash unchanged while both
+# suite series move — exactly the case the per-suite records were added to expose.
+# Where no rep carries a set_hash (a tree predating SetHash) the pass count is the
+# weaker fallback, and a weaker check is still worth making. One jq over all series
+# rather than three per series.
+bad="$(jq -sr '
+  [ (.[0].series | keys[]) as $k
+    | ([.[] | .series[$k].set_hash] | unique) as $h
+    | ([.[] | .series[$k].passed]   | unique) as $p
+    | select(($h | length) > 1
+             or (($h | map(select(. != "")) | length) == 0 and ($p | length) > 1))
+    | $k ]
+  | join(", ")' "$reps")"
+[ -z "$bad" ] || refuse "the passing set of ${bad}"
 
 # The metric is the MEAN per-test ns (summed_ns / passing_count), not the sum: the
 # sum conflates per-test speed with pass-count (#26). Reduce over the per-rep means
 # rather than the per-rep sums — identical while the pass count is stable, which the
 # check above has just established, and correct rather than incidentally correct.
 entry="$(jq -s --argjson a "$anchor_ns" --argjson stamp "${MACRO_RECORD_ANCHOR:-0}" '
-  def median($xs):
-    ($xs | length) as $n
-    | ($xs | sort) as $s
-    | if $n % 2 == 1 then $s[($n / 2 | floor)]
-      else ($s[($n / 2 | floor) - 1] + $s[($n / 2 | floor)]) / 2 end;
-
   # $obs: one observation per rep for a single series. $withstats: whether the
   # whole-run conformance counts belong on this entry (the total only).
+  #
+  # One sort serves both the median and the rep the conformance counts come from.
+  # They used to come from two independent sorts, with a comment explaining that for
+  # an odd count they pick the same rep — now they do so by construction. That is
+  # the property being relied on: the number and the set it was measured over
+  # describe one run rather than a composite. total/passed are identical across reps
+  # by the checks above; the failed/timeout split can wobble when a slow failure
+  # lands either side of the bound, which is why per_test_timeout travels with it.
   def build($obs; $ptt; $withstats):
-    ($obs | length)                        as $n
-    | median($obs | map(.mean))            as $med
-    # Conformance comes from the middle rep — for an odd count, the very rep that
-    # supplied the median, so the number and the set it was measured over describe
-    # one run rather than a composite. total/passed are identical across reps by
-    # the checks above; the failed/timeout split can wobble when a slow failure
-    # lands either side of the bound, which is why per_test_timeout travels with it.
-    | ($obs | sort_by(.mean) | .[(($n - 1) / 2 | floor)]) as $mid
+    ($obs | sort_by(.mean))                as $ranked
+    | ($ranked | length)                   as $n
+    | ($ranked[(($n - 1) / 2 | floor)])    as $mid
+    | (if $n % 2 == 1 then $mid.mean
+       else ($mid.mean + $ranked[$n / 2].mean) / 2 end) as $med
     | {
         ns_per_op: $med,
         allocs_per_op: 0,
@@ -219,10 +225,13 @@ entry="$(jq -s --argjson a "$anchor_ns" --argjson stamp "${MACRO_RECORD_ANCHOR:-
               $name == "test262.total") })
 ' "$reps")"
 
-if [ -n "$entry_out" ]; then
-  printf '%s\n' "$entry" > "$entry_out"
+# Written to the file when one is named, stdout otherwise. Both callers pass a path
+# and redirect stdout away, so emitting to both was writing to /dev/null every time.
+if [ -n "$entries_out" ]; then
+  printf '%s\n' "$entry" > "$entries_out"
+else
+  printf '%s\n' "$entry"
 fi
-printf '%s\n' "$entry"
 
 jq -r 'to_entries[] |
        "\(.key): median \(.value.ns_per_op) ns/test over \(.value.samples[0].iterations) passing " +

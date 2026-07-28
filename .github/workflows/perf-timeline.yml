@@ -57,18 +57,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/perf-writer-queue-check.sh "${{ github.repository }}"
 
-      # Also before the target checkout, and for the same reason. The reducer is
-      # post-processing — it turns N driver runs into one benchmark entry and never
-      # touches the engine — so it belongs to this workflow's commit, not to the tree
-      # being measured, exactly like bench-test262. Staging it here is what lets a
-      # dispatch against an older commit reduce the same way a forward run does.
+      # The reducer orchestrates the driver but never touches the engine, so it
+      # belongs to this workflow's commit rather than the tree being measured —
+      # the same tool/engine split bench-test262 uses, and what lets a dispatch
+      # against an older commit reduce the same way a forward run does.
+      #
+      # A worktree rather than a copy taken before the checkout. Both work today,
+      # but the copy was correct only because of step ORDER: "Check out target ref"
+      # below overwrites this working tree in place, so moving or inserting a step
+      # would silently start staging the TARGET commit's reducer — reintroducing
+      # the forward-and-backfill-reduce-differently bug this script exists to
+      # prevent, with nothing to catch it. A worktree is pinned to a sha and does
+      # not care where it sits in the sequence.
       - name: Stage the macro reducer from this workflow's commit
         id: reducer
         run: |
           set -euo pipefail
-          cp scripts/macro-test262-reduce.sh "${RUNNER_TEMP}/macro-test262-reduce.sh"
-          chmod +x "${RUNNER_TEMP}/macro-test262-reduce.sh"
-          echo "path=${RUNNER_TEMP}/macro-test262-reduce.sh" >> "$GITHUB_OUTPUT"
+          tool="${RUNNER_TEMP}/reducer-src"
+          rm -rf "$tool"
+          git worktree add --detach "$tool" "${{ github.sha }}" >/dev/null
+          chmod +x "$tool/scripts/macro-test262-reduce.sh"
+          echo "path=$tool/scripts/macro-test262-reduce.sh" >> "$GITHUB_OUTPUT"
 
       - name: Check out target ref
         env:
@@ -198,8 +207,8 @@ jobs:
           echo "out=${out}" >> "$GITHUB_OUTPUT"
 
 
-      # Fold the Test262 macro-benchmark into the snapshot as a `test262.total`
-      # series. Adds ~4 min/snapshot. Non-fatal: a macro hiccup must never drop
+      # Fold the Test262 macro-benchmark into the snapshot as the `test262.*` series
+      # — the total plus one per top-level suite. Adds ~4 min/snapshot. Non-fatal: a macro hiccup must never drop
       # the micro snapshot that's already captured above. Backfilling pre-PR#10
       # commits needs scripts/macro-test262.sh grafted in — they don't ship it.
       # Unconditional here; upstream gates this on [perf-test262].
@@ -213,19 +222,16 @@ jobs:
           ./setup-test262.sh
           anchor_ns="$(jq -r '.anchor.ns_per_op' "$out")"
 
-          # The reps are run and reduced by scripts/macro-test262-reduce.sh, which the
-          # backfill workflow calls too — the loop lived in both YAMLs as a copy and the
-          # copies had already started to differ. It emits one entry per series (the
-          # total plus one per top-level suite): median of the per-rep means, every rep
-          # in samples[], and a refusal if the reps disagree about which tests they
-          # timed. See the script for why median and not min.
+          # Reps are run and reduced by scripts/macro-test262-reduce.sh, shared with
+          # the backfill so the two cannot reduce differently. It emits one entry per
+          # series. See the script's header for the reducer choice and the guards.
           #
           # No anchor_ns_per_op: micro and macro are measured in the same run here, so
           # the profile's own anchor is the correct divisor. The backfill is the case
           # that isn't, and it passes MACRO_RECORD_ANCHOR=1.
           entries="${RUNNER_TEMP}/t262.entries.json"
           rc=0
-          "${{ steps.reducer.outputs.path }}" "${MACRO_COUNT:-3}" "$anchor_ns" "$entries" >/dev/null || rc=$?
+          "${{ steps.reducer.outputs.path }}" "$anchor_ns" "$entries" >/dev/null || rc=$?
           # 3 is "this engine passes nothing", a real answer about an old tree rather
           # than a failure of the measurement. Everything else stops the fold: this step
           # is continue-on-error so the micro snapshot still publishes. The missing
@@ -233,7 +239,7 @@ jobs:
           # which lives on the `tools/perf-runbook` branch, not main, so nothing
           # surfaces the gap automatically. Check it after a run that skipped.
           if [ "$rc" -eq 3 ]; then
-            echo "test262.total: no passing tests — skipped"
+            echo "test262: no passing tests — skipped"
             exit 0
           elif [ "$rc" -ne 0 ]; then
             exit "$rc"

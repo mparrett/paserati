@@ -224,6 +224,11 @@ const MIXED   = "Micro+Test262";  // every series: the micro families plus the m
 const MICRO   = "All Micro";      // the micro families only — see scopeOf
 const BASE = "baseline.json";
 const MANIFEST = "timeline/index.json";
+// The macro's roll-up series. Named once because five places have to agree on it:
+// the break detection, the aggregate selection, the sample band, the count text and
+// the conformance chip. It IS test262.built-ins + test262.language, so any consumer
+// aggregating the family takes this OR the suites, never both.
+const T262_TOTAL = "test262.total";
 // Series colours drawn from the sticker, kept quiet so the amber baseline line
 // and the hero carry the identity.
 const SERIES = ["#6fb7c4", "#c98a3a", "#9bbf6f", "#d8402a", "#e0cba0", "#cf6f8a", "#8ab0d8"];
@@ -262,11 +267,17 @@ function fmtNS(v) {
 // profile, so flatten it back to the v1 shape the rest of this file expects and
 // keep the machine key alongside. A file with several profiles (a hand-merged one,
 // or a future accumulator) would need one point each — take the first and say so
-// rather than silently dropping the rest.
+// rather than silently dropping the rest. The warning is the "say so": the fields
+// below recorded the situation but nothing surfaced them, so the disclaimer was
+// unkept for as long as it has existed.
 function flatten(s) {
   if (!s || !s.machines) return s;                       // already v1
   const keys = Object.keys(s.machines);
   if (!keys.length) return s;
+  if (keys.length > 1) {
+    console.warn(`timeline: ${keys.length} profiles in one snapshot; plotting ` +
+                 `${keys[0]} and dropping ${keys.slice(1).join(", ")}`);
+  }
   const prof = s.machines[keys[0]];
   return Object.assign({}, prof, {
     version: s.version,
@@ -411,7 +422,7 @@ function titleFor(s) {
   // set_hash; where it differs between two consecutive points the mean isn't over
   // the same workload, so the slope across that gap isn't a pure engine delta.
   // Surface those boundaries so the line isn't read as one continuous series.
-  const t262Hash = snaps.map(s => s.benchmarks?.["test262.total"]?.set_hash || null);
+  const t262Hash = snaps.map(s => s.benchmarks?.[T262_TOTAL]?.set_hash || null);
   const setChangedAt = j => j > 0 && !!t262Hash[j] && !!t262Hash[j - 1] && t262Hash[j] !== t262Hash[j - 1];
 
   // The same argument applies to HOW the point was reduced, not just to what it was
@@ -420,7 +431,7 @@ function titleFor(s) {
   // min sits at the fast edge of the reps, median in the middle. Each entry records
   // its own reducer (older points were stamped retroactively), so the boundary is
   // readable from the data rather than from a date in a commit message.
-  const t262Reducer = snaps.map(s => s.benchmarks?.["test262.total"]?.method?.reducer || null);
+  const t262Reducer = snaps.map(s => s.benchmarks?.[T262_TOTAL]?.method?.reducer || null);
   const reducerChangedAt = j => j > 0 && !!t262Reducer[j] && !!t262Reducer[j - 1] && t262Reducer[j] !== t262Reducer[j - 1];
 
   // Both are "the number either side of this step does not mean the same thing", so
@@ -451,7 +462,7 @@ function titleFor(s) {
   // also what keeps the aggregate series continuous across the snapshot where the
   // per-suite records first appear, since every earlier point has only the total.
   // Breakdown still draws all three; that is what a breakdown is for.
-  const t262Total = (members["Test262"] || []).find(d => d.benchName === "test262.total");
+  const t262Total = (members["Test262"] || []).find(d => d.benchName === T262_TOTAL);
   const t262Agg = t262Total ? [t262Total] : (members["Test262"] || []);
 
   // Overall is the CONTINUOUS micro suite only — Test262 is opt-in and sparse
@@ -485,7 +496,6 @@ function titleFor(s) {
     }
     return { mean, lo, hi };
   }
-  const meanBand = sub => bandOver(sub.map(d => [d]));
 
   // Run-to-run spread, from the reps the reducer keeps in samples[].
   //
@@ -509,14 +519,26 @@ function titleFor(s) {
     return { lo, hi, any: hi.some(v => v != null) };
   }
 
+  // Computed once per view: the inputs are the snapshots and the reference, both
+  // fixed for a view's lifetime, and drawnBandFor is called from both datasetsFor
+  // and yRangeFor on every mode switch.
+  const t262SampleBand = t262Total ? sampleBand(T262_TOTAL) : null;
+
   // What a mode actually draws as its band: measurement spread where the data
   // supports it, composition spread otherwise. Shared with yRangeFor so the axis
   // is fitted to the band that gets drawn rather than to a different one.
+  //
+  // The condition is "the mean is over ONE series", not "this is the Test262 tab".
+  // That is the property doing the work: bandOver of a single bucket has an sd of
+  // zero by construction, so the composition band is degenerate and the run band is
+  // the only one carrying information. Keying on the tab name hid that, and would
+  // have gone on hiding it for the next single-series aggregate.
   function drawnBandFor(mode) {
     const { mean, lo, hi } = bandFor(mode);
-    if (mode === "Test262" && t262Total) {
-      const sb = sampleBand("test262.total");
-      if (sb.any) return { mean, lo: sb.lo, hi: sb.hi, kind: "runs" };
+    const flat = bucketsFor(mode).flat();
+    if (flat.length === 1 && flat[0].benchName === T262_TOTAL && t262SampleBand?.any) {
+      const sb = t262SampleBand;
+      return { mean, lo: sb.lo, hi: sb.hi, kind: "runs" };
     }
     return { mean, lo, hi, kind: "members" };
   }
@@ -586,8 +608,6 @@ function titleFor(s) {
     const total = items.reduce((a, it) => a + it.pp, 0);
     return { items, total, exact: dropped === 0 };
   }
-  // One definition of each mode's band, shared by the chart and the flagged-changes
-  // table so the two can't disagree.
   // Family-balanced for BOTH aggregate scopes. They previously differed in method
   // as well as scope — All Micro averaged families, Micro+Test262 averaged cases —
   // so the combined tab was the GetOwn-dominated shape All Micro had just been
@@ -595,8 +615,9 @@ function titleFor(s) {
   // them, which is what the two names claim. Test262 joins as its own family: one
   // macro-benchmark should not carry 1/36 of a score it is half the point of.
   // ONE definition of what a mode averages, used by the chart, the y-range and the
-  // flagged-changes table. Test262 contributes its total rather than its members
-  // wherever it is aggregated, for the double-counting reason above.
+  // flagged-changes table, so the three cannot disagree. Test262 contributes its
+  // total rather than its members wherever it is aggregated, for the double-counting
+  // reason above.
   function bucketsFor(mode) {
     if (mode === MICRO) return microFamilies;
     if (mode === MIXED) return [...microFamilies, t262Agg].filter(b => b.length);
@@ -604,12 +625,9 @@ function titleFor(s) {
     return (members[mode] || []).map(d => [d]);
   }
   const bandFor = mode => bandOver(bucketsFor(mode));
-  // Aggregating "All" mixes the micro suite with the Test262 macro, which are
-  // different kinds of measurement. It is offered because a reader may want it,
-  // and labelled where it is shown rather than quietly presented as one score.
 
-  // Datasets for a mode: an aggregate scope · a group (that family's faint
-  // members behind a bold mean + ±σ band) · "All" (every raw line).
+  // Datasets for a mode at a given detail level: an aggregate (faint members behind
+  // a bold mean and a band) or a breakdown (every series in scope, drawn raw).
   // The series a mode is *about*, independent of how they're drawn.
   // The combined scope, named for what it holds. "All" said nothing about the one
   // fact a reader needs — that it is the micro suite PLUS a macro-benchmark, two
@@ -627,9 +645,9 @@ function titleFor(s) {
     if (detail === "breakdown") return [baseDS(), ...scopeOf(mode)];
     const sub = scopeOf(mode);
     const { mean, lo, hi, kind } = drawnBandFor(mode);
-    // Overall's faint lines are the three FAMILY means rather than the 35 individual
+    // All Micro's faint lines are the three FAMILY means rather than the 35 individual
     // cases. That is what the bold line is actually averaging now, and drawing them
-    // makes the weighting auditable: you can see which family is moving Overall
+    // makes the weighting auditable: you can see which family is moving the mean
     // instead of having to trust the label. (A ±σ over three numbers is a crude
     // statistic to read off a band; three lines are not.)
     const faintSrc = mode === MICRO
@@ -642,19 +660,21 @@ function titleFor(s) {
     const meanDS = { label: mode === MICRO ? "mean" : mode + " mean", data: mean,
       borderColor: "#ece0c8", backgroundColor: "#ece0c8", borderWidth: 2.5,
       pointRadius: 2.5, pointHoverRadius: 4, tension: .25 };
-    // On the Test262 tab, dash the span into a set-changed point and flag it with a
-    // triangle, so a jump caused by the workload changing reads differently from a
-    // real engine move. (Amber, matching the baseline guide's "watch this" hue.)
+    // On the Test262 tab, dash and triangle any span into a point where the number
+    // changes MEANING — the contributing test set changed, or the reducer did — so
+    // it reads differently from a real engine move. (Amber, matching the baseline
+    // guide's "watch this" hue.) The tooltip names which of the two it was.
     if (mode === "Test262" && anyBreak) {
       const amber = "#d08a3c";
       meanDS.segment = {
         borderColor: c => breakAt(c.p1DataIndex) ? amber : undefined,
         borderDash:  c => breakAt(c.p1DataIndex) ? [4, 3] : undefined,
       };
-      meanDS.pointStyle           = labels.map((_, j) => breakAt(j) ? "triangle" : "circle");
-      meanDS.pointRadius          = labels.map((_, j) => breakAt(j) ? 5 : 2.5);
-      meanDS.pointBackgroundColor = labels.map((_, j) => breakAt(j) ? amber : "#ece0c8");
-      meanDS.pointBorderColor     = labels.map((_, j) => breakAt(j) ? amber : "#ece0c8");
+      const marks = labels.map((_, j) => breakAt(j));
+      meanDS.pointStyle           = marks.map(m => m ? "triangle" : "circle");
+      meanDS.pointRadius          = marks.map(m => m ? 5 : 2.5);
+      meanDS.pointBackgroundColor = marks.map(m => m ? amber : "#ece0c8");
+      meanDS.pointBorderColor     = marks.map(m => m ? amber : "#ece0c8");
     }
     // Name the band for what it measures, because the page now draws two different
     // things under one shape. On the micro tabs it is the spread of the mean's own
@@ -680,7 +700,7 @@ function titleFor(s) {
   // replaces a groupCount() that was exported and never read, and that counted every
   // series in scope: on Micro+Test262 that would now advertise 38 benchmarks for a
   // mean over 36, because test262's two per-suite records live inside its total.
-  const aggCount = m => bucketsFor(m).flat().length;
+  const aggCount = m => bucketsFor(m).reduce((n, b) => n + b.length, 0);
 
   // The mean the flagged-changes table measures deltas against — same series the
   // chart draws for that mode, so the table can never disagree with the picture.
@@ -691,8 +711,7 @@ function titleFor(s) {
     Object.keys(s.benchmarks || {}).filter(n => !n.startsWith("test262")).length);
 
   return { labels, snaps, datasetsFor, aggCount, anyBreak, setChangedAt, reducerChangedAt,
-           t262SuiteCount: Math.max(0, (members["Test262"] || []).length - (t262Total ? 1 : 0)),
-           meanFor, benchCount, t262Hash, familyCount: microFamilies.length,
+           meanFor, benchCount, familyCount: microFamilies.length,
            contributionsAt, scopeOf, yRangeFor };
   }
 
@@ -846,7 +865,7 @@ function titleFor(s) {
     if (effective === "breakdown") {
       countEl.textContent = `${c} benchmark${c === 1 ? "" : "s"}, drawn separately · ${view.snaps.length} snapshots`;
     } else if (mode === MICRO) {
-      // Say that Overall is weighted by family. Without it the tab reads as a flat
+      // Say that All Micro is weighted by family. Without it the tab reads as a flat
       // average over cases, which is what it used to be and what the case count
       // still suggests on its own.
       countEl.textContent = `family-balanced mean · ${agg} benchmarks in ` +
@@ -855,11 +874,13 @@ function titleFor(s) {
       // Aggregating All averages the micro suite together with the Test262 macro.
       // Offered, but never presented as a single clean score.
       countEl.textContent = `family-balanced mean · ${agg} benchmarks in ${view.familyCount + 1} families incl. Test262 macro · ${view.snaps.length} snapshots`;
-    } else if (mode === "Test262" && view.t262SuiteCount) {
-      // "mean of 3 benchmarks" would be a lie here: the total is not averaged with
-      // built-ins and language, it IS them. Say what the line is and what Breakdown
-      // adds.
-      countEl.textContent = `test262.total · ${view.t262SuiteCount} suites in breakdown · ` +
+    } else if (c - agg > 0) {
+      // "mean of 3 benchmarks" would be a lie on Test262: the total is not averaged
+      // with built-ins and language, it IS them. Derived from the two counts already
+      // in hand rather than exported separately — c - agg is the number of series
+      // drawn but not averaged, which is 0 (and this branch is skipped) for a tab
+      // whose members are all peers, and for a corpus with no total to aggregate on.
+      countEl.textContent = `${T262_TOTAL} · ${c - agg} suites in breakdown · ` +
         `${view.snaps.length} snapshots`;
     } else {
       countEl.textContent = `mean of ${agg} benchmark${agg === 1 ? "" : "s"} · ${view.snaps.length} snapshots`;
@@ -1113,9 +1134,11 @@ function renderReadout(baseline, snaps, selectedCpu) {
   // could never be formed. Snapshots from 2026-07-27 carry both. Read back to front
   // rather than off `latest`, because the field is younger than the corpus and the
   // newest snapshot on a filtered tier may predate it.
-  const conf = [...snaps].reverse()
-    .map(s => s.benchmarks?.["test262.total"]?.stats)
-    .find(st => st && st.total > 0);
+  let conf = null;
+  for (let i = snaps.length - 1; i >= 0 && !conf; i--) {
+    const st = snaps[i].benchmarks?.[T262_TOTAL]?.stats;
+    if (st && st.total > 0) conf = st;
+  }
   if (conf) {
     chips.push(`test262 <b>${(conf.passed / conf.total * 100).toFixed(1)}%</b> ` +
                `(${conf.passed.toLocaleString()} / ${conf.total.toLocaleString()})`);
