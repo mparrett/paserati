@@ -690,14 +690,13 @@ function titleFor(s) {
   const benchCount = snaps.map(s =>
     Object.keys(s.benchmarks || {}).filter(n => !n.startsWith("test262")).length);
 
-  return { labels, snaps, datasetsFor, aggCount, anyBreak, breakAt, setChangedAt, reducerChangedAt,
+  return { labels, snaps, datasetsFor, aggCount, anyBreak, setChangedAt, reducerChangedAt,
            t262SuiteCount: Math.max(0, (members["Test262"] || []).length - (t262Total ? 1 : 0)),
            meanFor, benchCount, t262Hash, familyCount: microFamilies.length,
            contributionsAt, scopeOf, yRangeFor };
   }
 
   let view = buildView(modalCpu ? allSnaps.filter(s => cpuOf(s) === modalCpu) : allSnaps);
-  const breakAt = j => view.breakAt(j);
 
   const ink = "#a3906c", grid = "#2a2114";
   const chart = new Chart(document.getElementById("chart"), {
@@ -741,8 +740,18 @@ function titleFor(s) {
               const a = view.snaps[items[0]?.dataIndex]?.anchor?.ns_per_op;
               return a ? `anchor ${fmtNS(a)}` : "";
             },
-            afterLabel: c => (c.dataset.label === "Test262 mean" && setChangedAt(c.dataIndex))
-              ? "△ test set changed here — slope isn't a pure engine delta" : "",
+            // Say which discontinuity the △ marks. Both mean "the number either
+            // side of this step does not measure the same thing", but they are
+            // different repairs: a set change is the workload moving under the
+            // metric, a reducer change is the protocol moving.
+            afterLabel: c => {
+              if (c.dataset.label !== "Test262 mean") return "";
+              if (view.setChangedAt(c.dataIndex))
+                return "△ test set changed here — slope isn't a pure engine delta";
+              if (view.reducerChangedAt(c.dataIndex))
+                return "△ macro reducer changed here — slope isn't a pure engine delta";
+              return "";
+            },
           },
         },
       },

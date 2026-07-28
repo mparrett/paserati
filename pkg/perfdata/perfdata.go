@@ -44,11 +44,17 @@ type Method struct {
 // signal in its own right, and the denominator that turns the entry's passing count
 // into a rate.
 type Test262Stats struct {
-	Total      int   `json:"total"`
-	Passed     int   `json:"passed"`
-	Failed     int   `json:"failed"`
-	Timeouts   int   `json:"timeouts"`
-	Skipped    int   `json:"skipped"`
+	Total    int `json:"total"`
+	Passed   int `json:"passed"`
+	Failed   int `json:"failed"`
+	Timeouts int `json:"timeouts"`
+	Skipped  int `json:"skipped"`
+	// DurationNS is the SUM of per-test durations over every result — passing,
+	// failing and timed out alike — not the run's wall-clock time and not the
+	// timing metric. The metric (BenchmarkEntry.NSPerOp for test262.total) sums
+	// only the passing, non-timed-out set, so this is always the larger number:
+	// 159.6s against 117.3s on the first snapshot to carry both. Useful as a
+	// rough cost-of-a-run figure; not comparable to ns_per_op * passed.
 	DurationNS int64 `json:"duration_ns,omitempty"`
 }
 

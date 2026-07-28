@@ -228,8 +228,10 @@ jobs:
           "${{ steps.reducer.outputs.path }}" "${MACRO_COUNT:-3}" "$anchor_ns" "$entries" >/dev/null || rc=$?
           # 3 is "this engine passes nothing", a real answer about an old tree rather
           # than a failure of the measurement. Everything else stops the fold: this step
-          # is continue-on-error so the micro snapshot still publishes, and the missing
-          # macro point shows up in perf-gaps.sh section [2].
+          # is continue-on-error so the micro snapshot still publishes. The missing
+          # macro point is then detectable with scripts/perf-gaps.sh section [2] —
+          # which lives on the `tools/perf-runbook` branch, not main, so nothing
+          # surfaces the gap automatically. Check it after a run that skipped.
           if [ "$rc" -eq 3 ]; then
             echo "test262.total: no passing tests — skipped"
             exit 0

@@ -35,7 +35,8 @@ concurrency:
   # Share the perf-data writer lock with the timeline so snapshots don't collide.
   # NOTE: this serializes writers but does NOT queue them — GitHub keeps one
   # pending run per group, so a second dispatch evicts the first's pending run.
-  # Dispatch one target at a time and wait. See scripts/perf-dispatch.sh.
+  # Dispatch one target at a time and wait. See scripts/perf-dispatch.sh on the
+  # `tools/perf-runbook` branch — it is not on main.
   group: perf-timeline-main
   cancel-in-progress: false
 

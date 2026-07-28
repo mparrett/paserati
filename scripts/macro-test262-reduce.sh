@@ -60,8 +60,10 @@
 # comment that "passing count and set_hash are run-invariant" and checked nothing.
 # Empirically they are invariant — 38 reference-tier points share one set_hash — so
 # this should approximately never fire, and if it does the point genuinely is not
-# comparable to its neighbours. A missing macro point is visible in perf-gaps.sh
-# section [2]; a silently mis-composed one is not.
+# comparable to its neighbours. A missing macro point is detectable — it is what
+# section [2] of scripts/perf-gaps.sh reports — where a silently mis-composed one
+# is not. Note that tool lives on the `tools/perf-runbook` branch and is NOT on
+# main, so on main that detection is a thing you can run, not a thing that runs.
 #
 # Env:
 #   MACRO_DRIVER         driver run once per rep (default ./scripts/macro-test262.sh).
