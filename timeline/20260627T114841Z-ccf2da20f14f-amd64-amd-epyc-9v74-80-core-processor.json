@@ -1062,24 +1062,120 @@
           ]
         },
         "test262.total": {
-          "ns_per_op": 2960198.173189507,
+          "ns_per_op": 2941967.0347524974,
           "allocs_per_op": 0,
           "bytes_per_op": 0,
-          "ratio_to_anchor": 2103907.727924312,
+          "ratio_to_anchor": 2072293.7384277422,
           "method": {
-            "reducer": "min",
-            "count": 3
+            "reducer": "median",
+            "count": 3,
+            "per_test_timeout": "1.2s"
           },
-          "anchor_ns_per_op": 1.407000,
+          "stats": {
+            "total": 47291,
+            "passed": 40141,
+            "failed": 7138,
+            "timeouts": 12,
+            "skipped": 0,
+            "duration_ns": 161396070645
+          },
           "samples": [
             {
               "iterations": 40141,
-              "ns_per_op": 2960198.173189507,
-              "ratio_to_anchor": 2103907.727924312,
-              "anchor_ns_per_op": 1.407000
+              "ns_per_op": 2941967.0347524974,
+              "ratio_to_anchor": 2072293.7384277422,
+              "captured_at": "2026-07-28T04:21:41Z",
+              "anchor_ns_per_op": 1.419667
+            },
+            {
+              "iterations": 40141,
+              "ns_per_op": 2946194.261104606,
+              "ratio_to_anchor": 2075271.356666462,
+              "captured_at": "2026-07-28T04:24:25Z",
+              "anchor_ns_per_op": 1.419667
+            },
+            {
+              "iterations": 40141,
+              "ns_per_op": 2904102.772128248,
+              "ratio_to_anchor": 2045622.5101578385,
+              "captured_at": "2026-07-28T04:27:06Z",
+              "anchor_ns_per_op": 1.419667
             }
           ],
-          "set_hash": "9812300bd970d4b1"
+          "set_hash": "9812300bd970d4b1",
+          "anchor_ns_per_op": 1.419667
+        },
+        "test262.built-ins": {
+          "ns_per_op": 3221282.2183061237,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "ratio_to_anchor": 2269040.7104666964,
+          "method": {
+            "reducer": "median",
+            "count": 3,
+            "per_test_timeout": "1.2s"
+          },
+          "samples": [
+            {
+              "iterations": 16967,
+              "ns_per_op": 3240059.265751164,
+              "ratio_to_anchor": 2282267.0849932865,
+              "captured_at": "2026-07-28T04:21:41Z",
+              "anchor_ns_per_op": 1.419667
+            },
+            {
+              "iterations": 16967,
+              "ns_per_op": 3221282.2183061237,
+              "ratio_to_anchor": 2269040.7104666964,
+              "captured_at": "2026-07-28T04:24:25Z",
+              "anchor_ns_per_op": 1.419667
+            },
+            {
+              "iterations": 16967,
+              "ns_per_op": 3175674.516355278,
+              "ratio_to_anchor": 2236915.0768139837,
+              "captured_at": "2026-07-28T04:27:06Z",
+              "anchor_ns_per_op": 1.419667
+            }
+          ],
+          "set_hash": "5dd4f9d9bfb1d0a8",
+          "anchor_ns_per_op": 1.419667
+        },
+        "test262.language": {
+          "ns_per_op": 2723716.802451023,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "ratio_to_anchor": 1918560.3401720424,
+          "method": {
+            "reducer": "median",
+            "count": 3,
+            "per_test_timeout": "1.2s"
+          },
+          "samples": [
+            {
+              "iterations": 23174,
+              "ns_per_op": 2723716.802451023,
+              "ratio_to_anchor": 1918560.3401720424,
+              "captured_at": "2026-07-28T04:21:41Z",
+              "anchor_ns_per_op": 1.419667
+            },
+            {
+              "iterations": 23174,
+              "ns_per_op": 2744786.762621904,
+              "ratio_to_anchor": 1933401.820724088,
+              "captured_at": "2026-07-28T04:24:25Z",
+              "anchor_ns_per_op": 1.419667
+            },
+            {
+              "iterations": 23174,
+              "ns_per_op": 2705269.692629671,
+              "ratio_to_anchor": 1905566.3705852649,
+              "captured_at": "2026-07-28T04:27:06Z",
+              "anchor_ns_per_op": 1.419667
+            }
+          ],
+          "set_hash": "d4e3920f686991f6",
+          "anchor_ns_per_op": 1.419667
         }
       },
       "commit": {
