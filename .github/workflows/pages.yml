@@ -120,6 +120,36 @@ jobs:
           [ -s docs/perf/timeline/index.json ] || echo "[]" > docs/perf/timeline/index.json
           echo "manifest: $(cat docs/perf/timeline/index.json)"
 
+      - name: Map each snapshot commit to its engine tree
+        run: |
+          set -euo pipefail
+          # These benchmarks measure the RUNTIME, which is the pkg/ tree — not the
+          # commit. A commit touching only CI, docs or this dashboard cannot move
+          # any of them, yet it still gets a snapshot and renders as its own point,
+          # so apparatus noise reads as a step change. Nine consecutive June
+          # commits sit 6.67% apart on one tier with a byte-identical engine
+          # between them, and two of those were carried as regressions for a month.
+          #
+          # Emit the pkg/ tree hash per commit and let the page collapse runs of
+          # identical engines into one point. Keyed by the sha12 that the filename
+          # carries and the page already parses. Unreachable commits are absent
+          # from /tmp/ordered.txt, so they never reach here.
+          : > /tmp/engine.txt
+          cut -f2 /tmp/ordered.txt | while read -r f; do
+            sha="$(printf '%s' "${f%.json}" | cut -d- -f2)"
+            # Several tiers share a commit; hash it once.
+            grep -q "^${sha} " /tmp/engine.txt && continue
+            tree="$(git ls-tree "$sha" pkg | git hash-object --stdin)"
+            # No pkg/ at that commit would hash every such commit identically and
+            # group them as one engine. Fall back to the sha, which groups with
+            # nothing — an unknown engine must never merge points.
+            if [ -z "$(git ls-tree "$sha" pkg)" ]; then tree="$sha"; fi
+            printf '%s %s\n' "$sha" "${tree:0:12}" >> /tmp/engine.txt
+          done
+          jq -Rn '[inputs | split(" ") | {key: .[0], value: .[1]}] | from_entries' \
+            < /tmp/engine.txt > docs/perf/timeline/engine.json
+          echo "engine map: $(jq 'length' docs/perf/timeline/engine.json) commit(s), $(jq '[.[]] | unique | length' docs/perf/timeline/engine.json) distinct engine(s)"
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/perf

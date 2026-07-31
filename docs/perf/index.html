@@ -179,6 +179,10 @@
     <div id="detail" class="toggle" role="group" aria-label="Detail level"></div>
   </div>
   <div class="controls controls-cpu">
+    <span class="ctl-label">Points</span>
+    <div id="points" class="toggle" role="group" aria-label="Point grouping"></div>
+  </div>
+  <div class="controls controls-cpu">
     <span class="ctl-label">Machine</span>
     <div id="cpus" class="toggle" role="group" aria-label="Machine tier"></div>
   </div>
@@ -224,6 +228,9 @@ const MIXED   = "Micro+Test262";  // every series: the micro families plus the m
 const MICRO   = "All Micro";      // the micro families only — see scopeOf
 const BASE = "baseline.json";
 const MANIFEST = "timeline/index.json";
+// sha12 -> hash of that commit's pkg/ tree, emitted by pages.yml. Absent on a
+// page built before that step existed, which degrades to per-commit points.
+const ENGINE = "timeline/engine.json";
 // The macro's roll-up series. Named once because five places have to agree on it:
 // the break detection, the aggregate selection, the sample band, the count text and
 // the conformance chip. It IS test262.built-ins + test262.language, so any consumer
@@ -293,7 +300,10 @@ function stampParts(s) {
 // and the tooltip carries the identity.
 function labelFor(s) {
   const m = stampParts(s);
-  return m ? `${m[2]}-${m[3]} ${m[4]}:${m[5]}` : (s.captured_at || "").slice(0, 10);
+  const at = m ? `${m[2]}-${m[3]} ${m[4]}:${m[5]}` : (s.captured_at || "").slice(0, 10);
+  // A collapsed run is several commits at one point; the axis says how many so
+  // the reader can see that the series is not one-point-per-commit.
+  return s.run ? `${at} ×${s.run.n}` : at;
 }
 // Tooltip: the identity the axis gave up, plus the full stamp. Load-bearing where
 // a rebased stack puts several commits in the same minute — the axis labels are
@@ -303,13 +313,24 @@ function titleFor(s) {
   const sha = (s.captured_at_sha || "").slice(0, 8);
   const m = stampParts(s);
   const when = m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]} UTC` : (s.captured_at || "");
+  // For a run, the identity is the span rather than one sha — and saying the
+  // engine is identical is the whole point, since it is what licenses plotting
+  // these commits as a single population.
+  if (s.run) {
+    const ends = `${s.run.shas[0]}..${s.run.shas[s.run.shas.length - 1]}`;
+    return `${s.run.n} commits, identical engine · ${ends} · from ${when}`;
+  }
   return sha ? `${sha} · ${when}` : when;
 }
 
 (async function main() {
-  let baseline, files, tombstoned;
+  let baseline, files, tombstoned, engineMap;
   try { baseline = await getJSON(BASE); } catch { baseline = { benchmarks: {}, machine: {}, anchor: {} }; }
   try { files = await getJSON(MANIFEST); } catch { files = []; }
+  // Missing on a page deployed before pages.yml emitted it. An empty map makes
+  // every runKeyOf null, so nothing groups and the chart is per-commit as before
+  // — degrade to the old behaviour rather than to a broken one.
+  try { engineMap = await getJSON(ENGINE); } catch { engineMap = {}; }
   // Snapshots whose commit is no longer reachable from HEAD. pages.yml keeps them
   // out of the manifest (they aren't points on this branch's history and can't be
   // re-measured), but they still exist on perf-data — so say how many rather than
@@ -361,6 +382,114 @@ function titleFor(s) {
   // Fixed tab set, so the tabs don't appear and vanish as the selected tier
   // changes which benchmark families happen to be present.
   const GROUPS = ["GetOwn", "Prototype", "Workloads", "Test262"];
+
+  // ---- Collapse runs of identical-engine commits into one point ----
+  //
+  // The series is indexed by commit; what it measures is the pkg/ tree. A commit
+  // that only touches CI, docs or this page cannot move any of these numbers, but
+  // it still gets a snapshot and its own point — so apparatus noise between two
+  // identical engines renders as a step change and then a recovery.
+  //
+  // That is not hypothetical. Nine consecutive commits in June 2026 carry a
+  // byte-identical pkg/ tree and sit 6.67% apart on one tier; two of them were
+  // logged as >+5% regressions for a month before anyone compared the trees.
+  //
+  // Grouping is by MAXIMAL CONSECUTIVE RUN, not globally by hash: an engine tree
+  // recurs after a revert, and two runs separated by real work are two
+  // populations that happen to share a build, not one series.
+  const engineOf = s => engineMap[(s.captured_at_sha || "").slice(0, 12)] || null;
+
+  // A run also breaks wherever the numbers stop being commensurable. Tier is the
+  // hard one — the anchor does not normalize across CPU models, so a run may
+  // never span two — and a changed test262 passing set or reducer is the same
+  // "these do not mean the same thing" boundary the chart already marks with △.
+  // Averaging across one would produce a point that means nothing, quietly.
+  //
+  // A break needs BOTH sides KNOWN, matching setChangedAt/reducerChangedAt below:
+  // 20 of the corpus's snapshots record no set_hash, and treating absent as
+  // different splits runs on missing metadata rather than on a real change —
+  // reading absence as evidence, which is exactly what mergeRun refuses to do.
+  // It cuts the other way too: an unrecorded set change can now hide inside a
+  // run. That is the same exposure the △ marks already carry, and matching their
+  // rule keeps one convention on this page rather than two that disagree.
+  const t262Of = s => s.benchmarks?.[T262_TOTAL];
+  function breaksBetween(a, b) {
+    const ea = engineOf(a), eb = engineOf(b);
+    if (!ea || !eb || ea !== eb) return true;      // unknown engine merges with nothing
+    if (cpuOf(a) !== cpuOf(b)) return true;
+    const ta = t262Of(a), tb = t262Of(b);
+    if (ta?.set_hash && tb?.set_hash && ta.set_hash !== tb.set_hash) return true;
+    const ra = ta?.method?.reducer, rb = tb?.method?.reducer;
+    if (ra && rb && ra !== rb) return true;
+    return false;
+  }
+
+  function collapseRuns(list) {
+    const runs = [];
+    for (const s of list) {
+      const last = runs[runs.length - 1];
+      // Compare against the run's LAST member, not its first: the break rules are
+      // about adjacent points, and the △ marks they mirror are drawn the same way.
+      if (last && !breaksBetween(last[last.length - 1], s)) last.push(s);
+      else runs.push([s]);
+    }
+    return runs.map(r => (r.length === 1 ? r[0] : mergeRun(r)));
+  }
+
+  // The plotted value is the MEDIAN MEMBER of the run — the whole entry from one
+  // real measurement, not a field-by-field median.
+  //
+  // That distinction is load-bearing. Medianing ratio_to_anchor and ns_per_op
+  // independently lets them come from different members, which breaks the
+  // ratio == ns_per_op / anchor invariant the corpus is verified against; doing
+  // exactly that during session-capture development produced 210 violations. One
+  // member, chosen by ratio, cannot disagree with itself.
+  //
+  // Median rather than mean because the noise here is a bulk plus a heavy right
+  // tail: the median rejects a bad draw where a mean absorbs it. It is also the
+  // rule the corpus's own reducer moved to.
+  function mergeRun(ms) {
+    const names = new Set();
+    for (const s of ms) for (const n of Object.keys(s.benchmarks || {})) names.add(n);
+
+    const benchmarks = {};
+    for (const n of names) {
+      // Only over members that HAVE this benchmark. Test262 is sparse in the
+      // corpus, so a run can be half macro and half not; counting the absences
+      // would treat "not measured" as data.
+      const present = ms.filter(s => s.benchmarks?.[n]?.ratio_to_anchor > 0);
+      if (!present.length) continue;
+      const ordered = present
+        .map((s, i) => [s.benchmarks[n].ratio_to_anchor, i])
+        .sort((a, b) => a[0] - b[0]);
+      // Lower-middle for an even count, so the winner is always a real member.
+      const src = present[ordered[Math.floor((ordered.length - 1) / 2)][1]].benchmarks[n];
+      benchmarks[n] = Object.assign({}, src, {
+        // The members become the point's samples, so the existing run-spread band
+        // draws min..max ACROSS THE RUN. For a grouped point that supersedes the
+        // per-snapshot rep spread rather than competing with it: the members
+        // differ by everything the reps differ by, plus the between-job term the
+        // reps are structurally unable to see.
+        samples: present.map(s => ({
+          ratio_to_anchor: s.benchmarks[n].ratio_to_anchor,
+          ns_per_op: s.benchmarks[n].ns_per_op,
+          captured_at: s.captured_at,
+          sha: (s.captured_at_sha || "").slice(0, 8),
+        })),
+        method: Object.assign({}, src.method, {
+          reducer: "median", count: present.length, over: "engine-run",
+        }),
+      });
+    }
+
+    // Inherit the FIRST member's identity: the run's point sits where the engine
+    // first appeared, which is the commit that could actually have caused a
+    // change. `file` carries the stamp that labelFor and the sort both read.
+    return Object.assign({}, ms[0], {
+      benchmarks,
+      run: { n: ms.length, shas: ms.map(s => (s.captured_at_sha || "").slice(0, 8)) },
+    });
+  }
 
   // Everything downstream is derived from the selected subset, so it's rebuilt
   // when the tier changes rather than computed once.
@@ -1057,16 +1186,31 @@ function titleFor(s) {
   const note = document.getElementById("cpunote");
   let cpuSel = modalCpu || CPU_ALL;
 
+  // Grouped is the DEFAULT, because per-commit is the view that misleads: it
+  // draws a point for commits that cannot have moved the number and invites
+  // reading the gap between two identical engines as a change. Per-commit stays
+  // one click away — it is the right view for locating which snapshot a run's
+  // spread came from.
+  const POINTS = [["engine", "Engine runs"], ["commit", "Per commit"]];
+  let grouping = "engine";
+  let collapsedFrom = 0;   // snapshots feeding the current view, for the note
+
   function setCpu(sel) {
     cpuSel = cpuChoices.includes(sel) ? sel : (modalCpu || CPU_ALL);
     const subset = cpuSel === CPU_ALL ? allSnaps : allSnaps.filter(s => cpuOf(s) === cpuSel);
-    view = buildView(subset);
+    // Collapse AFTER the tier filter, never before: a run may not span tiers, and
+    // filtering first is what guarantees it. In the mixed "Any" view the tier is
+    // part of the run key instead, so the guarantee holds there too.
+    const points = grouping === "engine" ? collapseRuns(subset) : subset;
+    collapsedFrom = subset.length;
+    view = buildView(points);
     chart.data.labels = view.labels;
     for (const c of cpuChoices) {
       const on = c === cpuSel;
       cpuBtns[c].setAttribute("aria-pressed", on);
       cpuBtns[c].classList.toggle("on", on);
     }
+    paintPoints();
     renderReadout(baseline, view.snaps, cpuSel === CPU_ALL ? null : cpuSel);
     if (note) {
       let t;
@@ -1077,6 +1221,13 @@ function titleFor(s) {
       } else {
         const off = allSnaps.length - subset.length;
         t = off ? ` · ${off} point${off === 1 ? "" : "s"} on other tiers hidden (anchor unreliable off ${cpuShort(cpuSel)})` : "";
+      }
+      // Say how many snapshots went into how many points. Without it the chart
+      // silently shows fewer points than the corpus holds, which is the same
+      // class of quiet misrepresentation this grouping exists to fix.
+      const merged = collapsedFrom - view.snaps.length;
+      if (merged > 0) {
+        t += ` · ${collapsedFrom} snapshots in ${view.snaps.length} points — consecutive commits with an identical engine are one point`;
       }
       if (tombstoned.length) {
         t += ` · ${tombstoned.length} snapshot${tombstoned.length === 1 ? "" : "s"} excluded: commit unreachable from HEAD (kept on perf-data, see unreachable.json)`;
@@ -1094,6 +1245,29 @@ function titleFor(s) {
     b.onclick = () => setCpu(c);
     cpuEl.appendChild(b); cpuBtns[c] = b;
   }
+
+  const pointsEl = document.getElementById("points");
+  const pointBtns = {};
+  // No engine map means nothing can group, so offering the choice would be a
+  // control that does nothing. Hide it and leave the chart per-commit.
+  const canGroup = Object.keys(engineMap).length > 0;
+  if (!canGroup) { grouping = "commit"; pointsEl.closest(".controls").hidden = true; }
+  for (const [k, labelText] of POINTS) {
+    const b = document.createElement("button");
+    b.className = "seg"; b.textContent = labelText;
+    b.title = k === "engine"
+      ? "Consecutive commits with a byte-identical pkg/ tree are one point; the band is their spread"
+      : "One point per snapshot, including commits that cannot have changed the engine";
+    b.onclick = () => { grouping = k; setCpu(cpuSel); };
+    pointsEl.appendChild(b); pointBtns[k] = b;
+  }
+  function paintPoints() {
+    for (const [k] of POINTS) {
+      const on = k === grouping;
+      pointBtns[k].setAttribute("aria-pressed", on);
+      pointBtns[k].classList.toggle("on", on);
+    }
+  }
   // Match the ?mode= param case-insensitively: the tab names are capitalized now,
   // but old links used lowercase (?mode=all / ?mode=overall) — honor those.
   const want = (new URLSearchParams(location.search).get("mode") || "").toLowerCase();
@@ -1105,6 +1279,11 @@ function titleFor(s) {
       || MICRO;
   const wantDetail = (new URLSearchParams(location.search).get("detail") || "").toLowerCase();
   if (DETAILS.some(([k]) => k === wantDetail)) detail = wantDetail;
+
+  // ?points=commit opts out of engine grouping — for linking at a specific
+  // snapshot, which a collapsed run does not have a point for.
+  const wantPoints = (new URLSearchParams(location.search).get("points") || "").toLowerCase();
+  if (canGroup && POINTS.some(([k]) => k === wantPoints)) grouping = wantPoints;
 
   // ?cpu= selects a tier by substring ("9v74", "xeon") or "all"; default is modal.
   // setCpu builds the view and then calls setMode, so this is the single entry point.
