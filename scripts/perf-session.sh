@@ -163,7 +163,14 @@ for r in $(seq 1 "$ROUNDS"); do
       anchor_ns="$(jq -r '.anchor.ns_per_op' "$out")"
       ( cd "$TARGWT" && ./setup-test262.sh >/dev/null 2>&1 || true )
       ents="$OUT/raw/round-$r/${short}.t262.json"
-      ( cd "$TARGWT" && MACRO_COUNT="$COUNT" "$reduce_sh" "$anchor_ns" "$ents" >/dev/null ) \
+      # PER_TEST_TIMEOUT must be pinned. Left unset the driver takes its own
+      # default, and the boundary moves with it: the reducer refuses to combine
+      # reps that disagree about WHICH tests timed out, so an unpinned timeout
+      # turns one borderline test into a failed session. Every CI workflow pins
+      # 1.2s; match it, both for determinism and so a session's numbers sit on
+      # the same footing as the corpus.
+      ( cd "$TARGWT" && PER_TEST_TIMEOUT="${PER_TEST_TIMEOUT:-1.2s}" MACRO_COUNT="$COUNT" \
+          "$reduce_sh" "$anchor_ns" "$ents" >/dev/null ) \
         || die "macro failed at $short (round $r)"
       jq --slurpfile e "$ents" '.benchmarks += $e[0]' "$out" > "$out.tmp" && mv "$out.tmp" "$out"
     fi
@@ -219,7 +226,13 @@ for i in "${!FULL[@]}"; do
                                 | (.benchmarks[$k].samples // [])[]
                                 | . + { anchor_ns_per_op: $a } ]),
             set_hash:        ([$all[].benchmarks[$k].set_hash // empty] | first),
-            method: { reducer: "median-of-round-medians", rounds: ($all|length) } } ) })
+            # Rounds that actually contributed THIS entry, not rounds in the
+            # session. They differ whenever a series is present in only some
+            # rounds — merging a micro-only session with a --macro one leaves
+            # test262 in a subset — and a provenance field that overstates its
+            # own sample count is worse than none.
+            method: { reducer: "median-of-round-medians",
+                      rounds: ([$all[] | select(.benchmarks[$k] != null)] | length) } } ) })
       )' "${files[@]}" > "$OUT/snapshots/${STAMP[$i]}-${short}.json"
 
   # A macro measured across rounds must agree on WHICH tests it timed, exactly
