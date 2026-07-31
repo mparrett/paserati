@@ -1,0 +1,5227 @@
+{
+  "version": 2,
+  "machines": {
+    "amd64/AMD EPYC 9R14": {
+      "captured_at": "2026-07-31T11:53:55Z",
+      "captured_at_sha": "e6b096c01ea8",
+      "machine": {
+        "os": "linux",
+        "arch": "amd64",
+        "num_cpu": 8,
+        "cpu_model": "AMD EPYC 9R14",
+        "go_version": "go1.26.0"
+      },
+      "anchor": {
+        "name": "BenchmarkRatchetAnchor",
+        "package": "github.com/nooga/paserati/pkg/vm",
+        "ns_per_op": 1.0840000000000003,
+        "iterations": 1000000000,
+        "samples": [
+          {
+            "iterations": 1000000000,
+            "ns_per_op": 1.0840000000000003,
+            "bytes_per_op": 0,
+            "allocs_per_op": 0,
+            "captured_at": "2026-07-31T11:51:10Z"
+          },
+          {
+            "iterations": 1000000000,
+            "ns_per_op": 1.0840000000000003,
+            "bytes_per_op": 0,
+            "allocs_per_op": 0,
+            "captured_at": "2026-07-31T11:51:10Z"
+          },
+          {
+            "iterations": 1000000000,
+            "ns_per_op": 1.0840000000000003,
+            "bytes_per_op": 0,
+            "allocs_per_op": 0,
+            "captured_at": "2026-07-31T11:51:10Z"
+          }
+        ]
+      },
+      "benchmarks": {
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=1/first": {
+          "ns_per_op": 5.876666666666666,
+          "ratio_to_anchor": 5.421279212792125,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 202185002,
+              "ns_per_op": 5.949,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.488007380073799,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 210340036,
+              "ns_per_op": 5.953,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.491697416974168,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 201570994,
+              "ns_per_op": 5.941,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.480627306273061,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 210812137,
+              "ns_per_op": 5.697,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.255535055350552,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 210723114,
+              "ns_per_op": 5.71,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.267527675276751,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 206832468,
+              "ns_per_op": 5.96,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.498154981549814,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 210843116,
+              "ns_per_op": 5.897,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.440036900369003,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 209097157,
+              "ns_per_op": 5.773,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.325645756457563,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 201232928,
+              "ns_per_op": 5.96,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.498154981549814,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 204758026,
+              "ns_per_op": 5.924,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.464944649446493,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 202013571,
+              "ns_per_op": 5.964,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.501845018450183,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 210463833,
+              "ns_per_op": 5.896,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.43911439114391,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 203291054,
+              "ns_per_op": 5.729,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.285055350553504,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 210565408,
+              "ns_per_op": 5.959,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.497232472324721,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 204384994,
+              "ns_per_op": 5.844000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.391143911439114,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=1/last": {
+          "ns_per_op": 6.4860000000000015,
+          "ratio_to_anchor": 5.983394833948339,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 183562512,
+              "ns_per_op": 7.016000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 6.472324723247231,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 197646985,
+              "ns_per_op": 6.219000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.737084870848708,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 189098448,
+              "ns_per_op": 6.223000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.740774907749077,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 173320146,
+              "ns_per_op": 6.992000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 6.450184501845017,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 186638196,
+              "ns_per_op": 6.704,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 6.184501845018448,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 173210274,
+              "ns_per_op": 6.780000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 6.25461254612546,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 170392878,
+              "ns_per_op": 7.049,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 6.502767527675275,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 193384345,
+              "ns_per_op": 6.2410000000000005,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.757380073800737,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 198459513,
+              "ns_per_op": 6.214000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.732472324723247,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 170937807,
+              "ns_per_op": 7.05,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 6.503690036900367,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 191954232,
+              "ns_per_op": 6.236000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.752767527675275,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 191414343,
+              "ns_per_op": 5.962,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.499999999999998,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 180037132,
+              "ns_per_op": 6.723,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 6.202029520295201,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 179175152,
+              "ns_per_op": 6.244000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.760147601476014,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 178151270,
+              "ns_per_op": 6.211000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.72970479704797,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=1/round-robin": {
+          "ns_per_op": 6.231999999999999,
+          "ratio_to_anchor": 5.749077490774906,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 190027033,
+              "ns_per_op": 6.109,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.6356088560885595,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 196527343,
+              "ns_per_op": 6.218000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.736162361623616,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 196628784,
+              "ns_per_op": 6.107,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.633763837638375,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 184488688,
+              "ns_per_op": 6.11,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.636531365313652,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 185537080,
+              "ns_per_op": 6.469,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.96771217712177,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 177704935,
+              "ns_per_op": 6.105,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.631918819188191,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 183178701,
+              "ns_per_op": 6.69,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 6.171586715867157,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 190043774,
+              "ns_per_op": 6.765,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 6.240774907749075,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 196513562,
+              "ns_per_op": 6.365,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.871771217712176,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 196542481,
+              "ns_per_op": 6.768000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 6.243542435424353,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 196486495,
+              "ns_per_op": 6.109,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.6356088560885595,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 196519486,
+              "ns_per_op": 6.107,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.633763837638375,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 196397266,
+              "ns_per_op": 6.479,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.9769372693726925,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 188912020,
+              "ns_per_op": 6.108,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.634686346863467,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 196725693,
+              "ns_per_op": 6.109,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.6356088560885595,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=16/first": {
+          "ns_per_op": 12.62,
+          "ratio_to_anchor": 11.642066420664202,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 95536867,
+              "ns_per_op": 12.61,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.63284132841328,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95441430,
+              "ns_per_op": 12.62,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.642066420664202,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95135816,
+              "ns_per_op": 12.62,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.642066420664202,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95335684,
+              "ns_per_op": 12.63,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.651291512915126,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95181189,
+              "ns_per_op": 12.61,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.63284132841328,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95079523,
+              "ns_per_op": 12.62,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.642066420664202,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95137362,
+              "ns_per_op": 12.61,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.63284132841328,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94928131,
+              "ns_per_op": 12.61,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.63284132841328,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94996592,
+              "ns_per_op": 12.61,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.63284132841328,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95122332,
+              "ns_per_op": 12.62,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.642066420664202,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95106726,
+              "ns_per_op": 12.64,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.660516605166048,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94853973,
+              "ns_per_op": 12.64,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.660516605166048,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95545538,
+              "ns_per_op": 12.64,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.660516605166048,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95471720,
+              "ns_per_op": 12.64,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.660516605166048,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95200120,
+              "ns_per_op": 12.63,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.651291512915126,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=16/last": {
+          "ns_per_op": 12.803333333333335,
+          "ratio_to_anchor": 11.811193111931118,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 93375417,
+              "ns_per_op": 12.860000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.863468634686345,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94058356,
+              "ns_per_op": 12.850000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.854243542435423,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 91118047,
+              "ns_per_op": 12.790000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.798892988929888,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94605424,
+              "ns_per_op": 12.790000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.798892988929888,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94462802,
+              "ns_per_op": 12.800000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.808118081180812,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94389614,
+              "ns_per_op": 12.76,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.771217712177119,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94013818,
+              "ns_per_op": 12.790000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.798892988929888,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93992602,
+              "ns_per_op": 12.780000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.789667896678965,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93287475,
+              "ns_per_op": 12.75,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.761992619926197,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94455062,
+              "ns_per_op": 12.790000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.798892988929888,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93926802,
+              "ns_per_op": 12.800000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.808118081180812,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94148335,
+              "ns_per_op": 12.820000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.826568265682656,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93260904,
+              "ns_per_op": 12.810000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.817343173431734,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 91031438,
+              "ns_per_op": 12.810000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.817343173431734,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93411033,
+              "ns_per_op": 12.790000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.798892988929888,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=16/round-robin": {
+          "ns_per_op": 13.406666666666666,
+          "ratio_to_anchor": 12.367773677736773,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 90574239,
+              "ns_per_op": 13.36,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.324723247232468,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 87785264,
+              "ns_per_op": 13.41,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.370848708487081,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90429873,
+              "ns_per_op": 13.45,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.40774907749077,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90349233,
+              "ns_per_op": 13.39,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.352398523985237,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 89901404,
+              "ns_per_op": 13.36,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.324723247232468,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 88505052,
+              "ns_per_op": 13.38,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.343173431734314,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90279643,
+              "ns_per_op": 13.38,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.343173431734314,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 88425825,
+              "ns_per_op": 13.36,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.324723247232468,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90782868,
+              "ns_per_op": 13.37,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.33394833948339,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90028530,
+              "ns_per_op": 13.5,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.453874538745383,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 87088100,
+              "ns_per_op": 13.47,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.426199261992616,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 89402269,
+              "ns_per_op": 13.49,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.444649446494461,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 88392189,
+              "ns_per_op": 13.39,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.352398523985237,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 89834284,
+              "ns_per_op": 13.41,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.370848708487081,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90424633,
+              "ns_per_op": 13.5,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.453874538745383,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=32/first": {
+          "ns_per_op": 12.666666666666666,
+          "ratio_to_anchor": 11.685116851168507,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 94711348,
+              "ns_per_op": 12.66,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.678966789667893,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95103244,
+              "ns_per_op": 12.67,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.688191881918815,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94665018,
+              "ns_per_op": 12.66,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.678966789667893,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94876262,
+              "ns_per_op": 12.66,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.678966789667893,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94488976,
+              "ns_per_op": 12.67,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.688191881918815,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94941718,
+              "ns_per_op": 12.67,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.688191881918815,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94303502,
+              "ns_per_op": 12.65,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.66974169741697,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94913715,
+              "ns_per_op": 12.65,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.66974169741697,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94682683,
+              "ns_per_op": 12.65,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.66974169741697,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95042548,
+              "ns_per_op": 12.72,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.734317343173428,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93900122,
+              "ns_per_op": 12.71,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.725092250922506,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94553966,
+              "ns_per_op": 12.72,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.734317343173428,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93855462,
+              "ns_per_op": 12.72,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.734317343173428,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93961663,
+              "ns_per_op": 12.7,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.715867158671584,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94488806,
+              "ns_per_op": 12.71,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.725092250922506,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=32/last": {
+          "ns_per_op": 12.903333333333336,
+          "ratio_to_anchor": 11.903444034440344,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 94080553,
+              "ns_per_op": 12.900000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.900369003690036,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93548016,
+              "ns_per_op": 12.880000000000003,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.881918819188192,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93574276,
+              "ns_per_op": 12.870000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.872693726937268,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 92897419,
+              "ns_per_op": 12.900000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.900369003690036,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93264912,
+              "ns_per_op": 12.880000000000003,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.881918819188192,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93265057,
+              "ns_per_op": 12.910000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.909594095940959,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90902665,
+              "ns_per_op": 12.880000000000003,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.881918819188192,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 92910164,
+              "ns_per_op": 12.870000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.872693726937268,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 87868210,
+              "ns_per_op": 13.700000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.638376383763836,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 92702482,
+              "ns_per_op": 12.900000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.900369003690036,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 92823390,
+              "ns_per_op": 12.920000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.91881918819188,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93571446,
+              "ns_per_op": 12.890000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.891143911439114,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90973605,
+              "ns_per_op": 12.890000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.891143911439114,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90519861,
+              "ns_per_op": 12.890000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.891143911439114,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93609534,
+              "ns_per_op": 12.97,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.964944649446492,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=32/round-robin": {
+          "ns_per_op": 13.47,
+          "ratio_to_anchor": 12.426199261992616,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 90392278,
+              "ns_per_op": 13.46,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.416974169741694,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90070892,
+              "ns_per_op": 13.44,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.398523985239848,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 89892285,
+              "ns_per_op": 13.45,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.40774907749077,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90074488,
+              "ns_per_op": 13.42,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.380073800738003,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90095595,
+              "ns_per_op": 13.44,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.398523985239848,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90198937,
+              "ns_per_op": 13.47,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.426199261992616,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90253080,
+              "ns_per_op": 13.42,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.380073800738003,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 85471741,
+              "ns_per_op": 14.080000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.988929889298891,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 89751936,
+              "ns_per_op": 13.43,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.389298892988926,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 87146734,
+              "ns_per_op": 13.590000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.536900369003687,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 88054528,
+              "ns_per_op": 13.610000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.555350553505532,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 89487266,
+              "ns_per_op": 13.600000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.54612546125461,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 89865702,
+              "ns_per_op": 13.47,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.426199261992616,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 87896820,
+              "ns_per_op": 13.47,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.426199261992616,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 88672789,
+              "ns_per_op": 13.47,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.426199261992616,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=4/first": {
+          "ns_per_op": 5.860333333333334,
+          "ratio_to_anchor": 5.406211562115621,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 188195155,
+              "ns_per_op": 6.116,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.642066420664205,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 210832303,
+              "ns_per_op": 5.694000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.252767527675276,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 201430860,
+              "ns_per_op": 5.956,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.494464944649446,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 210815064,
+              "ns_per_op": 5.964,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.501845018450183,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 205819659,
+              "ns_per_op": 5.825000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.373616236162361,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 210818053,
+              "ns_per_op": 5.792,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.343173431734316,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 207128461,
+              "ns_per_op": 5.6930000000000005,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.251845018450184,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 202015203,
+              "ns_per_op": 5.876000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.4206642066420665,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 201454470,
+              "ns_per_op": 5.745,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.29981549815498,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 192029848,
+              "ns_per_op": 5.6930000000000005,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.251845018450184,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 201461676,
+              "ns_per_op": 5.934,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.474169741697415,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 208670580,
+              "ns_per_op": 5.694000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.252767527675276,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 204387236,
+              "ns_per_op": 5.762,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.315498154981548,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 208164122,
+              "ns_per_op": 6.073000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.602398523985239,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 178048551,
+              "ns_per_op": 5.815000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.364391143911439,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=4/last": {
+          "ns_per_op": 16.273333333333337,
+          "ratio_to_anchor": 15.012300123001229,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 73870783,
+              "ns_per_op": 16.29,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 15.027675276752763,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 73549448,
+              "ns_per_op": 16.27,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 15.009225092250919,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 73833740,
+              "ns_per_op": 16.26,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 14.999999999999998,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 73806420,
+              "ns_per_op": 16.26,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 14.999999999999998,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 73749579,
+              "ns_per_op": 16.27,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 15.009225092250919,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 73710168,
+              "ns_per_op": 16.26,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 14.999999999999998,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 73781244,
+              "ns_per_op": 16.27,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 15.009225092250919,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 73767234,
+              "ns_per_op": 16.29,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 15.027675276752763,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 73785282,
+              "ns_per_op": 16.26,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 14.999999999999998,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 73741549,
+              "ns_per_op": 16.27,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 15.009225092250919,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 73519590,
+              "ns_per_op": 16.31,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 15.046125461254608,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 73827703,
+              "ns_per_op": 16.27,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 15.009225092250919,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 73817934,
+              "ns_per_op": 16.31,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 15.046125461254608,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 73519707,
+              "ns_per_op": 16.27,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 15.009225092250919,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 73779674,
+              "ns_per_op": 16.27,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 15.009225092250919,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=4/round-robin": {
+          "ns_per_op": 11.306666666666667,
+          "ratio_to_anchor": 10.430504305043048,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 100000000,
+              "ns_per_op": 11.47,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 10.581180811808116,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 100000000,
+              "ns_per_op": 11.250000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 10.378228782287822,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 100000000,
+              "ns_per_op": 11.250000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 10.378228782287822,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 100000000,
+              "ns_per_op": 11.250000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 10.378228782287822,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 100000000,
+              "ns_per_op": 11.250000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 10.378228782287822,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 100000000,
+              "ns_per_op": 11.42,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 10.535055350553503,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 100000000,
+              "ns_per_op": 11.54,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 10.645756457564572,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 100000000,
+              "ns_per_op": 11.250000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 10.378228782287822,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 100000000,
+              "ns_per_op": 11.250000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 10.378228782287822,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 100000000,
+              "ns_per_op": 11.250000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 10.378228782287822,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 100000000,
+              "ns_per_op": 11.260000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 10.387453874538744,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 100000000,
+              "ns_per_op": 11.250000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 10.378228782287822,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 100000000,
+              "ns_per_op": 11.260000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 10.387453874538744,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 100000000,
+              "ns_per_op": 11.260000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 10.387453874538744,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 100000000,
+              "ns_per_op": 11.250000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 10.378228782287822,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=64/first": {
+          "ns_per_op": 12.616666666666667,
+          "ratio_to_anchor": 11.638991389913896,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 95686332,
+              "ns_per_op": 12.61,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.63284132841328,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94913985,
+              "ns_per_op": 12.61,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.63284132841328,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95238427,
+              "ns_per_op": 12.62,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.642066420664202,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95125348,
+              "ns_per_op": 12.64,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.660516605166048,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95261214,
+              "ns_per_op": 12.65,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.66974169741697,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94924219,
+              "ns_per_op": 12.64,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.660516605166048,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95431449,
+              "ns_per_op": 12.59,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.614391143911435,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95320630,
+              "ns_per_op": 12.59,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.614391143911435,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95534935,
+              "ns_per_op": 12.59,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.614391143911435,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95295847,
+              "ns_per_op": 12.63,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.651291512915126,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95474636,
+              "ns_per_op": 12.61,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.63284132841328,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95166236,
+              "ns_per_op": 12.61,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.63284132841328,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95093055,
+              "ns_per_op": 12.65,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.66974169741697,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95144792,
+              "ns_per_op": 12.64,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.660516605166048,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 95374602,
+              "ns_per_op": 12.65,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.66974169741697,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=64/last": {
+          "ns_per_op": 12.823333333333336,
+          "ratio_to_anchor": 11.829643296432964,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 94007293,
+              "ns_per_op": 12.850000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.854243542435423,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93997566,
+              "ns_per_op": 12.870000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.872693726937268,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 91859432,
+              "ns_per_op": 12.840000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.8450184501845,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93537902,
+              "ns_per_op": 12.850000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.854243542435423,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94152258,
+              "ns_per_op": 12.820000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.826568265682656,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93644985,
+              "ns_per_op": 12.860000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.863468634686345,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 92077681,
+              "ns_per_op": 12.76,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.771217712177119,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94300753,
+              "ns_per_op": 12.76,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.771217712177119,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 92121938,
+              "ns_per_op": 12.820000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.826568265682656,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 92443904,
+              "ns_per_op": 12.820000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.826568265682656,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93808146,
+              "ns_per_op": 12.790000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.798892988929888,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93564661,
+              "ns_per_op": 12.860000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.863468634686345,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94245554,
+              "ns_per_op": 12.820000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.826568265682656,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 94161832,
+              "ns_per_op": 12.770000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.780442804428043,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 93186606,
+              "ns_per_op": 12.840000000000002,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 11.8450184501845,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=64/round-robin": {
+          "ns_per_op": 13.690000000000003,
+          "ratio_to_anchor": 12.629151291512915,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 90006974,
+              "ns_per_op": 13.37,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.33394833948339,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90586683,
+              "ns_per_op": 13.39,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.352398523985237,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90160560,
+              "ns_per_op": 13.39,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.352398523985237,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 87415650,
+              "ns_per_op": 13.76,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.69372693726937,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 87884157,
+              "ns_per_op": 13.74,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.675276752767525,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 88245824,
+              "ns_per_op": 13.76,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.69372693726937,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 90097766,
+              "ns_per_op": 13.680000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.619926199261991,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 85557007,
+              "ns_per_op": 13.77,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.702952029520292,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 89817501,
+              "ns_per_op": 13.72,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.65682656826568,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 87137053,
+              "ns_per_op": 13.700000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.638376383763836,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 87258194,
+              "ns_per_op": 13.680000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.619926199261991,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 88455795,
+              "ns_per_op": 13.690000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.629151291512914,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 89814980,
+              "ns_per_op": 13.75,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.684501845018447,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 89389003,
+              "ns_per_op": 13.73,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.666051660516603,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 88049412,
+              "ns_per_op": 13.540000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 12.490774907749074,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=8/first": {
+          "ns_per_op": 5.8549999999999995,
+          "ratio_to_anchor": 5.401291512915127,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 185317082,
+              "ns_per_op": 5.692,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.250922509225091,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 206722209,
+              "ns_per_op": 5.899,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.4418819188191865,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 178210198,
+              "ns_per_op": 5.692,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.250922509225091,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 210852004,
+              "ns_per_op": 5.959,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.497232472324721,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 201262538,
+              "ns_per_op": 5.915,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.456642066420663,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 210839918,
+              "ns_per_op": 5.691000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.249999999999999,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 210830334,
+              "ns_per_op": 5.896,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.43911439114391,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 210833394,
+              "ns_per_op": 5.853000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.399446494464944,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 208949488,
+              "ns_per_op": 6.765,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 6.240774907749075,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 196158674,
+              "ns_per_op": 5.927,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.467712177121769,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 188498010,
+              "ns_per_op": 5.8,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.3505535055350535,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 210827661,
+              "ns_per_op": 5.6930000000000005,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.251845018450184,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 187029968,
+              "ns_per_op": 5.746,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.3007380073800725,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 190712665,
+              "ns_per_op": 6.759000000000001,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 6.235239852398523,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 210781395,
+              "ns_per_op": 5.767,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 5.32011070110701,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=8/last": {
+          "ns_per_op": 30.533333333333335,
+          "ratio_to_anchor": 28.16728167281672,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 38918598,
+              "ns_per_op": 30.880000000000003,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 28.487084870848705,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 39526281,
+              "ns_per_op": 30.360000000000003,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 28.007380073800732,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 39316358,
+              "ns_per_op": 30.360000000000003,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 28.007380073800732,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 39488391,
+              "ns_per_op": 30.350000000000005,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 27.998154981549813,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 39536192,
+              "ns_per_op": 30.41,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 28.053505535055344,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 39495214,
+              "ns_per_op": 30.350000000000005,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 27.998154981549813,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 39010008,
+              "ns_per_op": 30.880000000000003,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 28.487084870848705,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 39476275,
+              "ns_per_op": 30.68,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 28.302583025830252,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 39509302,
+              "ns_per_op": 30.360000000000003,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 28.007380073800732,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 39510878,
+              "ns_per_op": 30.9,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 28.505535055350546,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 39497016,
+              "ns_per_op": 30.9,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 28.505535055350546,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 39259087,
+              "ns_per_op": 30.360000000000003,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 28.007380073800732,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 38805717,
+              "ns_per_op": 30.550000000000004,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 28.182656826568262,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 39515572,
+              "ns_per_op": 30.620000000000005,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 28.24723247232472,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 39269886,
+              "ns_per_op": 30.420000000000005,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 28.06273062730627,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkGetOwn/n=8/round-robin": {
+          "ns_per_op": 18.323333333333334,
+          "ratio_to_anchor": 16.90344403444034,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 65545287,
+              "ns_per_op": 18.66,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 17.2140221402214,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 65632111,
+              "ns_per_op": 18.59,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 17.14944649446494,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 65461623,
+              "ns_per_op": 18.61,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 17.167896678966784,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 65620934,
+              "ns_per_op": 18.3,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 16.881918819188186,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 65424984,
+              "ns_per_op": 18.38,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 16.955719557195568,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 65389368,
+              "ns_per_op": 18.29,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 16.872693726937264,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 65603330,
+              "ns_per_op": 18.3,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 16.881918819188186,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 65355757,
+              "ns_per_op": 18.3,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 16.881918819188186,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 65425989,
+              "ns_per_op": 18.31,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 16.89114391143911,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 65218064,
+              "ns_per_op": 18.3,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 16.881918819188186,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 65608911,
+              "ns_per_op": 18.3,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 16.881918819188186,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 65615505,
+              "ns_per_op": 18.3,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 16.881918819188186,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 65241068,
+              "ns_per_op": 18.680000000000003,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 17.232472324723247,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 64665858,
+              "ns_per_op": 18.44,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 17.011070110701105,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 65593838,
+              "ns_per_op": 18.35,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 16.9280442804428,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkIsObject": {
+          "ns_per_op": 69.93,
+          "ratio_to_anchor": 64.5110701107011,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 17158495,
+              "ns_per_op": 69.93,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 64.5110701107011,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 17158173,
+              "ns_per_op": 69.93,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 64.5110701107011,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 17157812,
+              "ns_per_op": 69.93,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 64.5110701107011,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 17162818,
+              "ns_per_op": 69.92,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 64.50184501845017,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 17161405,
+              "ns_per_op": 69.92,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 64.50184501845017,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 17160315,
+              "ns_per_op": 69.92,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 64.50184501845017,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 17152693,
+              "ns_per_op": 69.92,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 64.50184501845017,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 17153889,
+              "ns_per_op": 69.94,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 64.52029520295201,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 17161915,
+              "ns_per_op": 69.93,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 64.5110701107011,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 17155143,
+              "ns_per_op": 69.95,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 64.52952029520294,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 17145504,
+              "ns_per_op": 70,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 64.57564575645755,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 17153893,
+              "ns_per_op": 69.95,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 64.52952029520294,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 17157980,
+              "ns_per_op": 69.93,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 64.5110701107011,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 16930405,
+              "ns_per_op": 69.93,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 64.5110701107011,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 17163752,
+              "ns_per_op": 69.93,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 64.5110701107011,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/pkg/vm.BenchmarkToInteger": {
+          "ns_per_op": 133.66666666666666,
+          "ratio_to_anchor": 123.30873308733084,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "samples": [
+            {
+              "iterations": 8978300,
+              "ns_per_op": 133.6,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 123.24723247232468,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 8980359,
+              "ns_per_op": 133.7,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 123.3394833948339,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 8973240,
+              "ns_per_op": 133.6,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 123.24723247232468,
+              "captured_at": "2026-07-31T11:51:10Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 8980023,
+              "ns_per_op": 133.7,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 123.3394833948339,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 8974658,
+              "ns_per_op": 133.7,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 123.3394833948339,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 8980282,
+              "ns_per_op": 133.7,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 123.3394833948339,
+              "captured_at": "2026-07-31T12:32:36Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 8981209,
+              "ns_per_op": 133.6,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 123.24723247232468,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 8978292,
+              "ns_per_op": 133.7,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 123.3394833948339,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 8973655,
+              "ns_per_op": 133.7,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 123.3394833948339,
+              "captured_at": "2026-07-31T13:13:34Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 8978397,
+              "ns_per_op": 133.7,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 123.3394833948339,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 8978364,
+              "ns_per_op": 133.7,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 123.3394833948339,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 8981118,
+              "ns_per_op": 133.7,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 123.3394833948339,
+              "captured_at": "2026-07-31T13:54:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 8977678,
+              "ns_per_op": 133.7,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 123.3394833948339,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 8978320,
+              "ns_per_op": 133.6,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 123.24723247232468,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 8976364,
+              "ns_per_op": 133.7,
+              "bytes_per_op": 0,
+              "allocs_per_op": 0,
+              "ratio_to_anchor": 123.3394833948339,
+              "captured_at": "2026-07-31T14:35:32Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/tests.BenchmarkAdd": {
+          "ns_per_op": 315745370,
+          "ratio_to_anchor": 291278016.60516596,
+          "allocs_per_op": 3,
+          "bytes_per_op": 576,
+          "samples": [
+            {
+              "iterations": 4,
+              "ns_per_op": 314840338,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 290443116.2361623,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 4,
+              "ns_per_op": 315373138,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 290934629.15129143,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 4,
+              "ns_per_op": 315553948,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 291101428.04428035,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 4,
+              "ns_per_op": 315368255.00000006,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 290930124.53874534,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 4,
+              "ns_per_op": 316866018,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 292311824.7232472,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 4,
+              "ns_per_op": 315092854.00000006,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 290676064.57564574,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 4,
+              "ns_per_op": 315299187.00000006,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 290866408.6715867,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 4,
+              "ns_per_op": 315625463,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 291167401.29151285,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 4,
+              "ns_per_op": 316189141,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 291687399.4464944,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 4,
+              "ns_per_op": 317551380,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 292944077.4907748,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 4,
+              "ns_per_op": 317086992,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 292515675.2767527,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 4,
+              "ns_per_op": 318046632,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 293400952.0295202,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 4,
+              "ns_per_op": 315194602.00000006,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 290769928.0442804,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 4,
+              "ns_per_op": 316398542,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 291880573.8007379,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 4,
+              "ns_per_op": 315642966,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 291183547.9704796,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/tests.BenchmarkArith": {
+          "ns_per_op": 155669202,
+          "ratio_to_anchor": 143606274.90774903,
+          "allocs_per_op": 3,
+          "bytes_per_op": 576,
+          "samples": [
+            {
+              "iterations": 7,
+              "ns_per_op": 154980463,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 142970906.82656822,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 7,
+              "ns_per_op": 154991768,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 142981335.7933579,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 7,
+              "ns_per_op": 155017293,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 143004882.84132838,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 7,
+              "ns_per_op": 155044740,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 143030202.95202947,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 7,
+              "ns_per_op": 154962985,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 142954783.21033207,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 7,
+              "ns_per_op": 154963668,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 142955413.2841328,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 7,
+              "ns_per_op": 156536429,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 144406299.8154981,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 7,
+              "ns_per_op": 155655794,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 143593905.904059,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 7,
+              "ns_per_op": 155599335,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 143541821.95571953,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 7,
+              "ns_per_op": 155714223,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 143647807.19557193,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 7,
+              "ns_per_op": 155583900,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 143527583.0258302,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 7,
+              "ns_per_op": 155709483,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 143643434.50184497,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 7,
+              "ns_per_op": 156633632.00000003,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 144495970.4797048,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 7,
+              "ns_per_op": 155638603,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 143578047.04797044,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 7,
+              "ns_per_op": 156827774,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 144675068.2656826,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/tests.BenchmarkFibPlaceholderRun": {
+          "ns_per_op": 810290098.6666666,
+          "ratio_to_anchor": 747500091.02091,
+          "allocs_per_op": 3,
+          "bytes_per_op": 576,
+          "samples": [
+            {
+              "iterations": 2,
+              "ns_per_op": 834081008.0000001,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 769447424.3542434,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 834810551,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 770120434.5018448,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 855716459,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 789406327.4907748,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 783334838,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 722633614.3911437,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 784651324,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 723848084.8708485,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 787551670,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 726523680.8118079,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 810935222,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 748095223.2472323,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 809419772,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 746697206.6420662,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 810515302.0000001,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 747707843.1734316,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 775575948.0000001,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 715475966.7896678,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 789401777,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 728230421.5867157,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 779508811,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 719104069.1881917,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 862709914.0000001,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 795857854.2435423,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 807230094,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 744677208.4870846,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 781447164,
+              "bytes_per_op": 576,
+              "allocs_per_op": 3,
+              "ratio_to_anchor": 720892217.7121769,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/tests.BenchmarkMatrixMult": {
+          "ns_per_op": 5881276.333333333,
+          "ratio_to_anchor": 5425531.672816726,
+          "allocs_per_op": 42,
+          "bytes_per_op": 179592,
+          "samples": [
+            {
+              "iterations": 205,
+              "ns_per_op": 8300219.000000001,
+              "bytes_per_op": 179592,
+              "allocs_per_op": 42,
+              "ratio_to_anchor": 7657028.597785977,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 205,
+              "ns_per_op": 5835484,
+              "bytes_per_op": 179592,
+              "allocs_per_op": 42,
+              "ratio_to_anchor": 5383287.822878228,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 204,
+              "ns_per_op": 5853663,
+              "bytes_per_op": 179592,
+              "allocs_per_op": 42,
+              "ratio_to_anchor": 5400058.118081179,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 205,
+              "ns_per_op": 5840001,
+              "bytes_per_op": 179592,
+              "allocs_per_op": 42,
+              "ratio_to_anchor": 5387454.797047969,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 202,
+              "ns_per_op": 5843964,
+              "bytes_per_op": 179593,
+              "allocs_per_op": 42,
+              "ratio_to_anchor": 5391110.701107009,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 201,
+              "ns_per_op": 5842043.000000001,
+              "bytes_per_op": 179592,
+              "allocs_per_op": 42,
+              "ratio_to_anchor": 5389338.560885608,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 204,
+              "ns_per_op": 5849094,
+              "bytes_per_op": 179592,
+              "allocs_per_op": 42,
+              "ratio_to_anchor": 5395843.173431733,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 205,
+              "ns_per_op": 5849530,
+              "bytes_per_op": 179592,
+              "allocs_per_op": 42,
+              "ratio_to_anchor": 5396245.387453873,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 204,
+              "ns_per_op": 5842965,
+              "bytes_per_op": 179592,
+              "allocs_per_op": 42,
+              "ratio_to_anchor": 5390189.1143911425,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 202,
+              "ns_per_op": 5926538,
+              "bytes_per_op": 179592,
+              "allocs_per_op": 42,
+              "ratio_to_anchor": 5467285.977859777,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 202,
+              "ns_per_op": 5911776.000000001,
+              "bytes_per_op": 179593,
+              "allocs_per_op": 42,
+              "ratio_to_anchor": 5453667.8966789665,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 201,
+              "ns_per_op": 7712840,
+              "bytes_per_op": 179592,
+              "allocs_per_op": 42,
+              "ratio_to_anchor": 7115166.051660514,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 204,
+              "ns_per_op": 5842117,
+              "bytes_per_op": 179592,
+              "allocs_per_op": 42,
+              "ratio_to_anchor": 5389406.8265682645,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 205,
+              "ns_per_op": 5915394,
+              "bytes_per_op": 179592,
+              "allocs_per_op": 42,
+              "ratio_to_anchor": 5457005.535055349,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 202,
+              "ns_per_op": 5886318.000000001,
+              "bytes_per_op": 179593,
+              "allocs_per_op": 42,
+              "ratio_to_anchor": 5430182.656826568,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/tests.BenchmarkPrototypeCacheHitRate": {
+          "ns_per_op": 1136890.3333333333,
+          "ratio_to_anchor": 1048791.8204182037,
+          "allocs_per_op": 13612,
+          "bytes_per_op": 4713017,
+          "samples": [
+            {
+              "iterations": 984,
+              "ns_per_op": 1099292,
+              "bytes_per_op": 4713168,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 1014107.0110701104,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1004,
+              "ns_per_op": 1123358,
+              "bytes_per_op": 4713056,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 1036308.1180811805,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1003,
+              "ns_per_op": 1156914,
+              "bytes_per_op": 4712957,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 1067263.837638376,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1005,
+              "ns_per_op": 1107817,
+              "bytes_per_op": 4713174,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 1021971.4022140219,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1014,
+              "ns_per_op": 1130105.0000000002,
+              "bytes_per_op": 4712972,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 1042532.2878228781,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 973,
+              "ns_per_op": 1124518.0000000002,
+              "bytes_per_op": 4713013,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 1037378.2287822878,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1011,
+              "ns_per_op": 1155885.0000000002,
+              "bytes_per_op": 4712998,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 1066314.5756457564,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 979,
+              "ns_per_op": 1164748.0000000002,
+              "bytes_per_op": 4712968,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 1074490.774907749,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 986,
+              "ns_per_op": 1170825.0000000002,
+              "bytes_per_op": 4712992,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 1080096.8634686347,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1042,
+              "ns_per_op": 1145269,
+              "bytes_per_op": 4713022,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 1056521.2177121767,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 957,
+              "ns_per_op": 1135003,
+              "bytes_per_op": 4712984,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 1047050.7380073798,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 946,
+              "ns_per_op": 1144789,
+              "bytes_per_op": 4712990,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 1056078.4132841325,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1016,
+              "ns_per_op": 1125607,
+              "bytes_per_op": 4713081,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 1038382.841328413,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 976,
+              "ns_per_op": 1134008.0000000002,
+              "bytes_per_op": 4713016,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 1046132.8413284132,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1004,
+              "ns_per_op": 1151056.0000000002,
+              "bytes_per_op": 4712955,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 1061859.7785977859,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/tests.BenchmarkPrototypeMethodAccess/Baseline/ArrayPrototypeMethod": {
+          "ns_per_op": 1137331.3333333333,
+          "ratio_to_anchor": 1049198.6469864694,
+          "allocs_per_op": 13645,
+          "bytes_per_op": 4715805,
+          "samples": [
+            {
+              "iterations": 754,
+              "ns_per_op": 1369598,
+              "bytes_per_op": 4716220,
+              "allocs_per_op": 13646,
+              "ratio_to_anchor": 1263466.7896678962,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1027,
+              "ns_per_op": 1098481,
+              "bytes_per_op": 4715686,
+              "allocs_per_op": 13645,
+              "ratio_to_anchor": 1013358.8560885607,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1108,
+              "ns_per_op": 1051372,
+              "bytes_per_op": 4715746,
+              "allocs_per_op": 13646,
+              "ratio_to_anchor": 969900.3690036897,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 816,
+              "ns_per_op": 1301759,
+              "bytes_per_op": 4716163,
+              "allocs_per_op": 13646,
+              "ratio_to_anchor": 1200884.6863468632,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1060,
+              "ns_per_op": 1078761.0000000002,
+              "bytes_per_op": 4715640,
+              "allocs_per_op": 13645,
+              "ratio_to_anchor": 995166.9741697416,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1107,
+              "ns_per_op": 1031474.0000000001,
+              "bytes_per_op": 4715700,
+              "allocs_per_op": 13646,
+              "ratio_to_anchor": 951544.2804428043,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 958,
+              "ns_per_op": 1106788,
+              "bytes_per_op": 4715639,
+              "allocs_per_op": 13645,
+              "ratio_to_anchor": 1021022.1402214019,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1041,
+              "ns_per_op": 1103970.0000000002,
+              "bytes_per_op": 4715635,
+              "allocs_per_op": 13645,
+              "ratio_to_anchor": 1018422.5092250921,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1027,
+              "ns_per_op": 1097134,
+              "bytes_per_op": 4715993,
+              "allocs_per_op": 13645,
+              "ratio_to_anchor": 1012116.2361623613,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 968,
+              "ns_per_op": 1086283.0000000002,
+              "bytes_per_op": 4715635,
+              "allocs_per_op": 13645,
+              "ratio_to_anchor": 1002106.0885608855,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1101,
+              "ns_per_op": 1037613.0000000001,
+              "bytes_per_op": 4715678,
+              "allocs_per_op": 13645,
+              "ratio_to_anchor": 957207.5645756456,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1118,
+              "ns_per_op": 1020390.0000000001,
+              "bytes_per_op": 4716016,
+              "allocs_per_op": 13646,
+              "ratio_to_anchor": 941319.1881918818,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 769,
+              "ns_per_op": 1327094,
+              "bytes_per_op": 4716113,
+              "allocs_per_op": 13646,
+              "ratio_to_anchor": 1224256.4575645754,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1051,
+              "ns_per_op": 1074345,
+              "bytes_per_op": 4715658,
+              "allocs_per_op": 13645,
+              "ratio_to_anchor": 991093.1734317341,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1111,
+              "ns_per_op": 1095529,
+              "bytes_per_op": 4715646,
+              "allocs_per_op": 13645,
+              "ratio_to_anchor": 1010635.6088560882,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/tests.BenchmarkPrototypeMethodAccess/Baseline/ObjectPrototypeChain": {
+          "ns_per_op": 1134238.3333333333,
+          "ratio_to_anchor": 1046345.3259532591,
+          "allocs_per_op": 13838,
+          "bytes_per_op": 4730110,
+          "samples": [
+            {
+              "iterations": 1086,
+              "ns_per_op": 1054816,
+              "bytes_per_op": 4730410,
+              "allocs_per_op": 13839,
+              "ratio_to_anchor": 973077.4907749075,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1089,
+              "ns_per_op": 1044467.0000000001,
+              "bytes_per_op": 4730042,
+              "allocs_per_op": 13840,
+              "ratio_to_anchor": 963530.4428044279,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1003,
+              "ns_per_op": 1237165.0000000002,
+              "bytes_per_op": 4729977,
+              "allocs_per_op": 13839,
+              "ratio_to_anchor": 1141296.1254612545,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1012,
+              "ns_per_op": 1125215.0000000002,
+              "bytes_per_op": 4730378,
+              "allocs_per_op": 13839,
+              "ratio_to_anchor": 1038021.2177121771,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1036,
+              "ns_per_op": 1098269,
+              "bytes_per_op": 4730003,
+              "allocs_per_op": 13839,
+              "ratio_to_anchor": 1013163.284132841,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1087,
+              "ns_per_op": 1179231,
+              "bytes_per_op": 4729950,
+              "allocs_per_op": 13838,
+              "ratio_to_anchor": 1087851.4760147599,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1022,
+              "ns_per_op": 1113794,
+              "bytes_per_op": 4729994,
+              "allocs_per_op": 13839,
+              "ratio_to_anchor": 1027485.2398523983,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1026,
+              "ns_per_op": 1165587,
+              "bytes_per_op": 4729981,
+              "allocs_per_op": 13839,
+              "ratio_to_anchor": 1075264.7601476011,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 975,
+              "ns_per_op": 1206889,
+              "bytes_per_op": 4729896,
+              "allocs_per_op": 13838,
+              "ratio_to_anchor": 1113366.2361623612,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1099,
+              "ns_per_op": 1039263.0000000001,
+              "bytes_per_op": 4730047,
+              "allocs_per_op": 13839,
+              "ratio_to_anchor": 958729.7047970478,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1060,
+              "ns_per_op": 1238724,
+              "bytes_per_op": 4729991,
+              "allocs_per_op": 13839,
+              "ratio_to_anchor": 1142734.317343173,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 950,
+              "ns_per_op": 1240530,
+              "bytes_per_op": 4729856,
+              "allocs_per_op": 13838,
+              "ratio_to_anchor": 1144400.3690036896,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1039,
+              "ns_per_op": 1078234,
+              "bytes_per_op": 4730437,
+              "allocs_per_op": 13839,
+              "ratio_to_anchor": 994680.8118081178,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1104,
+              "ns_per_op": 1047200.0000000001,
+              "bytes_per_op": 4729970,
+              "allocs_per_op": 13839,
+              "ratio_to_anchor": 966051.660516605,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 985,
+              "ns_per_op": 1232699,
+              "bytes_per_op": 4729975,
+              "allocs_per_op": 13839,
+              "ratio_to_anchor": 1137176.1992619922,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/tests.BenchmarkPrototypeMethodAccess/Baseline/StringPrototypeMethod": {
+          "ns_per_op": 1342796,
+          "ratio_to_anchor": 1238741.6974169738,
+          "allocs_per_op": 13619,
+          "bytes_per_op": 4714817,
+          "samples": [
+            {
+              "iterations": 1056,
+              "ns_per_op": 1179525,
+              "bytes_per_op": 4715146,
+              "allocs_per_op": 13621,
+              "ratio_to_anchor": 1088122.693726937,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 916,
+              "ns_per_op": 1432571,
+              "bytes_per_op": 4714924,
+              "allocs_per_op": 13619,
+              "ratio_to_anchor": 1321559.9630996305,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 802,
+              "ns_per_op": 1509093.0000000002,
+              "bytes_per_op": 4714411,
+              "allocs_per_op": 13618,
+              "ratio_to_anchor": 1392152.21402214,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 986,
+              "ns_per_op": 1134948,
+              "bytes_per_op": 4715173,
+              "allocs_per_op": 13621,
+              "ratio_to_anchor": 1046999.9999999998,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1021,
+              "ns_per_op": 1404895.0000000002,
+              "bytes_per_op": 4714975,
+              "allocs_per_op": 13620,
+              "ratio_to_anchor": 1296028.5977859776,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 786,
+              "ns_per_op": 1488545.0000000002,
+              "bytes_per_op": 4714378,
+              "allocs_per_op": 13618,
+              "ratio_to_anchor": 1373196.4944649446,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1047,
+              "ns_per_op": 1111146.0000000002,
+              "bytes_per_op": 4715128,
+              "allocs_per_op": 13621,
+              "ratio_to_anchor": 1025042.4354243542,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1012,
+              "ns_per_op": 1267730,
+              "bytes_per_op": 4714868,
+              "allocs_per_op": 13619,
+              "ratio_to_anchor": 1169492.6199261989,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 847,
+              "ns_per_op": 1445808,
+              "bytes_per_op": 4714398,
+              "allocs_per_op": 13618,
+              "ratio_to_anchor": 1333771.2177121767,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1050,
+              "ns_per_op": 1126888.0000000002,
+              "bytes_per_op": 4715091,
+              "allocs_per_op": 13620,
+              "ratio_to_anchor": 1039564.5756457564,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1000,
+              "ns_per_op": 1438917,
+              "bytes_per_op": 4714884,
+              "allocs_per_op": 13619,
+              "ratio_to_anchor": 1327414.2066420661,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 819,
+              "ns_per_op": 1597974,
+              "bytes_per_op": 4714393,
+              "allocs_per_op": 13618,
+              "ratio_to_anchor": 1474145.7564575642,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1053,
+              "ns_per_op": 1097321,
+              "bytes_per_op": 4715127,
+              "allocs_per_op": 13621,
+              "ratio_to_anchor": 1012288.7453874536,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 992,
+              "ns_per_op": 1376962,
+              "bytes_per_op": 4714893,
+              "allocs_per_op": 13619,
+              "ratio_to_anchor": 1270260.1476014757,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 769,
+              "ns_per_op": 1549319.0000000002,
+              "bytes_per_op": 4714431,
+              "allocs_per_op": 13618,
+              "ratio_to_anchor": 1429261.070110701,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/tests.BenchmarkPrototypeMethodAccess/WithDetailedStats/ArrayPrototypeMethod": {
+          "ns_per_op": 1119569.6666666667,
+          "ratio_to_anchor": 1032813.3456334561,
+          "allocs_per_op": 13641,
+          "bytes_per_op": 4714943,
+          "samples": [
+            {
+              "iterations": 1021,
+              "ns_per_op": 1134929,
+              "bytes_per_op": 4714912,
+              "allocs_per_op": 13642,
+              "ratio_to_anchor": 1046982.4723247229,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1011,
+              "ns_per_op": 1092423.0000000002,
+              "bytes_per_op": 4714905,
+              "allocs_per_op": 13642,
+              "ratio_to_anchor": 1007770.295202952,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1027,
+              "ns_per_op": 1106316,
+              "bytes_per_op": 4715013,
+              "allocs_per_op": 13642,
+              "ratio_to_anchor": 1020586.7158671584,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 988,
+              "ns_per_op": 1150378,
+              "bytes_per_op": 4714904,
+              "allocs_per_op": 13642,
+              "ratio_to_anchor": 1061234.317343173,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 999,
+              "ns_per_op": 1149719,
+              "bytes_per_op": 4714865,
+              "allocs_per_op": 13641,
+              "ratio_to_anchor": 1060626.3837638374,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1004,
+              "ns_per_op": 1094527,
+              "bytes_per_op": 4714940,
+              "allocs_per_op": 13641,
+              "ratio_to_anchor": 1009711.2546125458,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1008,
+              "ns_per_op": 1113783.0000000002,
+              "bytes_per_op": 4714875,
+              "allocs_per_op": 13641,
+              "ratio_to_anchor": 1027475.0922509225,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1039,
+              "ns_per_op": 1110601.0000000002,
+              "bytes_per_op": 4714880,
+              "allocs_per_op": 13642,
+              "ratio_to_anchor": 1024539.6678966789,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1054,
+              "ns_per_op": 1134325,
+              "bytes_per_op": 4715112,
+              "allocs_per_op": 13641,
+              "ratio_to_anchor": 1046425.2767527673,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1042,
+              "ns_per_op": 1123285.0000000002,
+              "bytes_per_op": 4714908,
+              "allocs_per_op": 13642,
+              "ratio_to_anchor": 1036240.774907749,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1040,
+              "ns_per_op": 1140061.0000000002,
+              "bytes_per_op": 4714924,
+              "allocs_per_op": 13641,
+              "ratio_to_anchor": 1051716.7896678967,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1048,
+              "ns_per_op": 1094555,
+              "bytes_per_op": 4715352,
+              "allocs_per_op": 13641,
+              "ratio_to_anchor": 1009737.0848708485,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 997,
+              "ns_per_op": 1173559,
+              "bytes_per_op": 4714889,
+              "allocs_per_op": 13641,
+              "ratio_to_anchor": 1082619.0036900367,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 970,
+              "ns_per_op": 1163785,
+              "bytes_per_op": 4714874,
+              "allocs_per_op": 13641,
+              "ratio_to_anchor": 1073602.398523985,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 952,
+              "ns_per_op": 1108967,
+              "bytes_per_op": 4714929,
+              "allocs_per_op": 13641,
+              "ratio_to_anchor": 1023032.287822878,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/tests.BenchmarkPrototypeMethodAccess/WithDetailedStats/ObjectPrototypeChain": {
+          "ns_per_op": 1141830.6666666667,
+          "ratio_to_anchor": 1053349.3234932348,
+          "allocs_per_op": 13833,
+          "bytes_per_op": 4729245,
+          "samples": [
+            {
+              "iterations": 955,
+              "ns_per_op": 1150199,
+              "bytes_per_op": 4729054,
+              "allocs_per_op": 13833,
+              "ratio_to_anchor": 1061069.1881918816,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 940,
+              "ns_per_op": 1107242,
+              "bytes_per_op": 4729379,
+              "allocs_per_op": 13833,
+              "ratio_to_anchor": 1021440.9594095938,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1011,
+              "ns_per_op": 1154488.0000000002,
+              "bytes_per_op": 4729304,
+              "allocs_per_op": 13833,
+              "ratio_to_anchor": 1065025.8302583024,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1006,
+              "ns_per_op": 1148319,
+              "bytes_per_op": 4729148,
+              "allocs_per_op": 13833,
+              "ratio_to_anchor": 1059334.870848708,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 982,
+              "ns_per_op": 1108331.0000000002,
+              "bytes_per_op": 4729666,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 1022445.5719557195,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1006,
+              "ns_per_op": 1168842,
+              "bytes_per_op": 4729177,
+              "allocs_per_op": 13833,
+              "ratio_to_anchor": 1078267.5276752764,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1030,
+              "ns_per_op": 1096076,
+              "bytes_per_op": 4729529,
+              "allocs_per_op": 13833,
+              "ratio_to_anchor": 1011140.2214022138,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1022,
+              "ns_per_op": 1153557.0000000002,
+              "bytes_per_op": 4729402,
+              "allocs_per_op": 13833,
+              "ratio_to_anchor": 1064166.9741697416,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 979,
+              "ns_per_op": 1205733,
+              "bytes_per_op": 4728775,
+              "allocs_per_op": 13833,
+              "ratio_to_anchor": 1112299.8154981546,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 998,
+              "ns_per_op": 1142391,
+              "bytes_per_op": 4729516,
+              "allocs_per_op": 13833,
+              "ratio_to_anchor": 1053866.2361623612,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 968,
+              "ns_per_op": 1162085,
+              "bytes_per_op": 4728959,
+              "allocs_per_op": 13833,
+              "ratio_to_anchor": 1072034.1328413282,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 976,
+              "ns_per_op": 1189296,
+              "bytes_per_op": 4728890,
+              "allocs_per_op": 13833,
+              "ratio_to_anchor": 1097136.5313653133,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1026,
+              "ns_per_op": 1133303,
+              "bytes_per_op": 4729086,
+              "allocs_per_op": 13833,
+              "ratio_to_anchor": 1045482.4723247229,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1053,
+              "ns_per_op": 1116699,
+              "bytes_per_op": 4729566,
+              "allocs_per_op": 13833,
+              "ratio_to_anchor": 1030165.1291512912,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 973,
+              "ns_per_op": 1160954,
+              "bytes_per_op": 4729193,
+              "allocs_per_op": 13833,
+              "ratio_to_anchor": 1070990.7749077487,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/tests.BenchmarkPrototypeMethodAccess/WithDetailedStats/StringPrototypeMethod": {
+          "ns_per_op": 1060908.3333333333,
+          "ratio_to_anchor": 978697.7244772444,
+          "allocs_per_op": 13612,
+          "bytes_per_op": 4713019,
+          "samples": [
+            {
+              "iterations": 1092,
+              "ns_per_op": 1031204,
+              "bytes_per_op": 4713050,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 951295.2029520293,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1083,
+              "ns_per_op": 1111426,
+              "bytes_per_op": 4713042,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 1025300.7380073798,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1056,
+              "ns_per_op": 1112725.0000000002,
+              "bytes_per_op": 4712993,
+              "allocs_per_op": 13611,
+              "ratio_to_anchor": 1026499.0774907748,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1063,
+              "ns_per_op": 1009049.0000000001,
+              "bytes_per_op": 4713032,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 930857.0110701106,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1062,
+              "ns_per_op": 1017886,
+              "bytes_per_op": 4713026,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 939009.2250922506,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 990,
+              "ns_per_op": 1149382,
+              "bytes_per_op": 4713055,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 1060315.4981549813,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1054,
+              "ns_per_op": 1043396,
+              "bytes_per_op": 4713009,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 962542.4354243539,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1014,
+              "ns_per_op": 1021285,
+              "bytes_per_op": 4713032,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 942144.8339483392,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1021,
+              "ns_per_op": 1118044,
+              "bytes_per_op": 4713016,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 1031405.9040590404,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1057,
+              "ns_per_op": 1011958.0000000001,
+              "bytes_per_op": 4713016,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 933540.5904059039,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1105,
+              "ns_per_op": 1022006,
+              "bytes_per_op": 4713027,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 942809.9630996308,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1089,
+              "ns_per_op": 1096389.0000000002,
+              "bytes_per_op": 4713016,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 1011428.9667896678,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1094,
+              "ns_per_op": 1010988,
+              "bytes_per_op": 4712995,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 932645.7564575643,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1095,
+              "ns_per_op": 1062382.0000000002,
+              "bytes_per_op": 4713022,
+              "allocs_per_op": 13612,
+              "ratio_to_anchor": 980057.1955719556,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1022,
+              "ns_per_op": 1125074,
+              "bytes_per_op": 4712992,
+              "allocs_per_op": 13611,
+              "ratio_to_anchor": 1037891.1439114389,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/tests.BenchmarkPrototypeMethodAccess/WithPrototypeCache/ArrayPrototypeMethod": {
+          "ns_per_op": 1039462.3333333334,
+          "ratio_to_anchor": 958913.5916359161,
+          "allocs_per_op": 13643,
+          "bytes_per_op": 4715425,
+          "samples": [
+            {
+              "iterations": 1107,
+              "ns_per_op": 1022130,
+              "bytes_per_op": 4715532,
+              "allocs_per_op": 13643,
+              "ratio_to_anchor": 942924.3542435422,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1129,
+              "ns_per_op": 1063432,
+              "bytes_per_op": 4715595,
+              "allocs_per_op": 13643,
+              "ratio_to_anchor": 981025.8302583023,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1119,
+              "ns_per_op": 1035687,
+              "bytes_per_op": 4715230,
+              "allocs_per_op": 13643,
+              "ratio_to_anchor": 955430.8118081178,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1104,
+              "ns_per_op": 1001760,
+              "bytes_per_op": 4715530,
+              "allocs_per_op": 13643,
+              "ratio_to_anchor": 924132.841328413,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1142,
+              "ns_per_op": 997113,
+              "bytes_per_op": 4715527,
+              "allocs_per_op": 13643,
+              "ratio_to_anchor": 919845.9409594093,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1042,
+              "ns_per_op": 1027953.0000000001,
+              "bytes_per_op": 4715219,
+              "allocs_per_op": 13643,
+              "ratio_to_anchor": 948296.1254612545,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1101,
+              "ns_per_op": 996306,
+              "bytes_per_op": 4715671,
+              "allocs_per_op": 13643,
+              "ratio_to_anchor": 919101.4760147599,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1122,
+              "ns_per_op": 1035624,
+              "bytes_per_op": 4715197,
+              "allocs_per_op": 13643,
+              "ratio_to_anchor": 955372.693726937,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 970,
+              "ns_per_op": 1175213,
+              "bytes_per_op": 4715159,
+              "allocs_per_op": 13643,
+              "ratio_to_anchor": 1084144.833948339,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1134,
+              "ns_per_op": 1000052,
+              "bytes_per_op": 4715503,
+              "allocs_per_op": 13643,
+              "ratio_to_anchor": 922557.1955719554,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1092,
+              "ns_per_op": 1044917,
+              "bytes_per_op": 4715212,
+              "allocs_per_op": 13643,
+              "ratio_to_anchor": 963945.5719557193,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1089,
+              "ns_per_op": 1073418,
+              "bytes_per_op": 4715152,
+              "allocs_per_op": 13643,
+              "ratio_to_anchor": 990238.0073800735,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1099,
+              "ns_per_op": 1018747,
+              "bytes_per_op": 4715653,
+              "allocs_per_op": 13643,
+              "ratio_to_anchor": 939803.5055350551,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1152,
+              "ns_per_op": 1019946.0000000001,
+              "bytes_per_op": 4715601,
+              "allocs_per_op": 13643,
+              "ratio_to_anchor": 940909.5940959408,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1142,
+              "ns_per_op": 1044365,
+              "bytes_per_op": 4715233,
+              "allocs_per_op": 13643,
+              "ratio_to_anchor": 963436.3468634684,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/tests.BenchmarkPrototypeMethodAccess/WithPrototypeCache/ObjectPrototypeChain": {
+          "ns_per_op": 1085414.3333333333,
+          "ratio_to_anchor": 1001304.7355473551,
+          "allocs_per_op": 13834,
+          "bytes_per_op": 4728954,
+          "samples": [
+            {
+              "iterations": 1059,
+              "ns_per_op": 1067137.0000000002,
+              "bytes_per_op": 4728980,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 984443.7269372693,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 996,
+              "ns_per_op": 1087374,
+              "bytes_per_op": 4728941,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 1003112.546125461,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1072,
+              "ns_per_op": 1110487,
+              "bytes_per_op": 4728944,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 1024434.5018450181,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1084,
+              "ns_per_op": 1102987.0000000002,
+              "bytes_per_op": 4728956,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 1017515.6826568265,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1029,
+              "ns_per_op": 1097248,
+              "bytes_per_op": 4728958,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 1012221.4022140219,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1010,
+              "ns_per_op": 1074368,
+              "bytes_per_op": 4728926,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 991114.3911439112,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1021,
+              "ns_per_op": 1102929,
+              "bytes_per_op": 4729004,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 1017462.1771217709,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1027,
+              "ns_per_op": 1095012,
+              "bytes_per_op": 4728976,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 1010158.6715867156,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 990,
+              "ns_per_op": 1058302,
+              "bytes_per_op": 4728883,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 976293.357933579,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1014,
+              "ns_per_op": 1087827,
+              "bytes_per_op": 4728977,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 1003530.4428044278,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 994,
+              "ns_per_op": 1104782,
+              "bytes_per_op": 4728947,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 1019171.5867158669,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1032,
+              "ns_per_op": 1058050,
+              "bytes_per_op": 4728911,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 976060.8856088559,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1075,
+              "ns_per_op": 1079230,
+              "bytes_per_op": 4728969,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 995599.6309963097,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1044,
+              "ns_per_op": 1081105.0000000002,
+              "bytes_per_op": 4728974,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 997329.3357933579,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1039,
+              "ns_per_op": 1093690,
+              "bytes_per_op": 4728942,
+              "allocs_per_op": 13834,
+              "ratio_to_anchor": 1008939.1143911437,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/tests.BenchmarkPrototypeMethodAccess/WithPrototypeCache/StringPrototypeMethod": {
+          "ns_per_op": 1093434.3333333333,
+          "ratio_to_anchor": 1008703.2595325949,
+          "allocs_per_op": 13613,
+          "bytes_per_op": 4713448,
+          "samples": [
+            {
+              "iterations": 933,
+              "ns_per_op": 1236257.0000000002,
+              "bytes_per_op": 4713600,
+              "allocs_per_op": 13614,
+              "ratio_to_anchor": 1140458.4870848707,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 938,
+              "ns_per_op": 1138318.0000000002,
+              "bytes_per_op": 4713395,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 1050108.8560885608,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1021,
+              "ns_per_op": 1046950,
+              "bytes_per_op": 4713344,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 965821.0332103318,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1020,
+              "ns_per_op": 1186064.0000000002,
+              "bytes_per_op": 4713564,
+              "allocs_per_op": 13614,
+              "ratio_to_anchor": 1094154.9815498155,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 997,
+              "ns_per_op": 1068252,
+              "bytes_per_op": 4713319,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 985472.324723247,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1098,
+              "ns_per_op": 1025987.0000000001,
+              "bytes_per_op": 4713390,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 946482.4723247231,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1006,
+              "ns_per_op": 1163623.0000000002,
+              "bytes_per_op": 4713493,
+              "allocs_per_op": 13614,
+              "ratio_to_anchor": 1073452.9520295202,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1106,
+              "ns_per_op": 1017579,
+              "bytes_per_op": 4713324,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 938726.0147601473,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1130,
+              "ns_per_op": 1030826.0000000001,
+              "bytes_per_op": 4713602,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 950946.4944649445,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 991,
+              "ns_per_op": 1111376,
+              "bytes_per_op": 4713350,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 1025254.6125461252,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1090,
+              "ns_per_op": 1029909.0000000001,
+              "bytes_per_op": 4713321,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 950100.5535055349,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1100,
+              "ns_per_op": 1023256.0000000001,
+              "bytes_per_op": 4713741,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 943963.0996309961,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 960,
+              "ns_per_op": 1274032,
+              "bytes_per_op": 4713589,
+              "allocs_per_op": 13614,
+              "ratio_to_anchor": 1175306.2730627302,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 939,
+              "ns_per_op": 1147047,
+              "bytes_per_op": 4713407,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 1058161.4391143909,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 1069,
+              "ns_per_op": 1040360.0000000001,
+              "bytes_per_op": 4713348,
+              "allocs_per_op": 13613,
+              "ratio_to_anchor": 959741.697416974,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        },
+        "github.com/nooga/paserati/tests.BenchmarkSetIndex": {
+          "ns_per_op": 698684239.6666666,
+          "ratio_to_anchor": 644542656.519065,
+          "allocs_per_op": 576882,
+          "bytes_per_op": 1637714,
+          "samples": [
+            {
+              "iterations": 2,
+              "ns_per_op": 701933983.0000001,
+              "bytes_per_op": 1637712,
+              "allocs_per_op": 576882,
+              "ratio_to_anchor": 647540574.7232472,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 701947636.0000001,
+              "bytes_per_op": 1637712,
+              "allocs_per_op": 576882,
+              "ratio_to_anchor": 647553169.7416973,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 702988401,
+              "bytes_per_op": 1637712,
+              "allocs_per_op": 576882,
+              "ratio_to_anchor": 648513285.0553504,
+              "captured_at": "2026-07-31T11:52:38Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 695934206,
+              "bytes_per_op": 1637720,
+              "allocs_per_op": 576882,
+              "ratio_to_anchor": 642005725.0922507,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 697427462,
+              "bytes_per_op": 1637712,
+              "allocs_per_op": 576882,
+              "ratio_to_anchor": 643383267.5276752,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 695624145,
+              "bytes_per_op": 1637720,
+              "allocs_per_op": 576882,
+              "ratio_to_anchor": 641719690.9594095,
+              "captured_at": "2026-07-31T12:34:02Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 700837850.0000001,
+              "bytes_per_op": 1637728,
+              "allocs_per_op": 576882,
+              "ratio_to_anchor": 646529381.9188191,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 700173808.0000001,
+              "bytes_per_op": 1637728,
+              "allocs_per_op": 576882,
+              "ratio_to_anchor": 645916797.0479704,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 701063580,
+              "bytes_per_op": 1637720,
+              "allocs_per_op": 576882,
+              "ratio_to_anchor": 646737619.9261991,
+              "captured_at": "2026-07-31T13:15:00Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 698790276.0000001,
+              "bytes_per_op": 1637720,
+              "allocs_per_op": 576882,
+              "ratio_to_anchor": 644640476.0147601,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 697469676.0000001,
+              "bytes_per_op": 1637712,
+              "allocs_per_op": 576882,
+              "ratio_to_anchor": 643422210.3321033,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 697452752,
+              "bytes_per_op": 1637712,
+              "allocs_per_op": 576882,
+              "ratio_to_anchor": 643406597.7859777,
+              "captured_at": "2026-07-31T13:55:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 697225674,
+              "bytes_per_op": 1637704,
+              "allocs_per_op": 576882,
+              "ratio_to_anchor": 643197116.2361622,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 698228110.0000001,
+              "bytes_per_op": 1637728,
+              "allocs_per_op": 576882,
+              "ratio_to_anchor": 644121872.6937269,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            },
+            {
+              "iterations": 2,
+              "ns_per_op": 700598935,
+              "bytes_per_op": 1637712,
+              "allocs_per_op": 576882,
+              "ratio_to_anchor": 646308980.6273061,
+              "captured_at": "2026-07-31T14:36:58Z",
+              "anchor_ns_per_op": 1.0840000000000003
+            }
+          ],
+          "set_hash": null,
+          "method": {
+            "reducer": "median-of-round-medians",
+            "rounds": 5
+          }
+        }
+      }
+    }
+  }
+}
