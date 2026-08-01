@@ -29,6 +29,11 @@
 # measured last and reads as a regression. Under rounds it spreads across all
 # of them and shows up in the round-to-round spread, where it is visible.
 #
+# The order within a round is counterbalanced too — rotated, and reversed on
+# even rounds. Interleaving alone still gives the first commit every cold start
+# and the last every warm one, and a bias that repeats identically in every
+# round is one the rounds cannot cancel.
+#
 # Each round is reduced independently and the rounds are combined by MEDIAN of
 # per-round values — the same rule the multi-job design uses, because the
 # failure it defends against (one bad round) is the same.
@@ -116,12 +121,20 @@ note "host: ${cpu_model}${itype:+ (${itype})}"
 note "${#FULL[@]} commit(s) x ${ROUNDS} round(s), interleaved; macro=$([ $MACRO -eq 1 ] && echo on || echo off)"
 
 # --- worktrees ------------------------------------------------------------
-# The tool/engine split, which is load-bearing rather than stylistic:
-# bench-ratchet must come from the TARGET tree because its benchmark set is
-# part of the commit being measured, while perf-migrate and the macro reducer
-# must come from a fixed tool tree so every commit is post-processed the same
-# way. Getting this backwards is how a backfill reduces differently from a
-# forward run.
+# The tool/engine split, which is load-bearing rather than stylistic: every
+# step that SUMMARIZES a measurement — bench-ratchet's reducer and anchor
+# normalization, perf-migrate, the macro reducer — comes from a fixed tool
+# tree, so all N commits are post-processed identically. Getting this backwards
+# is how a backfill reduces differently from a forward run.
+#
+# The engine and its benchmark functions still come from the target tree, and
+# that needs no special handling: bench-ratchet shells out to `go test <import
+# path>` with no explicit directory, so its cwd decides which module — and
+# therefore which _test.go files — it measures. Running the tool tree's binary
+# with the target worktree as cwd gets both halves at once. What it does NOT
+# pick up from the target is bench-ratchet's own package scope, which has
+# changed once since the tool was written; a commit that adds a benchmark
+# package needs -packages here.
 #
 # Both live outside the working tree so the session never disturbs it.
 TOOLWT="$OUT/.tool"
@@ -146,16 +159,51 @@ note "tooling from $(git -C "$TOOLWT" rev-parse --short HEAD) ($TOOL_REF)"
 reduce_sh="$TOOLWT/scripts/macro-test262-reduce.sh"
 [ $MACRO -eq 1 ] && { [ -x "$reduce_sh" ] || chmod +x "$reduce_sh" 2>/dev/null || die "no macro reducer at $reduce_sh"; }
 
+# Built once, from the tool tree, and invoked below with the target worktree as
+# cwd. Building beats `go run` per commit for a second reason: `go run` would
+# recompile the tool inside the measurement loop, on the same machine whose
+# spare capacity the next benchmark is about to depend on.
+BENCH_RATCHET="$OUT/.bin/bench-ratchet"
+mkdir -p "$OUT/.bin"
+( cd "$TOOLWT" && go build -o "$BENCH_RATCHET" ./cmd/bench-ratchet ) \
+  || die "cannot build bench-ratchet from tool tree"
+
 # --- measure --------------------------------------------------------------
+# Counterbalance the order WITHIN a round, not just across commits. Rounds
+# already spread session-scale drift, but if every round visits the commits in
+# the same order then position inside a round is perfectly confounded with
+# commit: whatever runs first is always cold, whatever runs last always carries
+# the round's accumulated warming. Rounds cannot cancel a bias that is identical
+# in each of them, and the median across rounds cannot either.
+#
+# So: reverse direction on even rounds — the N-commit generalization of the
+# ABBA alternation in ab_repeat.py:126 — and rotate the starting commit once per
+# PAIR of rounds. The offset has to be shared by a round and its mirror; advance
+# it every round instead and the rotation cancels the reversal exactly, which
+# for N=2 reproduces the fixed order this is meant to fix.
+#
+# Over an even number of rounds every commit's mean position is then exactly
+# (N-1)/2. The rotation is what the odd round left over at ROUNDS=3 rides on.
+round_order() {
+  local r="$1" n="${#FULL[@]}" off=$(( (r - 1) / 2 )) k
+  for ((k = 0; k < n; k++)); do
+    if (( r % 2 == 1 )); then
+      echo $(( (k + off) % n ))
+    else
+      echo $(( (n - 1 - k + off) % n ))
+    fi
+  done
+}
+
 for r in $(seq 1 "$ROUNDS"); do
   mkdir -p "$OUT/raw/round-$r"
-  for i in "${!FULL[@]}"; do
+  for i in $(round_order "$r"); do
     sha="${FULL[$i]}"; short="${SHORT[$i]}"
     out="$OUT/raw/round-$r/${short}.json"
     [ -f "$out" ] && { note "round $r  ${short}  (already present, skipping)"; continue; }
     note "round $r  ${short}  building"
     git -C "$TARGWT" checkout --force --quiet "$sha" || die "checkout $sha failed"
-    ( cd "$TARGWT" && go run ./cmd/bench-ratchet \
+    ( cd "$TARGWT" && "$BENCH_RATCHET" \
         -count "$COUNT" -benchtime "$BENCHTIME" -timeout 30m \
         -baseline "$out" snapshot >/dev/null ) || die "bench-ratchet failed at $short (round $r)"
 
