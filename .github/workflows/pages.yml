@@ -139,11 +139,27 @@ jobs:
             sha="$(printf '%s' "${f%.json}" | cut -d- -f2)"
             # Several tiers share a commit; hash it once.
             grep -q "^${sha} " /tmp/engine.txt && continue
-            tree="$(git ls-tree "$sha" pkg | git hash-object --stdin)"
-            # No pkg/ at that commit would hash every such commit identically and
-            # group them as one engine. Fall back to the sha, which groups with
-            # nothing — an unknown engine must never merge points.
-            if [ -z "$(git ls-tree "$sha" pkg)" ]; then tree="$sha"; fi
+            # Recurse and drop _test.go: the grouping key must be the RUNTIME,
+            # and a top-level `ls-tree pkg` hashes subtree ids, so adding a
+            # benchmark file changes the key while the engine is byte-identical.
+            # 24f6f81784a0 does exactly that. It costs nothing today (its parent
+            # isn't in the corpus, so it's a singleton either way) but the next
+            # test-only commit between two corpus points would split a group
+            # that should merge.
+            # `|| true` is load-bearing under `set -o pipefail`: grep exits 1 when
+            # nothing survives the filter, which would kill the whole step at the
+            # first commit whose pkg/ holds only test files.
+            runtime="$(git ls-tree -r "$sha" pkg | grep -v '_test\.go$' || true)"
+            # An empty runtime list — no pkg/, or pkg/ is all tests — would hash
+            # identically for every such commit and merge them into one bogus
+            # engine. Fall back to the sha, which groups with nothing: an unknown
+            # engine must never merge points. Note this must test the FILTERED
+            # list, not `ls-tree pkg`, which is non-empty in the all-tests case.
+            if [ -z "$runtime" ]; then
+              tree="$sha"
+            else
+              tree="$(printf '%s' "$runtime" | git hash-object --stdin)"
+            fi
             printf '%s %s\n' "$sha" "${tree:0:12}" >> /tmp/engine.txt
           done
           jq -Rn '[inputs | split(" ") | {key: .[0], value: .[1]}] | from_entries' \
