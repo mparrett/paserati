@@ -156,6 +156,8 @@ if [ -n "$OUT" ]; then
 fi
 
 echo
+echo "Apply with:  bench-ratchet -pins <this file> ...   (needs --out)"
+echo
 echo "A suggestion is a starting point, not a verdict. Confirm the pin by"
 echo "re-running the two commits you actually care about at that N and checking"
 echo "they still separate the way the variable-N run said they did."

@@ -33,6 +33,11 @@ type Method struct {
 	// bounds are not comparable in their failed/timeout split. Recorded by the driver
 	// that applied it (scripts/macro-test262.sh) rather than by whoever reports it.
 	PerTestTimeout string `json:"per_test_timeout,omitempty"`
+	// Pins records benchmarks measured at their own -benchtime rather than the
+	// run's. Without it Benchtime is a claim the run did not honour: it would
+	// name one value while several were used, and a later reader comparing two
+	// snapshots would see matching protocol strings for different protocols.
+	Pins map[string]string `json:"pins,omitempty"`
 }
 
 // Test262Stats is the conformance outcome of the Test262 run that produced a macro

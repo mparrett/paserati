@@ -79,8 +79,22 @@ paserati's `./tests` benchmarks the direction is not even consistent —
 expensive. So raising `-benchtime` uniformly does not converge them; it walks
 each one a different distance in a different direction.
 
-Pin instead. Take the suggested N per benchmark, and treat "NO FLAT REGION" or
-"NOT EVALUATED" as a result to act on rather than a line to skim past.
+Pin instead. Feed the calibration straight back in:
+
+```bash
+go run ./cmd/bench-ratchet -pins calib.json -count 3 -benchtime 1s snapshot ...
+```
+
+`-pins` splits each package into one `go test` invocation per distinct
+benchtime, so every benchmark is measured exactly once at its own pinned N, and
+records the table in `method.pins` — a snapshot that used several benchtimes
+must not carry a single `method.benchtime` claiming otherwise. A pin matching
+no benchmark warns rather than being dropped, because a table that has silently
+stopped applying still reads as if it pinned.
+
+Treat "NO FLAT REGION" or "NOT EVALUATED" as a result to act on rather than a
+line to skim past — those benchmarks stay unpinned and keep the global
+`-benchtime`.
 
 `bench-ratchet` warns on every run when a benchmark lands under its `b.N`
 floor (`-min-iterations`, default 20; `-strict-iterations` to fail). If that

@@ -138,6 +138,7 @@ func main() {
 		shaOverride     = flag.String("sha", "", "override the SHA recorded for this run (default: git rev-parse HEAD of cwd). Use when aggregating a capture from a worktree that differs from cwd.")
 		tags            = flag.String("tags", "", "go test -tags (default none)")
 		format          = flag.String("format", "text", "report format: text (default, ANSI terminal), markdown (GitHub/Slack-friendly table), json (the raw baseline)")
+		pinsPath        = flag.String("pins", "", "JSON pin table (bench-calibrate.sh -o output, or a {\"BenchmarkX\":\"32x\"} map): run each named benchmark at its own -benchtime")
 		minIterations   = flag.Int64("min-iterations", defaultMinIterations, "warn when a benchmark's observed b.N falls below this; 0 disables the check")
 		strictIters     = flag.Bool("strict-iterations", false, "with check: treat a b.N floor violation as a failure rather than a warning")
 		allowIncomplete = flag.Bool("allow-incomplete", false, "with check: tolerate package capture errors and missing baseline entries instead of failing (they shrink coverage, so the default is to fail)")
@@ -194,7 +195,14 @@ func main() {
 		die("invalid -filter regexp: %v", err)
 	}
 
-	jobs, scope, err := buildJobs(*packages, *tags, manual, filterRE)
+	var pins map[string]string
+	if *pinsPath != "" {
+		if pins, err = loadPins(*pinsPath); err != nil {
+			die("load pins: %v", err)
+		}
+	}
+
+	jobs, scope, err := buildJobs(*packages, *tags, manual, filterRE, pins, *benchtime)
 	if err != nil {
 		die("%v", err)
 	}
@@ -232,6 +240,7 @@ func main() {
 		die("aggregate: %v", err)
 	}
 	current.Method.Count, current.Method.Benchtime = *count, *benchtime
+	current.Method.Pins = pins
 	if *shaOverride != "" {
 		current.CapturedAtSHA = *shaOverride
 	}
@@ -516,32 +525,54 @@ type captureJob struct {
 	pkg    string
 	tags   string
 	filter *regexp.Regexp
+	// benchtime is per-job so a package can be split into several invocations
+	// with different pinned b.N. Empty means the global -benchtime; see pins.go.
+	benchtime string
 }
 
 // buildJobs decides what gets benchmarked. With -packages or -filter it
 // honors them verbatim (power-user escape hatch); otherwise it runs the
 // default package scope with an all-benchmarks filter, which includes the
 // calibration anchor in pkg/vm.
-func buildJobs(packages, tags string, manual bool, filterRE *regexp.Regexp) ([]captureJob, string, error) {
+func buildJobs(packages, tags string, manual bool, filterRE *regexp.Regexp,
+	pins map[string]string, defaultBenchtime string) ([]captureJob, string, error) {
 	pkgList := strings.Fields(packages)
 	if len(pkgList) == 0 {
 		pkgList = append(pkgList, defaultPackages...)
 	}
-	jobs := make([]captureJob, 0, len(pkgList))
-	for _, p := range pkgList {
-		jobs = append(jobs, captureJob{pkg: p, tags: tags, filter: filterRE})
-	}
+
 	scope := "default scope"
 	if manual {
 		scope = "manual scope"
 	}
-	return jobs, scope, nil
+
+	// No pins: one invocation per package, exactly as before. Worth keeping as
+	// its own path — it avoids a listing run per package, and it means the
+	// unpinned default cannot regress when the planner changes.
+	if len(pins) == 0 {
+		jobs := make([]captureJob, 0, len(pkgList))
+		for _, p := range pkgList {
+			jobs = append(jobs, captureJob{pkg: p, tags: tags, filter: filterRE})
+		}
+		return jobs, scope, nil
+	}
+
+	jobs, unmatched, err := planJobs(pkgList, tags, filterRE, pins, defaultBenchtime, listBenchmarks)
+	if err != nil {
+		// Falling back to the unpinned path here would measure at the wrong N
+		// while the run still claims to be pinned. Fail instead.
+		return nil, "", fmt.Errorf("plan pinned jobs: %w", err)
+	}
+	for _, n := range unmatched {
+		fmt.Fprintf(os.Stderr, "::warning::pin %q matched no benchmark in scope — it is NOT being applied\n", n)
+	}
+	return jobs, scope + ", pinned b.N", nil
 }
 
 // captureJobs returns the number of jobs whose `go test` invocation failed
 // (build error, timeout, panic). A non-zero count means reduced benchmark
 // coverage, which `check` treats as a failure unless -allow-incomplete is set.
-func captureJobs(jobs []captureJob, count int, benchtime, timeout, outPath string) (int, error) {
+func captureJobs(jobs []captureJob, count int, defaultBenchtime, timeout, outPath string) (int, error) {
 	out, err := os.OpenFile(outPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
 		return 0, fmt.Errorf("open %s: %w", outPath, err)
@@ -555,8 +586,15 @@ func captureJobs(jobs []captureJob, count int, benchtime, timeout, outPath strin
 		if j.tags != "" {
 			label += " -tags " + j.tags
 		}
+		bt := j.benchtime
+		if bt == "" {
+			bt = defaultBenchtime
+		}
+		if bt != defaultBenchtime {
+			label += " -benchtime " + bt
+		}
 		fmt.Fprintf(os.Stderr, "  [%d/%d] %s ... ", i+1, len(jobs), label)
-		n, err := captureOnePackage(j.pkg, count, benchtime, timeout, j.tags, j.filter, enc, out)
+		n, err := captureOnePackage(j.pkg, count, bt, timeout, j.tags, j.filter, enc, out)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warn: %v (%d records captured)\n", err, n)
 			failed++
