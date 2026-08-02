@@ -143,6 +143,7 @@ func main() {
 		reducerFlag     = flag.String("reducer", defaultReducer, "how -count repetitions collapse to one number: min (default) or warmup-median")
 		pinsPath        = flag.String("pins", "", "JSON pin table (bench-calibrate.sh -o output, or a {\"BenchmarkX\":\"32x\"} map): run each named benchmark at its own -benchtime")
 		minIterations   = flag.Int64("min-iterations", defaultMinIterations, "warn when a benchmark's observed b.N falls below this; 0 disables the check")
+		iterTolerance   = flag.Float64("iteration-tolerance", 0.02, "warn when a benchmark's b.N moves by more than this fraction across reps; the moving-N confound behind #48")
 		strictIters     = flag.Bool("strict-iterations", false, "with check: treat a b.N floor violation as a failure rather than a warning")
 		allowIncomplete = flag.Bool("allow-incomplete", false, "with check: tolerate package capture errors and missing baseline entries instead of failing (they shrink coverage, so the default is to fail)")
 	)
@@ -179,7 +180,7 @@ func main() {
 		if *shaOverride != "" {
 			current.CapturedAtSHA = *shaOverride
 		}
-		under := reportIterationFloor(os.Stderr, current, *minIterations)
+		under := reportIterationHealth(os.Stderr, current, *minIterations, *iterTolerance)
 		if mode == "snapshot" {
 			writeSnapshot(*baselinePath, current)
 		} else {
@@ -248,7 +249,7 @@ func main() {
 		current.CapturedAtSHA = *shaOverride
 	}
 
-	under := reportIterationFloor(os.Stderr, current, *minIterations)
+	under := reportIterationHealth(os.Stderr, current, *minIterations, *iterTolerance)
 
 	if mode == "snapshot" {
 		writeSnapshot(*baselinePath, current)

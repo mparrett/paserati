@@ -96,3 +96,32 @@ func TestReportIterationFloorSilentWhenClean(t *testing.T) {
 		t.Fatalf("want no output when clean, got:\n%s", buf.String())
 	}
 }
+
+// The floor and the instability check are close to independent, and the corpus
+// case that motivated this is a benchmark far ABOVE the floor whose b.N moves in
+// every commit. A floor-only check is silent on exactly the wrong one.
+func TestUnstableIterationsCatchesWhatTheFloorMisses(t *testing.T) {
+	b := Baseline{Benchmarks: map[string]BenchmarkEntry{
+		"pkg.SetIndex":   withSamples(2, 2, 2),       // under the floor, rock steady
+		"pkg.MatrixMult": withSamples(139, 200, 261), // far above the floor, moves 88%
+	}}
+	if v := iterationFloorViolations(b, 20); len(v) != 1 || v[0].Name != "pkg.SetIndex" {
+		t.Fatalf("floor should flag only SetIndex, got %+v", v)
+	}
+	u := unstableIterations(b, 0.02)
+	if len(u) != 1 || u[0].Name != "pkg.MatrixMult" {
+		t.Fatalf("instability should flag only MatrixMult, got %+v", u)
+	}
+}
+
+func TestUnstableIterationsRespectsTolerance(t *testing.T) {
+	b := Baseline{Benchmarks: map[string]BenchmarkEntry{
+		"pkg.Jitter": withSamples(200, 201), // 0.5%, within a 2% tolerance
+	}}
+	if u := unstableIterations(b, 0.02); len(u) != 0 {
+		t.Fatalf("want no violation inside tolerance, got %+v", u)
+	}
+	if u := unstableIterations(b, 0.001); len(u) != 1 {
+		t.Fatalf("want a violation below tolerance, got %+v", u)
+	}
+}

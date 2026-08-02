@@ -71,6 +71,77 @@ func iterationFloorViolations(b Baseline, floor int64) []iterationFloor {
 	return out
 }
 
+// unstableIterations returns benchmarks whose b.N MOVED across the reps of a
+// single run, worst first.
+//
+// This is the check that matters most and it is not the floor check. The floor
+// asks "is N small"; the confound behind nooga/paserati#48 is "is N the same
+// number it was last commit" — because ns/op is a function of N wherever
+// iterations share state, so a moving N changes the measurement with the engine
+// held fixed.
+//
+// The two are close to independent, and on this corpus they point at different
+// benchmarks. Measured over the 2026-07-31 session: SetIndex sat at b.N=2 for
+// all 16 commits — under any sane floor, and the TIGHTEST benchmark in the suite
+// at 0.30% MAD/median. MatrixMult ran at b.N 139–261, far above any floor, moved
+// in 16 of 16 commits, and was noisier at 0.42%/5.24%. A floor-only check flags
+// the stable one and stays silent on the unstable one.
+//
+// Yes, this is max/min, which is banned for TIMINGS in this project — it is set
+// by the single worst observation and grows with n, and it manufactured an
+// entire false finding. The ban does not extend here: b.N is a control input,
+// not a sampled quantity, and the question asked of it is literally "did it
+// move", for which the extremes are the whole answer rather than a bad summary
+// of a distribution.
+func unstableIterations(b Baseline, tolerance float64) []iterationFloor {
+	var out []iterationFloor
+	for name, entry := range b.Benchmarks {
+		if len(entry.Samples) < 2 {
+			continue
+		}
+		lo, hi := entry.Samples[0].Iterations, entry.Samples[0].Iterations
+		for _, s := range entry.Samples[1:] {
+			if s.Iterations < lo {
+				lo = s.Iterations
+			}
+			if s.Iterations > hi {
+				hi = s.Iterations
+			}
+		}
+		if lo > 0 && float64(hi-lo)/float64(lo) > tolerance {
+			out = append(out, iterationFloor{Name: name, Min: lo, Max: hi})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		si := float64(out[i].Max-out[i].Min) / float64(out[i].Min)
+		sj := float64(out[j].Max-out[j].Min) / float64(out[j].Min)
+		if si != sj {
+			return si > sj
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+// reportIterationHealth writes both b.N warnings. Returns whether anything was
+// under the floor, so the caller can decide what that means for its exit code.
+// Instability is reported but never fatal: it is a property of the run's
+// interaction with the machine, and failing on it would redden a lane for a
+// condition -pins is the fix for.
+func reportIterationHealth(w io.Writer, b Baseline, floor int64, tolerance float64) bool {
+	under := reportIterationFloor(w, b, floor)
+
+	if u := unstableIterations(b, tolerance); len(u) > 0 {
+		fmt.Fprintf(w, "\n::warning::%d benchmark(s) had b.N MOVE across reps — ns/op is N-dependent, so this is the measurement changing, not the engine\n", len(u))
+		for _, f := range u {
+			fmt.Fprintf(w, "  b.N %d–%d (%+.0f%%)  %s\n",
+				f.Min, f.Max, float64(f.Max-f.Min)/float64(f.Min)*100, f.Name)
+		}
+		fmt.Fprintf(w, "  pin these with -pins to make the comparison protocol constant across commits\n\n")
+	}
+	return under
+}
+
 // reportIterationFloor writes the warning block. Returns whether anything was
 // under the floor, so the caller can decide what that means for its exit code.
 func reportIterationFloor(w io.Writer, b Baseline, floor int64) bool {
