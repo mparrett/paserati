@@ -138,6 +138,8 @@ func main() {
 		shaOverride     = flag.String("sha", "", "override the SHA recorded for this run (default: git rev-parse HEAD of cwd). Use when aggregating a capture from a worktree that differs from cwd.")
 		tags            = flag.String("tags", "", "go test -tags (default none)")
 		format          = flag.String("format", "text", "report format: text (default, ANSI terminal), markdown (GitHub/Slack-friendly table), json (the raw baseline)")
+		minIterations   = flag.Int64("min-iterations", defaultMinIterations, "warn when a benchmark's observed b.N falls below this; 0 disables the check")
+		strictIters     = flag.Bool("strict-iterations", false, "with check: treat a b.N floor violation as a failure rather than a warning")
 		allowIncomplete = flag.Bool("allow-incomplete", false, "with check: tolerate package capture errors and missing baseline entries instead of failing (they shrink coverage, so the default is to fail)")
 	)
 	flag.Parse()
@@ -173,10 +175,14 @@ func main() {
 		if *shaOverride != "" {
 			current.CapturedAtSHA = *shaOverride
 		}
+		under := reportIterationFloor(os.Stderr, current, *minIterations)
 		if mode == "snapshot" {
 			writeSnapshot(*baselinePath, current)
 		} else {
 			writeOrCheck(*baselinePath, current, "update", *budget, *force, *format, 0, *allowIncomplete)
+		}
+		if under && *strictIters {
+			die("b.N floor violated (-strict-iterations)")
 		}
 		return
 	}
@@ -230,10 +236,17 @@ func main() {
 		current.CapturedAtSHA = *shaOverride
 	}
 
+	under := reportIterationFloor(os.Stderr, current, *minIterations)
+
 	if mode == "snapshot" {
 		writeSnapshot(*baselinePath, current)
 	} else {
 		writeOrCheck(*baselinePath, current, mode, *budget, *force, *format, captureFailed, *allowIncomplete)
+	}
+	// After the report, not before: a floor violation is a caveat on numbers
+	// worth printing, not a reason to withhold them.
+	if under && *strictIters {
+		die("b.N floor violated (-strict-iterations)")
 	}
 }
 
