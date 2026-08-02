@@ -19,7 +19,7 @@ func aggregate(t *testing.T, jsonl string) Baseline {
 	if err := os.WriteFile(path, []byte(anchorJSONL+jsonl), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	base, err := aggregateFromFile(path)
+	base, err := aggregateFromFile(path, defaultReducer)
 	if err != nil {
 		t.Fatalf("aggregateFromFile: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestAggregateFromFileUsesMin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	base, err := aggregateFromFile(path)
+	base, err := aggregateFromFile(path, defaultReducer)
 	if err != nil {
 		t.Fatalf("aggregateFromFile: %v", err)
 	}

@@ -78,12 +78,14 @@ const (
 	anchorName          = "BenchmarkRatchetAnchor"
 	anchorPackage       = "github.com/nooga/paserati/pkg/vm"
 	schemaVersion       = 1
-	// reducerName names what aggregateFromFile actually does across -count
-	// repetitions, and is written into every snapshot's method.reducer. It lives
-	// next to the reduction so the two cannot drift; changing one without the
-	// other should be visibly wrong in review. Locked by TestAggregateFromFileUsesMin.
-	reducerName = "min"
 )
+
+// The reducer used to live here as a const. It is now selectable — see
+// reducers.go, which holds the implementations, the default, and the reasoning
+// for why paserati's default is min. The name is still written into every
+// snapshot's method.reducer by aggregateFromFile itself rather than asserted by
+// a caller, which is the property that mattered: the recorded protocol cannot
+// disagree with the applied one. Locked by TestAggregateFromFileUsesMin.
 
 // defaultPackages is the scope when no -packages flag is given.
 //
@@ -138,6 +140,7 @@ func main() {
 		shaOverride     = flag.String("sha", "", "override the SHA recorded for this run (default: git rev-parse HEAD of cwd). Use when aggregating a capture from a worktree that differs from cwd.")
 		tags            = flag.String("tags", "", "go test -tags (default none)")
 		format          = flag.String("format", "text", "report format: text (default, ANSI terminal), markdown (GitHub/Slack-friendly table), json (the raw baseline)")
+		reducerFlag     = flag.String("reducer", defaultReducer, "how -count repetitions collapse to one number: min (default) or warmup-median")
 		pinsPath        = flag.String("pins", "", "JSON pin table (bench-calibrate.sh -o output, or a {\"BenchmarkX\":\"32x\"} map): run each named benchmark at its own -benchtime")
 		minIterations   = flag.Int64("min-iterations", defaultMinIterations, "warn when a benchmark's observed b.N falls below this; 0 disables the check")
 		strictIters     = flag.Bool("strict-iterations", false, "with check: treat a b.N floor violation as a failure rather than a warning")
@@ -166,7 +169,7 @@ func main() {
 			}
 		}
 		fmt.Printf("bench-ratchet: aggregate from %s\n", path)
-		current, err := aggregateFromFile(path)
+		current, err := aggregateFromFile(path, *reducerFlag)
 		if err != nil {
 			die("aggregate: %v", err)
 		}
@@ -235,7 +238,7 @@ func main() {
 		return
 	}
 
-	current, err := aggregateFromFile(*outPath)
+	current, err := aggregateFromFile(*outPath, *reducerFlag)
 	if err != nil {
 		die("aggregate: %v", err)
 	}
@@ -711,7 +714,11 @@ func captureOnePackage(pkg string, count int, benchtime, timeout, tags string, f
 // shared CI runners. All raw samples are retained in Samples for provenance.
 // alloc/bytes are deterministic per op, so min == mean for them; taking min
 // keeps the reduction uniform.
-func aggregateFromFile(path string) (Baseline, error) {
+func aggregateFromFile(path, reducerName string) (Baseline, error) {
+	reduce, err := lookupReducer(reducerName)
+	if err != nil {
+		return Baseline{}, err
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return Baseline{}, fmt.Errorf("open %s: %w", path, err)
@@ -719,14 +726,14 @@ func aggregateFromFile(path string) (Baseline, error) {
 	defer f.Close()
 
 	type accum struct {
-		pkg                       string
-		name                      string
-		count                     int
-		nsMin, bytesMin, allocMin float64
-		iters                     int64
-		setHash                   string // shared set identity across this key's records
-		setHashConflict           bool   // records disagreed → no coherent identity
-		samples                   []BenchmarkSample
+		pkg               string
+		name              string
+		count             int
+		ns, bytes, allocs []float64
+		iters             int64
+		setHash           string // shared set identity across this key's records
+		setHashConflict   bool   // records disagreed → no coherent identity
+		samples           []BenchmarkSample
 	}
 	byName := map[string]*accum{}
 	dec := json.NewDecoder(f)
@@ -742,15 +749,11 @@ func aggregateFromFile(path string) (Baseline, error) {
 			byName[key] = a
 		}
 		a.count++
-		if a.count == 1 || rec.NSPerOp < a.nsMin {
-			a.nsMin = rec.NSPerOp
-		}
-		if a.count == 1 || float64(rec.BytesPerOp) < a.bytesMin {
-			a.bytesMin = float64(rec.BytesPerOp)
-		}
-		if a.count == 1 || float64(rec.AllocsPerOp) < a.allocMin {
-			a.allocMin = float64(rec.AllocsPerOp)
-		}
+		// Capture order is preserved and load-bearing: warmup-discarding
+		// reducers are positional.
+		a.ns = append(a.ns, rec.NSPerOp)
+		a.bytes = append(a.bytes, float64(rec.BytesPerOp))
+		a.allocs = append(a.allocs, float64(rec.AllocsPerOp))
 		if rec.Iterations > a.iters {
 			a.iters = rec.Iterations
 		}
@@ -770,9 +773,9 @@ func aggregateFromFile(path string) (Baseline, error) {
 			Package:     a.pkg,
 			Name:        a.name,
 			Iterations:  a.iters,
-			NSPerOp:     a.nsMin,
-			BytesPerOp:  int64(a.bytesMin),
-			AllocsPerOp: int64(a.allocMin),
+			NSPerOp:     reduce(a.ns),
+			BytesPerOp:  int64(reduce(a.bytes)),
+			AllocsPerOp: int64(reduce(a.allocs)),
 			SetHash:     a.setHash,
 			Samples:     append([]BenchmarkSample(nil), a.samples...),
 		})
@@ -786,7 +789,7 @@ func aggregateFromFile(path string) (Baseline, error) {
 	if anchor.NSPerOp <= 0 {
 		return Baseline{}, fmt.Errorf("anchor ns/op is %.3f — divide-by-zero protection", anchor.NSPerOp)
 	}
-	return buildCurrentBaseline(results, anchor), nil
+	return buildCurrentBaseline(results, anchor, reducerName), nil
 }
 
 func findAnchor(results []Result) (Result, bool) {
@@ -798,7 +801,7 @@ func findAnchor(results []Result) (Result, bool) {
 	return Result{}, false
 }
 
-func buildCurrentBaseline(results []Result, anchor Result) Baseline {
+func buildCurrentBaseline(results []Result, anchor Result, reducerName string) Baseline {
 	m := detectMachine()
 	bm := map[string]BenchmarkEntry{}
 	for _, r := range results {
