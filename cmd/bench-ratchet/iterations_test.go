@@ -69,17 +69,17 @@ func TestIterationFloorDisabledAtZero(t *testing.T) {
 	}
 }
 
-// The resolution figure is the point of the message: 1/N is the smallest change
-// the number can express, which is what a reader compares against the delta
-// being claimed.
-func TestReportIterationFloorStatesResolution(t *testing.T) {
+// This test used to assert "resolution ~100.0%" and so locked in the defect:
+// 1/N is not a resolution, and Go's ns/op is not quantised at these magnitudes.
+// It now asserts the claim the warning is actually entitled to make.
+func TestReportIterationFloorStatesAveraging(t *testing.T) {
 	b := Baseline{Benchmarks: map[string]BenchmarkEntry{"pkg.One": withSamples(1)}}
 	var buf bytes.Buffer
 	if !reportIterationFloor(&buf, b, 20) {
 		t.Fatal("want true when a benchmark is under the floor")
 	}
 	out := buf.String()
-	for _, want := range []string{"pkg.One", "b.N 1", "resolution ~100.0%"} {
+	for _, want := range []string{"pkg.One", "b.N 1", "damped only 1.0×"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("report missing %q:\n%s", want, out)
 		}
@@ -123,5 +123,53 @@ func TestUnstableIterationsRespectsTolerance(t *testing.T) {
 	}
 	if u := unstableIterations(b, 0.001); len(u) != 1 {
 		t.Fatalf("want a violation below tolerance, got %+v", u)
+	}
+}
+
+// The case codex identified: b.N rock-steady WITHIN each run, but different
+// BETWEEN them. Every within-run check is silent, and the comparison still spans
+// two protocols — which is #48's actual confound.
+func TestProtocolDriftCatchesStableButDifferentAcrossSnapshots(t *testing.T) {
+	base := Baseline{Benchmarks: map[string]BenchmarkEntry{
+		"pkg.Arith": withSamples(4, 4, 4),
+	}}
+	cur := Baseline{Benchmarks: map[string]BenchmarkEntry{
+		"pkg.Arith": withSamples(8, 8, 8),
+	}}
+	if u := unstableIterations(cur, 0.02); len(u) != 0 {
+		t.Fatalf("within-run check should see nothing here, got %+v", u)
+	}
+	d := iterationProtocolDrift(base, cur, 0.02)
+	if len(d) != 1 || d[0].Was != 4 || d[0].Now != 8 {
+		t.Fatalf("want Arith 4→8 reported as drift, got %+v", d)
+	}
+}
+
+func TestProtocolDriftIgnoresNewAndMatchingBenchmarks(t *testing.T) {
+	base := Baseline{Benchmarks: map[string]BenchmarkEntry{"pkg.Same": withSamples(100, 100)}}
+	cur := Baseline{Benchmarks: map[string]BenchmarkEntry{
+		"pkg.Same": withSamples(100, 101), // 1%, inside tolerance
+		"pkg.New":  withSamples(7),        // no baseline to compare against
+	}}
+	if d := iterationProtocolDrift(base, cur, 0.02); len(d) != 0 {
+		t.Fatalf("want no drift, got %+v", d)
+	}
+}
+
+// The floor warning must not claim a quantisation that does not exist. Go
+// computes ns/op as elapsed/N, so the quantum is (1ns)/N — 1.3e-07% at N=1 on a
+// 700ms/op benchmark, not 100%.
+func TestFloorWarningMakesNoResolutionClaim(t *testing.T) {
+	b := Baseline{Benchmarks: map[string]BenchmarkEntry{"pkg.Slow": withSamples(1)}}
+	var buf bytes.Buffer
+	reportIterationFloor(&buf, b, 20)
+	out := buf.String()
+	for _, banned := range []string{"resolution", "quantis", "quantiz", "100.0%"} {
+		if strings.Contains(strings.ToLower(out), strings.ToLower(banned)) {
+			t.Fatalf("floor warning still claims %q:\n%s", banned, out)
+		}
+	}
+	if !strings.Contains(out, "damped") {
+		t.Fatalf("want the averaging framing, got:\n%s", out)
 	}
 }

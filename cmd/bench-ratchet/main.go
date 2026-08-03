@@ -184,7 +184,7 @@ func main() {
 		if mode == "snapshot" {
 			writeSnapshot(*baselinePath, current)
 		} else {
-			writeOrCheck(*baselinePath, current, "update", *budget, *force, *format, 0, *allowIncomplete)
+			writeOrCheck(*baselinePath, current, "update", *budget, *force, *format, 0, *allowIncomplete, *iterTolerance)
 		}
 		if under && *strictIters {
 			die("b.N floor violated (-strict-iterations)")
@@ -254,7 +254,7 @@ func main() {
 	if mode == "snapshot" {
 		writeSnapshot(*baselinePath, current)
 	} else {
-		writeOrCheck(*baselinePath, current, mode, *budget, *force, *format, captureFailed, *allowIncomplete)
+		writeOrCheck(*baselinePath, current, mode, *budget, *force, *format, captureFailed, *allowIncomplete, *iterTolerance)
 	}
 	// After the report, not before: a floor violation is a caveat on numbers
 	// worth printing, not a reason to withhold them.
@@ -280,7 +280,7 @@ func writeSnapshot(path string, current Baseline) {
 }
 
 // writeOrCheck dispatches the post-aggregate action.
-func writeOrCheck(baselinePath string, current Baseline, mode string, budget float64, force bool, format string, captureFailed int, allowIncomplete bool) {
+func writeOrCheck(baselinePath string, current Baseline, mode string, budget float64, force bool, format string, captureFailed int, allowIncomplete bool, iterTol float64) {
 	switch mode {
 	case "show":
 		switch format {
@@ -329,6 +329,7 @@ func writeOrCheck(baselinePath string, current Baseline, mode string, budget flo
 			die("read baseline (%s): %v\n  hint: run `bench-ratchet update` to seed it",
 				baselinePath, err)
 		}
+		reportProtocolDrift(os.Stderr, baseline, current, iterTol)
 		res := compareAndReport(baseline, current, budget, format)
 		fail := res.regressions > 0
 		// A capture error or a missing baseline entry means we measured less
