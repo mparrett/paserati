@@ -66,6 +66,20 @@ git tag perf-data-pre-<session> FETCH_HEAD && git push origin perf-data-pre-<ses
 driver script. reg-lisp adopted this and had three consecutive runs fail; the
 trap is why those failures cost nothing.
 
+All of that — launch, the watchdog, the burstable refusal, and teardown verified
+by re-query — is in `scripts/perf-session-box.sh`:
+
+```bash
+scripts/perf-session-box.sh up                 # launch, wait, print the ssh line
+scripts/perf-session-box.sh status             # what is running, in every region
+scripts/perf-session-box.sh down               # terminate, then verify
+```
+
+It exists because this recipe used to live only in old session transcripts;
+reconstructing it on 2026-08-03 meant grepping a conversation log for
+`run-instances`. Confirm the instance type from instance metadata after boot —
+the script prints it — rather than from what you asked for.
+
 ## 3. Calibrate b.N — before the real run
 
 Both packages, and they need different sweeps:
