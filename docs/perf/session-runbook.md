@@ -97,9 +97,22 @@ line to skim past — those benchmarks stay unpinned and keep the global
 `-benchtime`.
 
 `bench-ratchet` warns on every run when a benchmark lands under its `b.N`
-floor (`-min-iterations`, default 20; `-strict-iterations` to fail). If that
-warning appears during a session, the numbers under it are quantised and any
-delta smaller than `1/N` is not real.
+floor (`-min-iterations`, default 20; `-strict-iterations` to fail), and
+separately when `b.N` **moves** across reps (`-iteration-tolerance`).
+
+**The second warning is the one that invalidates a comparison.** `ns/op` is a
+function of `N` wherever iterations share state, so two commits measured at
+different `N` were measured under different protocols. A low `b.N` on its own
+costs *averaging* — `ns/op` is the mean over `N`, variance falls as `√N`, and at
+`N`=1 one slow iteration is the entire reading. It is not quantisation: Go
+divides elapsed nanoseconds by `N`, so the quantum is `(1 ns)/N`, which on a
+700 ms/op benchmark at `N`=1 is 1.3e-07% of the value.
+
+This paragraph previously said the numbers were "quantised" and that any delta
+smaller than `1/N` was unreal. That was wrong by nine orders of magnitude,
+withdrawn in `5fb6f8ee`, and corrected publicly. `SetIndex` runs at `b.N`=2 and
+is the tightest benchmark in the suite; `MatrixMult` runs at 139–261 and is the
+worst. Size is not the signal — movement is.
 
 ## 4. Run a null control
 

@@ -17,9 +17,17 @@
 # measurement (N ≈ benchtime / per-op cost). Two things follow, and the second
 # is the one that motivated this script.
 #
-# First, a slow benchmark gets a tiny N and its ns/op is quantised to 1-in-N.
-# bench-ratchet warns about that on every run now; see cmd/bench-ratchet/
-# iterations.go.
+# First, a slow benchmark gets a tiny N, which costs AVERAGING: ns/op is the
+# mean over N iterations, so per-iteration variance falls only as sqrt(N) and at
+# N=1 a single slow iteration is the whole reading.
+#
+# It is NOT quantisation. This comment used to say ns/op was "quantised to
+# 1-in-N", and that bench-ratchet warned about it. Both were wrong and both are
+# withdrawn (5fb6f8ee): Go computes ns/op as elapsed nanoseconds divided by N,
+# so the quantum is (1 ns)/N — an absolute quantity, not a fraction of the
+# result. On Fib at N=1, ~780 ms/op, that is 1.3e-07% of the value. The check
+# bench-ratchet actually runs now is whether b.N MOVES between commits, which is
+# the real confound; see cmd/bench-ratchet/iterations.go.
 #
 # Second — and this is not fixed by raising -benchtime — ns/op is a FUNCTION of
 # N whenever iterations share state. paserati's ./tests benchmarks build one
