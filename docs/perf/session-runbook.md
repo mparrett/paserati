@@ -68,21 +68,40 @@ trap is why those failures cost nothing.
 
 ## 3. Calibrate b.N — before the real run
 
+Both packages, and they need different sweeps:
+
 ```bash
-scripts/bench-calibrate.sh -o calib.json
+# ./tests — milliseconds per op, b.N in the ones-to-hundreds
+scripts/bench-calibrate.sh -o calib-tests.json
+
+# pkg/vm — NANOSECONDS per op, b.N in the tens of millions. The default
+# 1..256 sweep measures timer overhead here and nothing else.
+scripts/bench-calibrate.sh -p github.com/nooga/paserati/pkg/vm \
+  -n 10000000 -m 320000000 -f 10000000 -o calib-vm.json
 ```
 
-`b.N` is an *output* of the timing loop (N ≈ benchtime / per-op cost), and for
-any benchmark whose iterations share state, `ns/op` is a function of N. On
-paserati's `./tests` benchmarks the direction is not even consistent —
-`MatrixMult` and `Arith` get cheaper with N, `Add` and `Fib` get more
-expensive. So raising `-benchtime` uniformly does not converge them; it walks
-each one a different distance in a different direction.
+`b.N` is an *output* of the timing loop (N ≈ benchtime / per-op cost), so it
+moves whenever per-op cost moves — which is exactly what a perf change does.
+Measured on `c7a.2xlarge`, every `pkg/vm` benchmark's `b.N` moved 5–49% across a
+single session. Two commits compared at different N were compared under
+different protocols wherever `ns/op` depends on N.
 
-Pin instead. Feed the calibration straight back in:
+**Pin both packages.** Where the curve is flat, pinning costs nothing and makes
+the question moot; where it is not, pinning is the only thing that removes the
+confound. Do not reason per benchmark about which case you are in — that is the
+reasoning the session showed to be unreliable.
+
+**Never pin `BenchmarkRatchetAnchor`.** Every ratio in the corpus is
+`bench_ns / anchor_ns`, so moving the anchor's `b.N` shifts the whole timeline
+against itself by an amount nobody measured. `bench-ratchet` rejects a pin table
+that names it, as a hard error rather than a warning.
+
+Feed the calibration straight back in:
 
 ```bash
-go run ./cmd/bench-ratchet -pins calib.json -count 3 -benchtime 1s snapshot ...
+go run ./cmd/bench-ratchet -pins calib-tests.json -count 3 -benchtime 1s snapshot ...
+# or, through the session driver:
+scripts/perf-session.sh --pins calib-tests.json --reducer min ...
 ```
 
 `-pins` splits each package into one `go test` invocation per distinct

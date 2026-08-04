@@ -161,6 +161,27 @@ func planJobs(pkgs []string, tags string, filterRE *regexp.Regexp, pins map[stri
 // does not have was never applied, and writing it down anyway would let two
 // snapshots claim identical protocols while one of them ran at the global
 // -benchtime. Returns a copy; the caller's table is left alone.
+// pinsRejectAnchor refuses a pin table that names the calibration anchor.
+//
+// Every ratio in the corpus is bench_ns / anchor_ns, so the anchor is the one
+// benchmark whose measured value must not change for reasons of protocol. Pin
+// it at a different b.N from the historical snapshots and every ratio shifts
+// together — the whole timeline moves, silently and by an amount nobody
+// measured. The anchor stays on the global -benchtime, which is what the corpus
+// was built with.
+//
+// This is a hard error rather than a warning: a warning would be printed once,
+// into a session log nobody re-reads, while the corrupted snapshot lives on.
+func pinsRejectAnchor(pins map[string]string) error {
+	for name := range pins {
+		if name == anchorName {
+			return fmt.Errorf("pin table names %s: the anchor must stay on the global "+
+				"-benchtime, or every ratio_to_anchor in the corpus shifts against it", name)
+		}
+	}
+	return nil
+}
+
 func appliedPins(pins map[string]string, unmatched []string) map[string]string {
 	if len(unmatched) == 0 {
 		return pins

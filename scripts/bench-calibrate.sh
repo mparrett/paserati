@@ -5,10 +5,24 @@
 # Usage: scripts/bench-calibrate.sh [options] [BenchmarkName ...]
 #
 #   -p, --package PKG   go package (default: github.com/nooga/paserati/tests)
+#   -n, --min-n N       smallest N to sweep (default 1)
 #   -m, --max-n N       largest N to sweep (default 256)
 #   -c, --count N       go test -count per point (default 3, min taken)
 #   -t, --tolerance PCT consecutive-point agreement that counts as flat (default 2)
 #   -f, --floor N       smallest acceptable pin, matching bench-ratchet (default 20)
+#   -o, --out FILE      also write the curves as JSON
+#
+# The defaults suit ./tests, whose benchmarks run in milliseconds and land at
+# b.N between 1 and a few hundred. They are wrong for pkg/vm, which runs at
+# NANOSECONDS per op and lands at b.N in the tens of millions: sweeping 1..256
+# there measures timer and loop overhead and nothing else. For that package:
+#
+#   scripts/bench-calibrate.sh -p github.com/nooga/paserati/pkg/vm \
+#     -n 10000000 -m 320000000 -f 10000000
+#
+# NEVER pin BenchmarkRatchetAnchor. Every ratio in the corpus is
+# bench_ns/anchor_ns, so moving the anchor's b.N shifts the entire timeline
+# against itself. bench-ratchet rejects a pin table that names it.
 #   -o, --out FILE      also write the curves as JSON
 #
 # WHY THIS EXISTS
@@ -29,23 +43,26 @@
 # bench-ratchet actually runs now is whether b.N MOVES between commits, which is
 # the real confound; see cmd/bench-ratchet/iterations.go.
 #
-# Second — and this is not fixed by raising -benchtime — ns/op is a FUNCTION of
-# N whenever iterations share state. paserati's ./tests benchmarks build one
-# interpreter outside the loop and call InterpretChunk b.N times on it, so
-# iteration k inherits iteration 1's warm inline caches, built shapes and grown
-# heap. Measured 2026-08-01 (project-docs/docs/paserati/evidence/
-# 2026-08-01-bn-sweep/), the direction is NOT the same for every benchmark:
+# Second, ns/op CAN be a function of N where iterations share state — and where
+# it is, two commits measured at different N were measured under different
+# protocols. Which benchmarks those are is a fact to measure, not to assume.
 #
-#   MatrixMult  -33% by N=16 then flat     warmup dominates
-#   Arith       -38% by N=256              warmup dominates
-#   Add         +73% by N=256              accumulation dominates
-#   Fib         +17% by N=256, monotone    accumulation dominates
+# On the measurement host (c7a.2xlarge, 2026-08-03) the five ./tests workloads
+# that compile above b.ResetTimer() are FLAT from N=1 to N=256: Add +6.2%,
+# Arith +0.1%, Fib -0.4%, MatrixMult +0.9%, SetIndex +1.9%, each with per-curve
+# scatter of the same size. An earlier sweep on a loaded MacBook reported
+# -38%..+73% for the same four; those shapes were the laptop's load and do not
+# reproduce. See project-docs .../perf-session-remeasure-results.md.
 #
-# So "raise -benchtime until N is comfortably above 20" walks each benchmark a
-# different distance along its own curve, in its own direction, and changes what
-# each one measures. What a cross-commit comparison actually needs is not a
-# steady state but a CONSTANT: pin N and the amortisation blend stops varying
-# between commits, which is the whole confound.
+# The group that IS strongly N-dependent is PrototypeMethodAccess and
+# PrototypeCacheHitRate, at a median -37.8% across the same sweep, because they
+# construct an engine inside the timed loop and larger N amortises the first,
+# coldest iteration (nooga#51).
+#
+# Either way, what a cross-commit comparison needs is not a steady state but a
+# CONSTANT: pin N and the blend stops varying between commits, which is the
+# confound. Pinning is cheap where the curve is flat, so pin regardless rather
+# than reasoning per benchmark about whether it matters.
 #
 # This script finds where to pin. It reports the curve and suggests the smallest
 # N at or above the floor whose neighbours agree within --tolerance, because a
@@ -58,6 +75,7 @@
 set -uo pipefail
 
 PKG="github.com/nooga/paserati/tests"
+MINN=1
 MAXN=256
 COUNT=3
 TOL=2
@@ -71,12 +89,13 @@ note() { echo "==> $*" >&2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     -p|--package)   PKG="${2:?}"; shift 2;;
+    -n|--min-n)     MINN="${2:?}"; shift 2;;
     -m|--max-n)     MAXN="${2:?}"; shift 2;;
     -c|--count)     COUNT="${2:?}"; shift 2;;
     -t|--tolerance) TOL="${2:?}"; shift 2;;
     -f|--floor)     FLOOR="${2:?}"; shift 2;;
     -o|--out)       OUT="${2:?}"; shift 2;;
-    -h|--help)      sed -n '2,49p' "$0"; exit 0;;
+    -h|--help)      awk 'NR>1 && /^#/ {sub(/^# ?/,""); print; next} NR>1 {exit}' "$0"; exit 0;;
     -*)             die "unknown option: $1";;
     *)              BENCHES+=("$1"); shift;;
   esac
@@ -100,7 +119,8 @@ fi
 # read on a log axis: the interesting structure is between 1 and 32, and a
 # linear sweep spends all its wall clock in the flat tail.
 NS=()
-n=1; while [ "$n" -le "$MAXN" ]; do NS+=("$n"); n=$((n * 2)); done
+n="$MINN"; while [ "$n" -le "$MAXN" ]; do NS+=("$n"); n=$((n * 2)); done
+[ "${#NS[@]}" -ge 2 ] || die "--min-n $MINN and --max-n $MAXN leave fewer than 2 points to sweep"
 
 note "${#BENCHES[@]} benchmark(s) x ${#NS[@]} N values, -count $COUNT"
 echo

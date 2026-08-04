@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -182,5 +183,26 @@ func TestAppliedPinsEmptyWhenNoneMatch(t *testing.T) {
 	pins := map[string]string{"BenchmarkGone": "32x"}
 	if got := appliedPins(pins, []string{"BenchmarkGone"}); len(got) != 0 {
 		t.Errorf("appliedPins(none matched) = %v, want empty", got)
+	}
+}
+
+// The anchor is the denominator of every ratio in the corpus. Pinning it to a
+// b.N other than the one the historical snapshots were taken at shifts the whole
+// timeline against itself, so the table is rejected rather than warned about.
+func TestPinsRejectAnchor(t *testing.T) {
+	err := pinsRejectAnchor(map[string]string{"BenchmarkAdd": "8x", anchorName: "1000000x"})
+	if err == nil {
+		t.Fatal("pinning the anchor was accepted; it must be refused")
+	}
+	if !strings.Contains(err.Error(), anchorName) {
+		t.Errorf("error should name the offending pin, got: %v", err)
+	}
+}
+
+func TestPinsAllowEverythingElse(t *testing.T) {
+	if err := pinsRejectAnchor(map[string]string{
+		"BenchmarkGetOwn": "70000000x", "BenchmarkIsObject": "90000000x",
+	}); err != nil {
+		t.Errorf("ordinary pins rejected: %v", err)
 	}
 }

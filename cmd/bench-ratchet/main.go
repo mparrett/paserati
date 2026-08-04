@@ -204,6 +204,9 @@ func main() {
 		if pins, err = loadPins(*pinsPath); err != nil {
 			die("load pins: %v", err)
 		}
+		if err := pinsRejectAnchor(pins); err != nil {
+			die("%v", err)
+		}
 	}
 
 	jobs, scope, appliedPins, err := buildJobs(*packages, *tags, manual, filterRE, pins, *benchtime)
