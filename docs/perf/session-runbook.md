@@ -21,6 +21,12 @@ its own machine-keyed tier which must never be compared against a CI tier.
 
 ## 0. Decide the question before booting anything
 
+**Read the benchmark register first**
+(`project-docs/docs/paserati/benchmark-defects.md`). Ten of the thirty-five
+benchmarks in this corpus measure engine startup rather than what they are named
+for, one compiles non-deterministically, and a few depend on `b.N`. Knowing
+which before you interpret a number is cheaper than discovering it after.
+
 Write down what result would change your mind. "Did these 16 commits do what
 the commit messages say" is a question. "Let's see how it looks" is not, and
 produces a session whose numbers get reinterpreted until they agree with
