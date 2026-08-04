@@ -94,9 +94,17 @@ jobs:
         run: |
           set -euo pipefail
           git checkout --force "$BASE"
+          # Protocol flags are pinned rather than inherited. bench-ratchet's
+          # defaults are ours to change and #22 makes `mean` the default
+          # upstream with `min` opt-in — on the day that reaches this tree, an
+          # unpinned lane would switch reducer with no diff here to explain it,
+          # and every comparison against an existing snapshot would silently
+          # cross reducers. The b.N checks are named for the same reason: a
+          # warning that depends on a default is a warning that can vanish.
           go run ./cmd/bench-ratchet \
             -baseline "${RUNNER_TEMP}/base.json" \
             -count 3 -benchtime 500ms -timeout 15m \
+            -reducer min -min-iterations 20 -iteration-tolerance 0.02 \
             update
 
       - name: Bench head and compare
@@ -112,6 +120,7 @@ jobs:
           go run ./cmd/bench-ratchet \
             -baseline "${RUNNER_TEMP}/base.json" \
             -count 3 -benchtime 500ms -timeout 15m \
+            -reducer min -min-iterations 20 -iteration-tolerance 0.02 \
             -budget 0.10 -allow-incomplete \
             -format markdown \
             check > "${RUNNER_TEMP}/report.md" || true
