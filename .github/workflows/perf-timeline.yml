@@ -26,6 +26,16 @@ on:
       - 'cmd/**'
       - 'go.mod'
       - 'go.sum'
+      # tests/** defines 15 of the 35 measured benchmarks — bench_test.go,
+      # benchmark_prototype_test.go, and the .ts workloads they run —
+      # because bench-ratchet's default scope is pkg/vm AND ./tests. Without
+      # this, changing what BenchmarkArith runs produces no point at all, and
+      # the engine key (which hashes pkg/ alone) would additionally read such a
+      # commit as the SAME engine and group two different workloads as one.
+      # No commit has yet changed these files without also touching pkg/ or
+      # cmd/, so this has cost nothing so far. The prototype-benchmark fix is a
+      # tests/-only commit by construction, which is what makes it due now.
+      - 'tests/**'
   # Manual backfill: dispatch once per historical commit to fill the timeline.
   # Snapshot identity is derived from the checked-out HEAD (sha + commit time),
   # so the rest of the job is commit-agnostic.
