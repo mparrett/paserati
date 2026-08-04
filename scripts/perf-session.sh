@@ -57,6 +57,18 @@ MACRO=0
 TOOL_REF="HEAD"
 BENCHTIME=1s
 COUNT=3
+# Pin the protocol rather than inheriting it. bench-ratchet's defaults are ours
+# to change — #22 makes `mean` the default upstream with `min` opt-in — and a
+# session is the instrument that decides reducer-sensitive verdicts, so it is
+# the last place that should take whatever the tool happened to default to.
+# Same reasoning as the CI lanes.
+REDUCER=min
+MIN_ITERS=20
+ITER_TOL=0.02
+# Empty means no -pins, which is the unpinned global -benchtime. Passing a table
+# here is what makes the b.N calibration reachable from the driver at all: the
+# -pins flag landed in bench-ratchet (77d4c38d) without ever being wired in.
+PINS=
 SHAS=()
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -70,6 +82,8 @@ while [ $# -gt 0 ]; do
     --tool-ref)     TOOL_REF="${2:?}"; shift 2;;
     --benchtime)    BENCHTIME="${2:?}"; shift 2;;
     --count)        COUNT="${2:?}"; shift 2;;
+    --pins)         PINS="${2:?}"; shift 2;;
+    --reducer)      REDUCER="${2:?}"; shift 2;;
     -h|--help)      sed -n '2,44p' "$0"; exit 0;;
     -*)             die "unknown option: $1";;
     *)              SHAS+=("$1"); shift;;
@@ -205,6 +219,9 @@ for r in $(seq 1 "$ROUNDS"); do
     git -C "$TARGWT" checkout --force --quiet "$sha" || die "checkout $sha failed"
     ( cd "$TARGWT" && "$BENCH_RATCHET" \
         -count "$COUNT" -benchtime "$BENCHTIME" -timeout 30m \
+        -reducer "$REDUCER" \
+        -min-iterations "$MIN_ITERS" -iteration-tolerance "$ITER_TOL" \
+        ${PINS:+-pins "$PINS"} \
         -baseline "$out" snapshot >/dev/null ) || die "bench-ratchet failed at $short (round $r)"
 
     if [ $MACRO -eq 1 ]; then
