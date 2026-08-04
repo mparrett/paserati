@@ -135,10 +135,29 @@ worst. Size is not the signal — movement is.
 
 ## 4. Run a null control
 
-Include at least one pair of commits that **cannot** differ — adjacent commits
-touching only docs, comments or tests. They must tie. If they don't, the gap is
-your **per-benchmark attribution floor**, and any delta below it is not
-attributable to code however clean the measurement looks.
+Include at least one pair of commits that **cannot** differ. They must tie. If
+they don't, the gap is your **per-benchmark attribution floor**, and any delta
+below it is not attributable to code however clean the measurement looks.
+
+**Check the pair can RUN the suite before checking it cannot differ.** The
+2026-08-03 session died on its second commit because all four historical
+controls — picked by scanning history for no-op diffs and verified to compile
+byte-identically — predate the benchmark harness. Zero benchmarks in `pkg/vm`,
+4 of 7 in `./tests`, and no `BenchmarkRatchetAnchor` to normalise against.
+Compiling was never the question that mattered.
+
+The reliable move is to **construct** the controls on the base you are
+measuring, so they share its engine by construction:
+
+- **noise floor** — a comment-only edit in `pkg/vm`. Verify the test binaries
+  hash identically on both families.
+- **layout floor** — a real but never-called function. One in `pkg/modules`
+  moves the `./tests` binary; `pkg/vm` does not link `pkg/modules`, so it needs
+  its own.
+
+Measured this way on `c7a.2xlarge`: byte-identical binaries land **3.7% apart**
+on `./tests` and 1.1% on `pkg/vm`, and the layout floor is *not* distinguishable
+from the noise floor.
 
 This is not optional and not an error bar. reg-lisp measured a *reproducible*
 4.2% between two builds differing only at compile time, precision ±0.28% —
@@ -167,9 +186,22 @@ on its first measurement while the box sits at load 0.00 for 90 minutes.
 `perf-session.sh` prints anchor drift across rounds. Above 2% the machine did
 not hold still and small deltas mean nothing.
 
-Know what the anchor does and does not certify: it runs at `b.N`=1e9 in a
-*different `go test` process* from `./tests`. It once read 0.031% drift across
-a session whose headline benchmark moved 70%.
+Know what the anchor does and does not certify: it runs in a *different
+`go test` process* from `./tests`, at whatever `b.N` the global `-benchtime`
+gives it. It once read 0.031% drift across a session whose headline benchmark
+moved 70% — and that 0.031% was not drift at all but the two-level quantum of a
+four-significant-digit value.
+
+What it **does** certify, measured: the same commit measured in two sessions on
+boxes whose anchors read 1.084 and 1.378 ns/op — **27.1% apart** — agreed on
+`ratio_to_anchor` to a **median of 0.30%** across 35 benchmarks. Absolute
+`ns/op` does not survive across sessions; the ratio does.
+
+What it does **not**: it is subject to transients of about 4% lasting several
+launches. A median across rounds absorbs one; it does not absorb two of four,
+which is how the 2026-08-03 session understated a real 23% win as 13%. Read the
+per-round anchors, not just the summary drift — two rounds reading 1.316 against
+a session median of 1.376 is the signature.
 
 ## 7. Publish
 
