@@ -148,3 +148,39 @@ func TestLoadPinsRejectsGarbage(t *testing.T) {
 		t.Fatal("want an error for a file that is neither form")
 	}
 }
+
+// A pin naming a benchmark this commit does not have was never applied, so it
+// must not survive into the recorded protocol. Two snapshots claiming identical
+// pin tables while one ran at the global -benchtime is exactly the confound the
+// pin table exists to remove.
+func TestAppliedPinsDropsUnmatched(t *testing.T) {
+	pins := map[string]string{"BenchmarkAdd": "8x", "BenchmarkGone": "32x"}
+	got := appliedPins(pins, []string{"BenchmarkGone"})
+
+	if _, ok := got["BenchmarkGone"]; ok {
+		t.Errorf("unmatched pin recorded as applied: %v", got)
+	}
+	if got["BenchmarkAdd"] != "8x" {
+		t.Errorf("matched pin lost: %v", got)
+	}
+	// The caller's table is provenance for what was asked; do not mutate it.
+	if len(pins) != 2 {
+		t.Errorf("requested table mutated: %v", pins)
+	}
+}
+
+func TestAppliedPinsKeepsEverythingWhenAllMatch(t *testing.T) {
+	pins := map[string]string{"BenchmarkAdd": "8x"}
+	if got := appliedPins(pins, nil); len(got) != 1 || got["BenchmarkAdd"] != "8x" {
+		t.Errorf("appliedPins(all matched) = %v, want the table unchanged", got)
+	}
+}
+
+// All pins missing means nothing was pinned, and `omitempty` then drops the
+// field. That reads as an unpinned run, which is what it was.
+func TestAppliedPinsEmptyWhenNoneMatch(t *testing.T) {
+	pins := map[string]string{"BenchmarkGone": "32x"}
+	if got := appliedPins(pins, []string{"BenchmarkGone"}); len(got) != 0 {
+		t.Errorf("appliedPins(none matched) = %v, want empty", got)
+	}
+}

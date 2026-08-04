@@ -206,7 +206,7 @@ func main() {
 		}
 	}
 
-	jobs, scope, err := buildJobs(*packages, *tags, manual, filterRE, pins, *benchtime)
+	jobs, scope, appliedPins, err := buildJobs(*packages, *tags, manual, filterRE, pins, *benchtime)
 	if err != nil {
 		die("%v", err)
 	}
@@ -244,7 +244,7 @@ func main() {
 		die("aggregate: %v", err)
 	}
 	current.Method.Count, current.Method.Benchtime = *count, *benchtime
-	current.Method.Pins = pins
+	current.Method.Pins = appliedPins
 	if *shaOverride != "" {
 		current.CapturedAtSHA = *shaOverride
 	}
@@ -539,8 +539,16 @@ type captureJob struct {
 // honors them verbatim (power-user escape hatch); otherwise it runs the
 // default package scope with an all-benchmarks filter, which includes the
 // calibration anchor in pkg/vm.
+// The returned pin map is the one that was APPLIED, which is not always the one
+// that was asked for: a pin naming a benchmark absent from this commit matches
+// nothing. Recording the requested table instead would let two snapshots carry
+// byte-identical provenance for two different protocols — the failure this
+// series already refuses in perf-timeline.yml, where a literal reducer:"min"
+// would have gone on claiming min after the default changed. Provenance that
+// can disagree with the thing it describes is worse than none, because it gets
+// trusted.
 func buildJobs(packages, tags string, manual bool, filterRE *regexp.Regexp,
-	pins map[string]string, defaultBenchtime string) ([]captureJob, string, error) {
+	pins map[string]string, defaultBenchtime string) ([]captureJob, string, map[string]string, error) {
 	pkgList := strings.Fields(packages)
 	if len(pkgList) == 0 {
 		pkgList = append(pkgList, defaultPackages...)
@@ -559,19 +567,26 @@ func buildJobs(packages, tags string, manual bool, filterRE *regexp.Regexp,
 		for _, p := range pkgList {
 			jobs = append(jobs, captureJob{pkg: p, tags: tags, filter: filterRE})
 		}
-		return jobs, scope, nil
+		return jobs, scope, nil, nil
 	}
 
 	jobs, unmatched, err := planJobs(pkgList, tags, filterRE, pins, defaultBenchtime, listBenchmarks)
 	if err != nil {
 		// Falling back to the unpinned path here would measure at the wrong N
 		// while the run still claims to be pinned. Fail instead.
-		return nil, "", fmt.Errorf("plan pinned jobs: %w", err)
+		return nil, "", nil, fmt.Errorf("plan pinned jobs: %w", err)
 	}
 	for _, n := range unmatched {
 		fmt.Fprintf(os.Stderr, "::warning::pin %q matched no benchmark in scope — it is NOT being applied\n", n)
 	}
-	return jobs, scope + ", pinned b.N", nil
+	applied := appliedPins(pins, unmatched)
+	// Say so in the scope line too: "pinned b.N" alone reads as though the whole
+	// table took, which is the same overclaim in prose.
+	pinNote := ", pinned b.N"
+	if len(unmatched) > 0 {
+		pinNote = fmt.Sprintf(", pinned b.N (%d of %d pins applied)", len(applied), len(pins))
+	}
+	return jobs, scope + pinNote, applied, nil
 }
 
 // captureJobs returns the number of jobs whose `go test` invocation failed

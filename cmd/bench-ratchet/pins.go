@@ -155,3 +155,31 @@ func planJobs(pkgs []string, tags string, filterRE *regexp.Regexp, pins map[stri
 	sort.Strings(unmatched)
 	return jobs, unmatched, nil
 }
+
+// appliedPins is the requested table minus the pins that matched no benchmark.
+// It is what gets recorded as provenance: a pin naming a benchmark this commit
+// does not have was never applied, and writing it down anyway would let two
+// snapshots claim identical protocols while one of them ran at the global
+// -benchtime. Returns a copy; the caller's table is left alone.
+func appliedPins(pins map[string]string, unmatched []string) map[string]string {
+	if len(unmatched) == 0 {
+		return pins
+	}
+	drop := make(map[string]struct{}, len(unmatched))
+	for _, n := range unmatched {
+		drop[n] = struct{}{}
+	}
+	applied := make(map[string]string, len(pins))
+	for k, v := range pins {
+		if _, skip := drop[k]; !skip {
+			applied[k] = v
+		}
+	}
+	// If every pin missed, this returns an empty map and `omitempty` drops the
+	// field entirely — the snapshot then reads as an unpinned run. That is the
+	// correct reading, not a gap: with no pin applied, every benchmark did run at
+	// the global -benchtime. The operator learns pinning was attempted from the
+	// per-pin stderr warnings and the scope line, which is where a request that
+	// failed belongs; the snapshot records the protocol, not the intent.
+	return applied
+}
