@@ -5154,6 +5154,9 @@ startExecution:
 			// fmt.Printf("// [VM DEBUG] OpReturn: Hit in module '%s', frameCount=%d, result=%s\n", vm.currentModulePath, vm.frameCount, result.ToString())
 
 			// Check if there are finally handlers that should execute
+			if layoutNullControlFlag {
+				layoutNullControlSink++
+			}
 			handlers := vm.findAllExceptionHandlers(frame.ip)
 			hasFinallyHandler := false
 			for _, handler := range handlers {
@@ -5434,6 +5437,9 @@ startExecution:
 			}
 
 			// Check if there are finally handlers that should execute
+			if layoutNullControlFlag {
+				layoutNullControlSink++
+			}
 			handlers := vm.findAllExceptionHandlers(frame.ip)
 			hasFinallyHandler := false
 			for _, handler := range handlers {
@@ -7611,6 +7617,12 @@ startExecution:
 				// only set once such an accessor is actually defined. See
 				// arrayIndexAccessorSeen in object.go.
 				setterFound := false
+				// Null control, not for merge. layoutNullControlFlag is never
+				// assigned, so this branch is never taken. Placed at the site #43
+				// touches so the two perturb run() comparably.
+				if layoutNullControlFlag {
+					layoutNullControlSink++
+				}
 				if arrayIndexAccessorSeen && vm.ArrayPrototype.IsObject() {
 					idxKey := strconv.Itoa(idx)
 					setterKey := "s:" + idxKey // PropertyKey hash format for string keys
@@ -13017,6 +13029,9 @@ startExecution:
 			}
 
 			// Check if we have more finally or iterator cleanup handlers that need to run
+			if layoutNullControlFlag {
+				layoutNullControlSink++
+			}
 			handlers := vm.findAllExceptionHandlers(frame.ip)
 			var nextHandler *ExceptionHandler
 			for _, handler := range handlers {
@@ -13191,6 +13206,9 @@ startExecution:
 			case ActionReturn:
 				// Check if we have more finally or iterator cleanup handlers that need to run
 				// BEFORE completing the return
+				if layoutNullControlFlag {
+					layoutNullControlSink++
+				}
 				handlers := vm.findAllExceptionHandlers(frame.ip)
 				var nextHandler *ExceptionHandler
 				for _, handler := range handlers {

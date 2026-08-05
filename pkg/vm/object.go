@@ -672,6 +672,15 @@ func (o *PlainObject) DefineOwnProperty(name string, value Value, writable *bool
 // disables the fast path for others, which is negligible in practice.
 var arrayIndexAccessorSeen bool
 
+// Null control, not for merge. Never assigned anywhere, so the guarded branch
+// in run() can never be taken and the VM's behaviour is unchanged by
+// construction. It exists to measure how large a delta a pkg/vm edit can
+// produce through code layout alone — the floor the session's layout controls
+// (0239b8bf6dc8, b0107dd44596) cannot measure, because both leave pkg/vm
+// byte-identical.
+var layoutNullControlFlag bool
+var layoutNullControlSink uint64
+
 // isCanonicalArrayIndexKey reports whether name is a canonical array-index string
 // ("0", or a digit-string with no leading zero, within the 0..2^32-2 index range) —
 // the only keys the OpSetIndex setter walk can ever match.
