@@ -333,7 +333,7 @@ jq -n --arg key "$mkey" --arg cpu "$cpu_model" --arg itype "${itype:-}" \
 # quantity that survives that.
 #
 # Per-benchmark deltas reduced by MEDIAN and geomean, never by an arithmetic
-# mean of ratios. BenchmarkFibPlaceholderRun runs at ~5e8x the anchor, so a
+# mean of ratios. BenchmarkFactorial runs at ~5e8x the anchor, so a
 # plain mean is that one benchmark plus rounding — it reported 9.27% on a pair
 # of commits differing only in a workflow file. Median and geomean disagreeing
 # widely is itself the signal that the session was noisy.

@@ -15,7 +15,7 @@ import (
 // WHAT LOW N DOES AND DOES NOT MEAN. This warning used to report a "resolution"
 // of 1/N and call the metric quantised. That was wrong, and wrong by nine orders
 // of magnitude: Go computes ns/op as elapsed nanoseconds divided by N, so the
-// quantum is (1 ns)/N. On BenchmarkFibPlaceholderRun at N=1 that is 1.3e-07% of
+// quantum is (1 ns)/N. On BenchmarkFactorial at N=1 that is 1.3e-07% of
 // the reported value, not 100%. The old text also shouted loudest exactly where
 // quantisation is most irrelevant — a 700 ms/op benchmark — while printing 0.0%
 // for a 70 ns/op one with the same absolute quantum.
@@ -31,7 +31,7 @@ import (
 //
 // The data to catch this has been recorded in every sample since the tool was
 // written; nothing ever read it. Four benchmarks in ./tests ran at N ≤ 8 for
-// more than a year — BenchmarkFibPlaceholderRun at N=1–2 — and it was found by
+// more than a year — BenchmarkFactorial at N=1–2 — and it was found by
 // accident while chasing something else. This check exists so the fifth one is
 // caught by the machine on its first run instead.
 //

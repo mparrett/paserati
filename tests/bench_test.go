@@ -29,11 +29,16 @@ func compileFile(tb testing.TB, filename string) *vm.Chunk {
 	return chunk
 }
 
-// BenchmarkFib runs the (currently placeholder) fib.ts script.
-// Renamed to match BenchmarkXxx pattern.
-func BenchmarkFibPlaceholderRun(b *testing.B) {
-	// Compile once outside the loop.
-	// Use the correct filename provided by the user.
+// BenchmarkFactorial runs scripts/factorial.ts: recursive factorial over 1e6
+// outer iterations, so roughly 5M calls and returns per iteration, with a fused
+// pre-decrement on the parameter.
+//
+// It was called BenchmarkFibPlaceholderRun and there is also a scripts/fib.ts,
+// which nothing benchmarks (nooga#53). The workload was always the real one and
+// the numbers were always sound; only the label was wrong, and it was wrong in a
+// way that misled — attributing a delta here to an array-index guard only looks
+// reasonable until you notice factorial.ts has no arrays in it.
+func BenchmarkFactorial(b *testing.B) {
 	chunk := compileFile(b, "scripts/factorial.ts")
 	paserati := driver.NewPaserati()
 
