@@ -4,6 +4,17 @@
 #
 # Usage: scripts/perf-session.sh [options] <sha>...
 #
+#   -o, --out DIR       session output directory
+#       --tool-ref REF  tree the summarizing tools come from (see below)
+#       --corpus FILE   pin the benchmark corpus (docs/perf/bench-corpus.json);
+#                       without it each commit is measured with whatever
+#                       benchmarks it shipped with
+#       --pins FILE     b.N pin table from bench-calibrate.sh -o
+#       --benchtime D   global -benchtime for anything unpinned
+#       --count N       go test -count per measurement
+#       --reducer NAME  min (default) or mean
+#       --macro         also run the test262 macro benchmark
+#
 # WHY THIS EXISTS, AND WHY IT IS NOT THE CI WORKFLOWS
 #
 # The forward timeline measures one commit per run on a runner drawn at random
@@ -69,6 +80,12 @@ ITER_TOL=0.02
 # here is what makes the b.N calibration reachable from the driver at all: the
 # -pins flag landed in bench-ratchet (77d4c38d) without ever being wired in.
 PINS=
+# Empty means each commit is measured with the benchmarks it happens to ship
+# with, which confounds benchmark drift with engine change and makes a commit
+# older than a benchmark unmeasurable by it. Passing a corpus config overlays one
+# pinned set of _test.go files and fixtures onto every commit, so the engine
+# varies and the instrument does not. See scripts/bench-corpus.sh.
+CORPUS=
 SHAS=()
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -83,6 +100,7 @@ while [ $# -gt 0 ]; do
     --benchtime)    BENCHTIME="${2:?}"; shift 2;;
     --count)        COUNT="${2:?}"; shift 2;;
     --pins)         PINS="${2:?}"; shift 2;;
+    --corpus)       CORPUS="${2:?}"; shift 2;;
     --reducer)      REDUCER="${2:?}"; shift 2;;
     -h|--help)      sed -n '2,44p' "$0"; exit 0;;
     -*)             die "unknown option: $1";;
@@ -217,6 +235,12 @@ for r in $(seq 1 "$ROUNDS"); do
     [ -f "$out" ] && { note "round $r  ${short}  (already present, skipping)"; continue; }
     note "round $r  ${short}  building"
     git -C "$TARGWT" checkout --force --quiet "$sha" || die "checkout $sha failed"
+    # Re-overlay after every checkout: --force discards the previous round's
+    # overlay, so this has to run per commit rather than once at setup.
+    if [ -n "$CORPUS" ]; then
+      "$TOOLWT/scripts/bench-corpus.sh" --config "$CORPUS" --into "$TARGWT" \
+        || die "corpus overlay failed at $short (round $r)"
+    fi
     ( cd "$TARGWT" && "$BENCH_RATCHET" \
         -count "$COUNT" -benchtime "$BENCHTIME" -timeout 30m \
         -reducer "$REDUCER" \

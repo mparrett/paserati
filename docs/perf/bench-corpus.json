@@ -1,0 +1,32 @@
+{
+  "comment": [
+    "The pinned benchmark corpus. perf-session.sh measures an engine commit with",
+    "the benchmarks named here, taken from `ref`, instead of the ones that commit",
+    "happened to ship with.",
+    "",
+    "Why: without this, benchmark drift is confounded with engine change. Two",
+    "commits whose bench_test.go differs are not measuring the same thing, and a",
+    "commit predating a benchmark cannot be measured by it at all — which is what",
+    "makes historical re-measurement impossible and forces an epoch break every",
+    "time a benchmark is fixed.",
+    "",
+    "Only _test.go files and tests/scripts fixtures may appear in `files`.",
+    "bench-corpus.sh refuses anything else, because overlaying engine source",
+    "would measure a different engine than the commit under test."
+  ],
+  "version": "v2",
+  "ref": "perf/bench-corpus-v2",
+  "files": [
+    "tests/bench_test.go",
+    "tests/benchmark_prototype_test.go",
+    "tests/scripts/bench_add.ts",
+    "tests/scripts/bench_arith.ts",
+    "tests/scripts/bench_setindex.ts",
+    "tests/scripts/factorial.ts",
+    "tests/scripts/matrix_mult.ts",
+    "pkg/vm/bench_ratchet_anchor_test.go",
+    "pkg/vm/isobject_bench_test.go",
+    "pkg/vm/object_bench_test.go",
+    "pkg/vm/tointeger_bench_test.go"
+  ]
+}
