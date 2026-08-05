@@ -14,6 +14,8 @@
 #       --count N       go test -count per measurement
 #       --reducer NAME  min (default) or mean
 #       --macro         also run the test262 macro benchmark
+#       --limit N       stop after N measurements this run, then skip aggregation;
+#                       re-run the same command to continue
 #
 # WHY THIS EXISTS, AND WHY IT IS NOT THE CI WORKFLOWS
 #
@@ -86,6 +88,19 @@ PINS=
 # pinned set of _test.go files and fixtures onto every commit, so the engine
 # varies and the instrument does not. See scripts/bench-corpus.sh.
 CORPUS=
+# 0 means measure everything. A positive value stops after that many measurements
+# in THIS invocation and skips the aggregation, so a long session can be staged:
+# measure a few, look at the numbers, re-run to continue. Resume is keyed per
+# (round, commit) file, so re-running picks up exactly where this left off.
+#
+# Staging this way rather than by shortening the commit list matters, because
+# round_order derives each commit's position from the LIST LENGTH. Measure four
+# commits with a four-commit list and they occupy different positions in the
+# drift sequence than they would in the real run, and counterbalancing is the
+# thing that stops session drift landing on whoever went last. Keep the list
+# whole; limit the work instead.
+LIMIT=0
+MEASURED=0
 SHAS=()
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -101,6 +116,7 @@ while [ $# -gt 0 ]; do
     --count)        COUNT="${2:?}"; shift 2;;
     --pins)         PINS="${2:?}"; shift 2;;
     --corpus)       CORPUS="${2:?}"; shift 2;;
+    --limit)        LIMIT="${2:?}"; shift 2;;
     --reducer)      REDUCER="${2:?}"; shift 2;;
     -h|--help)      sed -n '2,44p' "$0"; exit 0;;
     -*)             die "unknown option: $1";;
@@ -264,8 +280,32 @@ for r in $(seq 1 "$ROUNDS"); do
       jq --slurpfile e "$ents" '.benchmarks += $e[0]' "$out" > "$out.tmp" && mv "$out.tmp" "$out"
     fi
     note "round $r  ${short}  anchor $(jq -r '.anchor.ns_per_op' "$out") ns/op"
+
+    MEASURED=$(( MEASURED + 1 ))
+    if [ "$LIMIT" -gt 0 ] && [ "$MEASURED" -ge "$LIMIT" ]; then
+      note "--limit $LIMIT reached; stopping. Re-run the same command without --limit to continue."
+      break 2
+    fi
   done
 done
+
+# --- completeness ---------------------------------------------------------
+# Everything below reads every round file directly, so a partial session must
+# stop here rather than fail in jq. This is reached by --limit, by a killed run,
+# and by a box that went away mid-session; all three are resumable by re-running
+# the identical command, since the skip is per (round, commit) file.
+expected=$(( ${#FULL[@]} * ROUNDS ))
+present=0
+for r in $(seq 1 "$ROUNDS"); do
+  for s in "${SHORT[@]}"; do
+    [ -f "$OUT/raw/round-$r/${s}.json" ] && present=$(( present + 1 ))
+  done
+done
+if [ "$present" -lt "$expected" ]; then
+  note "measured $present of $expected (round, commit) cells; skipping aggregation"
+  note "re-run the same command to continue — completed cells are skipped"
+  exit 0
+fi
 
 # --- drift check ----------------------------------------------------------
 # The anchor is measured every round on the same machine, so its spread across
