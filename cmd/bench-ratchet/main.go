@@ -401,10 +401,17 @@ func ratchetMerge(existing, current Baseline) (Baseline, RatchetSummary) {
 			BytesPerOp:    minI(cur.BytesPerOp, base.BytesPerOp),
 			RatioToAnchor: minF(cur.RatioToAnchor, base.RatioToAnchor),
 		}
-		tightened := merged.RatioToAnchor < base.RatioToAnchor ||
+		// Judged on judgeMetric, not on ratio_to_anchor directly: the micro
+		// family is compared on raw ns/op because the anchor's own resolution is
+		// coarser than most of those benchmarks (A10). The ratio is still merged
+		// and stored below.
+		mergedJudge := judgeMetric(name, merged)
+		baseJudge := judgeMetric(name, base)
+		curJudge := judgeMetric(name, cur)
+		tightened := mergedJudge < baseJudge ||
 			merged.AllocsPerOp < base.AllocsPerOp ||
 			merged.BytesPerOp < base.BytesPerOp
-		regressedOnSome := cur.RatioToAnchor > base.RatioToAnchor ||
+		regressedOnSome := curJudge > baseJudge ||
 			cur.AllocsPerOp > base.AllocsPerOp ||
 			cur.BytesPerOp > base.BytesPerOp
 		if tightened {
@@ -812,6 +819,39 @@ func aggregateFromFile(path, reducerName string) (Baseline, error) {
 	return buildCurrentBaseline(results, anchor, reducerName), nil
 }
 
+// microPkgSuffix identifies the nanosecond-scale family. Full names look like
+// "github.com/nooga/paserati/pkg/vm.BenchmarkToInteger".
+const microPkgSuffix = "/pkg/vm."
+
+// isMicro reports whether a benchmark belongs to the pkg/vm family.
+func isMicro(fullName string) bool { return strings.Contains(fullName, microPkgSuffix) }
+
+// judgeMetric returns the quantity a benchmark is judged on — ratchet
+// decisions, drift deltas, everything comparative.
+//
+// The macro family is judged on ratio_to_anchor, which is what the anchor is
+// for and where it demonstrably works: it absorbed a 27% between-session
+// hardware shift to a median of 0.30%.
+//
+// The micro family is judged on raw ns/op instead (A10). BenchmarkRatchetAnchor
+// returns four significant digits on a ~1.08-1.38 ns value, so its entire
+// resolution is one ulp — 0.0923%. 264 of 560 micro cells measured tighter than
+// that, which means dividing by the anchor cannot sharpen them and can only
+// inject a 0.09% square wave: ToInteger went from 0.026% to 0.078% MAD purely
+// from being normalised. Cross-tier comparison — the one job the ratio would
+// still do here — is already forbidden, because the corpus partitions by
+// machine key and nothing may cross it.
+//
+// ratio_to_anchor is still computed and stored for the micro family. Dropping
+// the field would break the stored series for no gain; the harm was in judging
+// on it, not in recording it.
+func judgeMetric(fullName string, e BenchmarkEntry) float64 {
+	if isMicro(fullName) {
+		return e.NSPerOp
+	}
+	return e.RatioToAnchor
+}
+
 func findAnchor(results []Result) (Result, bool) {
 	for _, r := range results {
 		if r.Name == anchorName {
@@ -976,7 +1016,11 @@ func compareAndReport(baseline, current Baseline, budget float64, format string)
 		if ok {
 			d.curRatio = cur.RatioToAnchor
 			d.curNs = cur.NSPerOp
-			d.delta = (cur.RatioToAnchor - base.RatioToAnchor) / base.RatioToAnchor
+			// Micro is judged on ns/op, macro on the anchor ratio (A10).
+			bj, cj := judgeMetric(name, base), judgeMetric(name, cur)
+			if bj != 0 {
+				d.delta = (cj - bj) / bj
+			}
 		}
 		drifts = append(drifts, d)
 	}
