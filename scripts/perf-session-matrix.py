@@ -529,6 +529,9 @@ JS = """
 })();
 """
 
+CSS = CSS.replace(
+    "repeat(16,1fr)", f"repeat({NCOM},minmax(20px,1fr))")
+
 HTML = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -567,7 +570,7 @@ change vs {esc(ref[:8])} &middot; hover or tab a cell for its value</p>
   underneath both, but is never the comparison base.)
   <strong>Grey means the change is inside that benchmark&rsquo;s own noise</strong> — the neutral bin is per-benchmark,
   not a fixed percentage, so 0.4% on a quiet benchmark is not painted like 0.4% on a noisy one.
-  Rows are sorted by final change. <strong>The outlined column is the last commit</strong> —
+  Rows are sorted by final change. <strong>The bold column header is the last commit</strong> —
   the one the summary tiles above are counted from, and the one the Δ column on the right
   reports.</p>
 
@@ -585,6 +588,7 @@ change vs {esc(ref[:8])} &middot; hover or tab a cell for its value</p>
     <span class="modenote" id="modenote">cumulative change since <span class="mono">{esc(ref[:8])}</span> &mdash; where the stack stands at each point</span>
   </div>
 
+  <div class="scroll">
   <div class="matrix" role="grid" aria-label="Change per benchmark per commit">
     <div></div>
     <div class="colhead">{''.join(colhead_cells)}</div>
@@ -597,6 +601,7 @@ change vs {esc(ref[:8])} &middot; hover or tab a cell for its value</p>
     <div class="flab cum">geomean, cumulative</div>
     <div class="foot cum">{''.join(foot_cum)}</div>
     <div></div>
+  </div>
   </div>
   <p style="margin-top:14px"><strong>Read the columns, not just the rows.</strong> The red band at
   <span style="font-family:ui-monospace,Menlo,monospace">56b7bb</span> &mdash; &ldquo;store strings
