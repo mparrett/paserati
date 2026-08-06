@@ -20,9 +20,17 @@
     "      GetOwn) via runtime.KeepAlive. Under v2 the IsObject loop body was",
     "      dead-code eliminated at commits where IsObject inlines and retained",
     "      where it does not, so v2 IsObject deltas across that boundary",
-    "      overstate the gain and must not be compared against v3."
+    "      overstate the gain and must not be compared against v3.",
+    "  v4  add the seven Octane workloads. This is a version bump and not a",
+    "      quiet addition because pinning splits a cell into separate go test",
+    "      invocations, so changing which benchmarks share a process can move",
+    "      the existing ones. Costs ~22s on top of a ~7min cell.",
+    "",
+    "Octane's RegExp workload is deliberately absent: it fails its own checksum",
+    "on every engine across the measured window, so it is a bug to fix rather",
+    "than a benchmark to run."
   ],
-  "version": "v3",
+  "version": "v4",
   "ref": "perf/bench-corpus-v2",
   "files": [
     "tests/bench_test.go",
@@ -35,6 +43,24 @@
     "pkg/vm/bench_ratchet_anchor_test.go",
     "pkg/vm/isobject_bench_test.go",
     "pkg/vm/object_bench_test.go",
-    "pkg/vm/tointeger_bench_test.go"
+    "pkg/vm/tointeger_bench_test.go",
+    "tests/bench_octane_test.go",
+    "tests/scripts/octane/LICENSE",
+    "tests/scripts/octane/richards.js",
+    "tests/scripts/octane/richards-run.js",
+    "tests/scripts/octane/deltablue.js",
+    "tests/scripts/octane/deltablue-run.js",
+    "tests/scripts/octane/crypto.js",
+    "tests/scripts/octane/crypto-run.js",
+    "tests/scripts/octane/raytrace.js",
+    "tests/scripts/octane/raytrace-run.js",
+    "tests/scripts/octane/earley-boyer.js",
+    "tests/scripts/octane/earley-boyer-run.js",
+    "tests/scripts/octane/splay.js",
+    "tests/scripts/octane/splay-run.js",
+    "tests/scripts/octane/splay-teardown.js",
+    "tests/scripts/octane/navier-stokes.js",
+    "tests/scripts/octane/navier-stokes-run.js",
+    "tests/scripts/octane/navier-stokes-teardown.js"
   ]
 }
