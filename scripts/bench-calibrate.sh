@@ -169,6 +169,22 @@ for b in "${BENCHES[@]}"; do
       "" "$TOL" "$MAXN" "$evaluable"
   fi
 
+  # NEVER pin the anchor, and say so in the output rather than leaving it to the
+  # reader. bench-ratchet refuses any pin table naming BenchmarkRatchetAnchor —
+  # every ratio in the corpus is bench_ns/anchor_ns, so moving its b.N shifts the
+  # whole timeline against itself — which meant this script emitted a file its
+  # own consumer rejects, and every calibration needed hand-surgery before use.
+  # A null suggested_n is the "calibration declined" signal loadPins already
+  # honours, so declining here is expressed in the vocabulary that exists.
+  case "$b" in
+    *BenchmarkRatchetAnchor*)
+      if [ -n "$suggest" ]; then
+        printf '%-46s → declining to pin: the anchor must stay on the global -benchtime\n' ""
+      fi
+      suggest=""
+      ;;
+  esac
+
   json=$(jq -c --arg b "$b" --arg s "$suggest" \
             --argjson ns "$(printf '%s\n' "${NS[@]}" | jq -sc .)" \
             --argjson v "$(printf '%s\n' "${vals[@]:-}" | jq -sc '[.[] | if . == "" then null else tonumber end]')" \
