@@ -135,6 +135,15 @@ Treat "NO FLAT REGION" or "NOT EVALUATED" as a result to act on rather than a
 line to skim past — those benchmarks stay unpinned and keep the global
 `-benchtime`.
 
+**The Octane workloads (corpus v4) need their own treatment.** They run at
+116–489 ms per op, so the default 1..256 sweep is the wrong range in the other
+direction from `pkg/vm`: at a 1s benchtime `go test` picks `b.N` of 1 or 2, and
+which one it picks can differ between commits. They are top-level `Benchmark`
+funcs specifically so they *can* be pinned — pin them at 1 and take samples with
+`-count` instead. Their per-op iteration counts, baked into
+`tests/scripts/octane/*-run.js`, were derived on a laptop and are provisional;
+re-derive them here if any workload lands outside roughly 0.3–0.5s.
+
 `bench-ratchet` warns on every run when a benchmark lands under its `b.N`
 floor (`-min-iterations`, default 20; `-strict-iterations` to fail), and
 separately when `b.N` **moves** across reps (`-iteration-tolerance`).
@@ -200,6 +209,122 @@ round, so 16 commits × 5 rounds is ~17 hours.
 
 **Watch round 1.** The classic failure is a chained job nobody watched, dying
 on its first measurement while the box sits at load 0.00 for 90 minutes.
+
+## 5b. Bisecting instead, when the history is long
+
+Measuring every commit spends most of its cells inside flat stretches. If the
+question is *which commit did this* rather than *what does the whole history
+look like*, bisect: `scripts/perf-bisect.sh` measures three points, classifies
+each benchmark as step, ramp or flat, and then spends one cell per level on
+whichever commit splits the most outstanding change.
+
+Steps 1, 2, 3, 4, 6 and 8 are unchanged. What differs is that **the box stays up
+between levels**, because that is what makes a level cost one cell instead of
+three. Everything below is about protecting that.
+
+### Before you boot: two things that will otherwise fail mid-run
+
+**Push the orphaned commits.** As of 2026-08-06, two of the whole-world run's 21
+commits (`1a3857ac`, `21c5e929`) exist only in one laptop's clone under
+`refs/preserve/perf-corpus/*` — and `1a3857ac` is the older endpoint, so a fresh
+box cannot check out level 0. Push them somewhere the box can fetch first:
+
+```bash
+git for-each-ref refs/preserve/perf-corpus --format='%(refname)' \
+  | while read -r r; do git push origin "$r:$r"; done
+git ls-remote origin 'refs/preserve/*' | wc -l     # expect 14
+```
+
+`perf-bisect.sh` refuses to start when a listed commit is unresolvable, so this
+fails at the preflight rather than three hours in — but only in a clone that
+already has them.
+
+**Supply the commit list; do not let it be derived.** `1a3857ac` is *not* an
+ancestor of `20f7bf60`; the perf branches were rebased, so a `rev-list` range
+returns 91 commits off a divergent line and every bisect position after that is
+meaningless. `perf-bisect.sh` refuses to guess when the endpoints are not
+linearly related. Pass the measured set:
+
+```bash
+scripts/perf-bisect.sh --commits <evidence>/2026-08-06-whole-world/measure-list.txt ...
+```
+
+The script sorts it by **author** date. Do not sort by commit date and do not
+trust the file's own order: the bulk rebase stamped most of the corpus with a
+single commit date, `measure-list.txt` is not stored in history order, and
+author date is the only monotone axis that survived.
+
+### The run
+
+```bash
+tmux new -s bisect
+EV=<evidence>/2026-08-06-whole-world
+
+# Level 0 — the three-point probe. ~1h at 3 rounds. Stop and read it.
+scripts/perf-bisect.sh -o ~/bisect --probe \
+  --commits "$EV/measure-list.txt" \
+  --corpus docs/perf/bench-corpus.json --pins calib-tests.json \
+  1a3857acaa6b 20f7bf60402d
+```
+
+Read the **shape** table before spending anything else. A *step* has a culprit
+commit and subdividing will find it. A *ramp* is accumulated change with no
+single cause, and bisection will subdivide it until `--threshold` stops it and
+still hand you nothing — against a ramp, stop as soon as the resolution is
+enough. Knowing which costs one session rather than five.
+
+Then subdivide, a level at a time, re-reading between:
+
+```bash
+scripts/perf-bisect.sh -o ~/bisect --levels 1 \
+  --commits "$EV/measure-list.txt" \
+  --corpus docs/perf/bench-corpus.json --pins calib-tests.json \
+  1a3857acaa6b 20f7bf60402d
+```
+
+Same command every time; it picks up where it left off. `--levels N` runs N of
+them unattended.
+
+### Keeping the box alive is the whole design
+
+The dead-man switch defaults to **300 minutes and a real bisect exceeds it**.
+Extend it *before* starting, not at 3am:
+
+```bash
+sudo shutdown -c
+sudo shutdown -h +600
+```
+
+`--instance-initiated-shutdown-behavior terminate` is an instance attribute and
+survives, so the extended switch still tears the box down rather than stopping
+it. Do not disable the switch outright; a forgotten box is a live failure mode
+in this account.
+
+### What makes cross-level comparison legitimate
+
+Levels are separate sessions, so they are only comparable because they are the
+same physical box and because `ratio_to_anchor` is what gets compared —
+`perf-micro-noise-and-anchor-results.md` measured the anchor absorbing 100% of a
+22.4% hardware split inside one CPU model. That is an assumption, so it is
+checked: `perf-bisect-select.py` **refuses to run** when levels span machine
+keys, and each level's anchor drift is carried into the report. If the box has
+to be replaced mid-bisect, the earlier levels are gone — start over rather than
+mixing keys.
+
+### What this run should find, if it is working
+
+`1c6c7f66` ("replace IsObject OR-chain with a range check") sits at author
+position 11 of 21, and the whole-world run put `IsObject` at −85.66%. A working
+bisect should localise `BenchmarkIsObject` to that commit. It is worth writing
+that prediction down before the run, because a bisect that confirms whatever you
+already believed is not evidence.
+
+Expect the magnitude to come in **lower than −85.66%**: that figure was measured
+under corpus v2, where the benchmark's loop body was dead-code eliminated at
+commits where `IsObject` inlines. Corpus v3 escaped the accumulator, and a
+laptop check put the DCE-proof figure near −78%. If v4 reproduces ~−86%, the
+corpus overlay is not taking effect — check the resolved corpus SHA in the
+session metadata before believing the number.
 
 ## 6. Read the anchor before reading anything else
 

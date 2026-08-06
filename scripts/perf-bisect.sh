@@ -83,12 +83,37 @@ HI="$(git rev-parse --verify -q "${ENDPOINTS[1]}^{commit}")" || die "not a commi
 LIST="$OUT/commits.txt"
 if [ ! -f "$LIST" ]; then
   if [ -n "$COMMITS" ]; then
-    cp "$COMMITS" "$LIST"
+    # Sort by AUTHOR date, not the file's order and not commit date. The perf
+    # corpus has been rebased in bulk, so most of its commits share a single
+    # commit date and carry no ordering at all; author date survives a rebase
+    # and is the only monotone axis left. measure-list.txt in particular is not
+    # stored in history order.
+    while read -r s; do
+      [ -n "$s" ] || continue
+      f="$(git rev-parse --verify -q "${s}^{commit}")" || die "not a commit: $s"
+      printf '%s %s\n' "$(git show -s --format=%at "$f")" "$f"
+    done < "$COMMITS" | sort -n | awk '{print $2}' > "$LIST"
   else
+    # Only safe when the endpoints are actually linearly related. They often are
+    # not here: 1a3857ac is not an ancestor of 20f7bf60, so a rev-list range
+    # silently returns 91 commits off a divergent line and every bisect position
+    # after that is meaningless.
+    git merge-base --is-ancestor "$LO" "$HI" 2>/dev/null \
+      || die "$(git rev-parse --short "$LO") is not an ancestor of $(git rev-parse --short "$HI") — the range is not linear, so it cannot be derived. Pass the measured set with --commits (e.g. the whole-world run's measure-list.txt)."
     { echo "$LO"; git rev-list --reverse "${LO}..${HI}"; } > "$LIST"
   fi
-  note "commit list pinned: $(wc -l < "$LIST" | tr -d ' ') commits"
+  note "commit list pinned: $(wc -l < "$LIST" | tr -d ' ') commits, author-date order"
 fi
+
+# A commit the box cannot resolve fails the level rather than the preflight,
+# which wastes a boot. 2 of the whole-world run's 21 live only in one clone
+# under refs/preserve/perf-corpus/*.
+missing=0
+while read -r s; do
+  [ -n "$s" ] || continue
+  git rev-parse --verify -q "${s}^{commit}" >/dev/null || { echo "  unresolvable: $s" >&2; missing=1; }
+done < "$LIST"
+[ "$missing" -eq 0 ] || die "commits above are not in this clone — fetch them before starting"
 N="$(wc -l < "$LIST" | tr -d ' ')"
 [ "$N" -ge 3 ] || die "need at least three commits between the endpoints"
 
