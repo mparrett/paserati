@@ -12,9 +12,17 @@
     "",
     "Only _test.go files and tests/scripts fixtures may appear in `files`.",
     "bench-corpus.sh refuses anything else, because overlaying engine source",
-    "would measure a different engine than the commit under test."
+    "would measure a different engine than the commit under test.",
+    "",
+    "Version history — numbers are comparable only within a version:",
+    "  v2  first pinned corpus.",
+    "  v3  escape the accumulators in the pkg/vm micros (IsObject, ToInteger,",
+    "      GetOwn) via runtime.KeepAlive. Under v2 the IsObject loop body was",
+    "      dead-code eliminated at commits where IsObject inlines and retained",
+    "      where it does not, so v2 IsObject deltas across that boundary",
+    "      overstate the gain and must not be compared against v3."
   ],
-  "version": "v2",
+  "version": "v3",
   "ref": "perf/bench-corpus-v2",
   "files": [
     "tests/bench_test.go",

@@ -3,6 +3,7 @@ package vm
 import (
 	"math"
 	"math/big"
+	"runtime"
 	"testing"
 )
 
@@ -61,5 +62,9 @@ func BenchmarkToInteger(b *testing.B) {
 			sink += vs[j].ToInteger()
 		}
 	}
-	_ = sink
+	// ToInteger is far over the inline budget at both ends of the measured
+	// history, so nothing here was eliminated — but "too complex to inline" is
+	// not a property a benchmark should depend on holding forever. Escape the
+	// accumulator so the guard does not rest on the optimizer's current budget.
+	runtime.KeepAlive(sink)
 }

@@ -1,6 +1,9 @@
 package vm
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
 
 // isObjectMix models the hot-path distribution: IsObject is called predominantly
 // on non-object values (numbers in arithmetic/ToInteger guards), which is the
@@ -18,6 +21,13 @@ func isObjectMix() []Value {
 	return vs
 }
 
+// The accumulator must be escaped, not discarded with `_ = sink`. The OR-chain
+// form of IsObject costs 90 nodes against an inline budget of 80, so it was a
+// real call the compiler could not see through; the range-check form inlines.
+// That made the two commits unequally vulnerable to dead-code elimination —
+// with a discarded accumulator the inlined form's loop body was removed
+// outright and the benchmark measured an empty loop, exaggerating the A/B gain.
+// runtime.KeepAlive is the same guard BenchmarkRatchetAnchor already uses.
 func BenchmarkIsObject(b *testing.B) {
 	vs := isObjectMix()
 	b.ResetTimer()
@@ -31,7 +41,7 @@ func BenchmarkIsObject(b *testing.B) {
 			}
 		}
 	}
-	_ = sink
+	runtime.KeepAlive(sink)
 }
 
 // TestIsObjectExhaustive locks in that IsObject is equivalent to the contiguous

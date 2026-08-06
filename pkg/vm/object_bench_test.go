@@ -2,6 +2,7 @@ package vm
 
 import (
 	"fmt"
+	"runtime"
 	"testing"
 )
 
@@ -39,9 +40,17 @@ func benchGetOwn(b *testing.B, fieldCount int, accessPattern string) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
+	var sink Value
+	var found bool
 	for i := 0; i < b.N; i++ {
-		_, _ = obj.GetOwn(lookup(i))
+		sink, found = obj.GetOwn(lookup(i))
 	}
+	// (*PlainObject).GetOwn costs 179 against an inline budget of 80, so the
+	// call survives today — but (*ArrayObject).GetOwn crossed that same budget
+	// (73 -> 84) inside the window this corpus measures, which is precisely how
+	// a benchmark silently starts measuring an empty loop. Escape the results.
+	runtime.KeepAlive(sink)
+	runtime.KeepAlive(found)
 }
 
 func BenchmarkGetOwn(b *testing.B) {
