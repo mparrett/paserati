@@ -96,7 +96,28 @@ for rd in sorted(glob.glob(os.path.join(SRC, 'raw', 'round-*'))):
                 elif A[k] > 0:
                     R[k][sha][name].append(val / A[k])
 
-out = {'ref': ref, 'order': order, 'subjects': subjects, 'benchmarks': []}
+# Session shape, so the renderer does not have to hardcode it. The page that
+# first consumed this file baked in "16 commits x 5 rounds = 80 builds" and
+# "micro suite only" as prose, which was true of the session it was written for
+# and silently false for every other one.
+meta = {'commits': len(order), 'rounds': 0, 'cells': 0}
+meta['rounds'] = len(glob.glob(os.path.join(SRC, 'raw', 'round-*')))
+meta['cells'] = len(glob.glob(os.path.join(SRC, 'raw', 'round-*', '*.json')))
+_snaps = sorted(glob.glob(os.path.join(SRC, 'snapshots', '*.json')))
+if _snaps:
+    _d = json.load(open(_snaps[0]))
+    _k, _m = next(iter(_d.get('machines', {}).items()), (None, {}))
+    meta['machine_key'] = _k
+    meta.update({k: v for k, v in _m.get('machine', {}).items()
+                 if k in ('cpu_model', 'go_version', 'num_cpu', 'os', 'arch')})
+    _meth = _m.get('method', {})
+    meta.update({k: _meth[k] for k in ('reducer', 'count', 'benchtime') if k in _meth})
+    meta['pins_applied'] = len(_meth.get('pins', {}))
+# Recorded because the page must not claim otherwise: A10 means the micro family
+# is NOT anchor-normalised, so a footer asserting it is would be false.
+meta['anchor_policy'] = 'macro only; pkg/vm judged on raw ns/op (A10)'
+
+out = {'meta': meta, 'ref': ref, 'order': order, 'subjects': subjects, 'benchmarks': []}
 for name in sorted(R['min'][ref]):
     base = {k: st.median(R[k][ref][name]) for k in ('min', 'mean')}
     row = {'name': name.split('.')[-1], 'pkg': PKG.get(name, 'vm'),
