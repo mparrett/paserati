@@ -67,3 +67,6 @@ GEMINI.md
 CLAUDE.md
 .claude/
 .cursor/
+
+# perf-session box state — holds a private key (perf-session-box.sh -s default)
+.perf-box/

@@ -25,6 +25,14 @@ NCOM = M.get('commits', len(order))
 NRND = M.get('rounds', 0)
 NCELL = M.get('cells', NCOM * NRND)
 TITLE = f"{NCOM} commits on {M.get('cpu_model', 'unknown host')}, reduced by {M.get('reducer', 'min')}"
+_bits = []
+if M.get('reducer') and M.get('count'):
+    _bits.append(f"{M['reducer']} of each count-{M['count']} triple, then median across rounds")
+elif M.get('reducer'):
+    _bits.append(f"{M['reducer']}-reduced, then median across rounds")
+if M.get('pins_applied') is not None:
+    _bits.append(f"{M['pins_applied']} pin(s) applied")
+PROTOCOL = " &middot; ".join(_bits)
 W = 880
 
 # A delta is "separated" only once it clears twice its own MAD. One MAD is too
@@ -318,7 +326,7 @@ HTML = f"""<!doctype html>
 
 <p class="meta">{M.get("cpu_model","unknown host")} &middot; tier key {M.get("machine_key","?")} &middot;
 {NCOM} commits &times; {NRND} rounds = {NCELL} cells &middot; {SUITE} &middot; {M.get("go_version","")} {M.get("os","")}/{M.get("arch","")}
-&middot; {M.get("reducer","min")} of each count-{M.get("count","?")} triple, then median across rounds &middot; {M.get("pins_applied",0)} pin(s) applied</p>
+{" &middot; " + PROTOCOL if PROTOCOL else ""}</p>
 
 <div class="tiles">
   <div class="tile"><div class="k">Benchmarks moved</div><div class="v">{len(movers)} of {len(rows_all)}</div>
