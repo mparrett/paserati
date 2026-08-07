@@ -26,7 +26,26 @@ import argparse
 import json
 import math
 import os
+import re
 import sys
+
+# perf-migrate renames snapshots to <stamp>-<sha>-<machine-key-slug>.json, so
+# neither the first nor the last dash-separated field is the commit. Pick the
+# field that actually looks like one: the stamp carries T and Z, and the key
+# slug carries non-hex letters, so a pure-hex run is unambiguous.
+_SHA_FIELD = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+def display(name):
+    """Snapshot keys are package-qualified; the package is noise in a table."""
+    return "Benchmark" + name.split(".Benchmark", 1)[1] if ".Benchmark" in name else name
+
+
+def sha_from_snapshot(filename):
+    for field in filename[:-5].split("-"):
+        if _SHA_FIELD.match(field):
+            return field
+    return None
 
 
 def die(msg):
@@ -63,8 +82,9 @@ def load_levels(outdir):
                     for name, b in m.get("benchmarks", {}).items()
                     if b.get("ratio_to_anchor")
                 }
-                if benches:
-                    measured[fn.split("-")[-1][:-5]] = {
+                sha = sha_from_snapshot(fn)
+                if benches and sha:
+                    measured[sha] = {
                         "level": lvl, "key": mkey, "benchmarks": benches,
                     }
     return measured, keys, drifts
@@ -200,7 +220,7 @@ def main():
         print("|---|---|---|---|")
         for name, total, shape, frac in shapes[:20]:
             pos = "-" if frac is None else f"{frac:.2f}"
-            print(f"| `{name}` | {total:+.2f}% | {shape} | {pos} |")
+            print(f"| `{display(name)}` | {total:+.2f}% | {shape} | {pos} |")
         print()
         print("A **step** has a culprit commit and bisecting will find it. A **ramp**")
         print("is accumulated change with no single cause — subdividing it just buys")
@@ -217,7 +237,7 @@ def main():
     print("| benchmark | Δ across bracket | bracket | unmeasured inside |")
     print("|---|---|---|---|")
     for i0, i1, name, pct in outstanding[:20]:
-        print(f"| `{name}` | {pct:+.2f}% | {commits[i0][:8]}..{commits[i1][:8]} | {i1 - i0 - 1} |")
+        print(f"| `{display(name)}` | {pct:+.2f}% | {commits[i0][:8]}..{commits[i1][:8]} | {i1 - i0 - 1} |")
     print()
     print(f"**Next:** `{nxt}`")
 

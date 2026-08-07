@@ -70,3 +70,8 @@ CLAUDE.md
 
 # perf-session box state — holds a private key (perf-session-box.sh -s default)
 .perf-box/
+
+# Session data pulled off the perf box; the durable copy is the evidence
+# directory in project-docs, not this working dir.
+perf-session-collected/
+bisect-collected/
