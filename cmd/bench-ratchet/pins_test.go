@@ -206,3 +206,57 @@ func TestPinsAllowEverythingElse(t *testing.T) {
 		t.Errorf("ordinary pins rejected: %v", err)
 	}
 }
+
+// bench-calibrate auto-discovers by RUNNING the benchmarks, where go test
+// prints one line per subtest and none for the parent. Those keys match nothing
+// here — -list and -bench both work in top-level names — so the benchmark ran
+// unpinned while the table read as pinned. Collapsing is what makes the
+// calibrator's output consumable by the tool that reads it.
+func TestCollapseSubtestPinsFoldsOntoParent(t *testing.T) {
+	got := collapseSubtestPins(map[string]string{
+		"BenchmarkGetOwn/n=1/first": "10000000x",
+		"BenchmarkGetOwn/n=1/last":  "10000000x",
+		"BenchmarkGetOwn/n=64/last": "10000000x",
+		"BenchmarkAdd":              "64x",
+	})
+	if got["BenchmarkGetOwn"] != "10000000x" {
+		t.Errorf("subtests did not fold onto the parent: %v", got)
+	}
+	if got["BenchmarkAdd"] != "64x" {
+		t.Errorf("top-level pin lost: %v", got)
+	}
+	if _, ok := got["BenchmarkGetOwn/n=1/first"]; ok {
+		t.Errorf("subtest key survived, it will match nothing: %v", got)
+	}
+}
+
+// Subtests disagree when their calibration curves differ. The most common
+// suggestion wins; a tie takes the smaller N so a disagreement cannot silently
+// inflate runtime.
+func TestCollapseSubtestPinsVotesAndBreaksTiesLow(t *testing.T) {
+	got := collapseSubtestPins(map[string]string{
+		"BenchmarkX/a": "32x", "BenchmarkX/b": "32x", "BenchmarkX/c": "64x",
+	})
+	if got["BenchmarkX"] != "32x" {
+		t.Errorf("majority vote lost, got %q", got["BenchmarkX"])
+	}
+
+	tie := collapseSubtestPins(map[string]string{
+		"BenchmarkY/a": "128x", "BenchmarkY/b": "16x",
+	})
+	if tie["BenchmarkY"] != "16x" {
+		t.Errorf("tie should break toward the smaller N, got %q", tie["BenchmarkY"])
+	}
+}
+
+// An explicit top-level entry is a deliberate choice and outranks anything the
+// subtests would have voted for.
+func TestCollapseSubtestPinsExplicitParentWins(t *testing.T) {
+	got := collapseSubtestPins(map[string]string{
+		"BenchmarkZ":   "8x",
+		"BenchmarkZ/a": "4096x", "BenchmarkZ/b": "4096x",
+	})
+	if got["BenchmarkZ"] != "8x" {
+		t.Errorf("explicit parent pin was overridden, got %q", got["BenchmarkZ"])
+	}
+}

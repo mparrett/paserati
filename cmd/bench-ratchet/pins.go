@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -61,14 +62,78 @@ func loadPins(path string) (map[string]string, error) {
 				pins[c.Benchmark] = fmt.Sprintf("%dx", *c.SuggestedN)
 			}
 		}
-		return pins, nil
+		return collapseSubtestPins(pins), nil
 	}
 
 	var plain map[string]string
 	if err := json.Unmarshal(raw, &plain); err != nil {
 		return nil, fmt.Errorf("%s: not a bench-calibrate curves file nor a name→benchtime map: %w", path, err)
 	}
-	return plain, nil
+	return collapseSubtestPins(plain), nil
+}
+
+// collapseSubtestPins folds `Parent/sub` keys onto `Parent`.
+//
+// bench-calibrate.sh auto-discovers by RUNNING the benchmarks, where `go test`
+// prints one line per subtest and none for the parent, so it emits keys like
+// BenchmarkGetOwn/n=1/first. Nothing here can act on those: -list enumerates
+// only top-level names and a -bench filter selects only top-level names, so
+// every such pin went unmatched and the benchmark ran at a b.N chosen by the
+// timing loop — which moves with the very change under measurement — while the
+// table read as though it had pinned. That silently invalidated GetOwn and
+// PrototypeMethodAccess in the 2026-08-06 whole-world run.
+//
+// A parent's subtests disagree only when the calibration curve differs across
+// them, so the most common suggestion wins; ties break toward the smaller N so
+// a disagreement cannot silently inflate runtime. An explicit top-level entry
+// always beats anything collapsed into it.
+func collapseSubtestPins(pins map[string]string) map[string]string {
+	votes := map[string]map[string]int{}
+	out := map[string]string{}
+	for name, bt := range pins {
+		parent, _, isSub := strings.Cut(name, "/")
+		if !isSub {
+			out[name] = bt
+			continue
+		}
+		if votes[parent] == nil {
+			votes[parent] = map[string]int{}
+		}
+		votes[parent][bt]++
+	}
+	for parent, tally := range votes {
+		if _, explicit := out[parent]; explicit {
+			continue
+		}
+		best, bestCount := "", -1
+		for bt, n := range tally {
+			if n > bestCount || (n == bestCount && benchtimeLess(bt, best)) {
+				best, bestCount = bt, n
+			}
+		}
+		out[parent] = best
+	}
+	return out
+}
+
+// benchtimeLess orders two `<n>x` benchtimes by their iteration count, so a tie
+// among subtest votes resolves deterministically and toward the cheaper run.
+// Anything unparseable sorts last, which keeps a malformed entry from winning.
+func benchtimeLess(a, b string) bool {
+	an, aok := parseBenchtimeN(a)
+	bn, bok := parseBenchtimeN(b)
+	if aok != bok {
+		return aok
+	}
+	if !aok {
+		return a < b
+	}
+	return an < bn
+}
+
+func parseBenchtimeN(bt string) (int64, bool) {
+	n, err := strconv.ParseInt(strings.TrimSuffix(bt, "x"), 10, 64)
+	return n, err == nil && strings.HasSuffix(bt, "x")
 }
 
 // listBenchmarks enumerates a package's top-level benchmarks WITHOUT running

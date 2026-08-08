@@ -146,6 +146,8 @@ func main() {
 		iterTolerance   = flag.Float64("iteration-tolerance", 0.02, "warn when a benchmark's b.N moves by more than this fraction across reps; the moving-N confound behind #48")
 		strictIters     = flag.Bool("strict-iterations", false, "with check: treat a b.N floor violation as a failure rather than a warning")
 		allowIncomplete = flag.Bool("allow-incomplete", false, "with check: tolerate package capture errors and missing baseline entries instead of failing (they shrink coverage, so the default is to fail)")
+
+		allowUnmatchedPins = flag.Bool("allow-unmatched-pins", false, "measure even when a pin matches no benchmark in scope; the benchmark then runs at a b.N the timing loop picks, so its cross-commit deltas are not comparable")
 	)
 	flag.Parse()
 
@@ -209,7 +211,7 @@ func main() {
 		}
 	}
 
-	jobs, scope, appliedPins, err := buildJobs(*packages, *tags, manual, filterRE, pins, *benchtime)
+	jobs, scope, appliedPins, err := buildJobs(*packages, *tags, manual, filterRE, pins, *benchtime, *allowUnmatchedPins)
 	if err != nil {
 		die("%v", err)
 	}
@@ -558,7 +560,7 @@ type captureJob struct {
 // can disagree with the thing it describes is worse than none, because it gets
 // trusted.
 func buildJobs(packages, tags string, manual bool, filterRE *regexp.Regexp,
-	pins map[string]string, defaultBenchtime string) ([]captureJob, string, map[string]string, error) {
+	pins map[string]string, defaultBenchtime string, allowUnmatchedPins bool) ([]captureJob, string, map[string]string, error) {
 	pkgList := strings.Fields(packages)
 	if len(pkgList) == 0 {
 		pkgList = append(pkgList, defaultPackages...)
@@ -585,6 +587,18 @@ func buildJobs(packages, tags string, manual bool, filterRE *regexp.Regexp,
 		// Falling back to the unpinned path here would measure at the wrong N
 		// while the run still claims to be pinned. Fail instead.
 		return nil, "", nil, fmt.Errorf("plan pinned jobs: %w", err)
+	}
+	// An unmatched pin means the benchmark runs at a b.N the timing loop picks,
+	// which moves with per-op cost — i.e. with the change under measurement —
+	// while the table still reads as pinned. This used to warn and continue; a
+	// warning in a long CI log is not a stop, and one went unnoticed long enough
+	// to invalidate two benchmarks in a published run. Subtest-keyed pins, the
+	// common cause, now collapse onto their parent in loadPins, so what reaches
+	// here is a genuinely absent benchmark.
+	if len(unmatched) > 0 && !allowUnmatchedPins {
+		return nil, "", nil, fmt.Errorf("pins matched no benchmark in scope: %s — "+
+			"fix the pin table or narrow -bench; re-run with -allow-unmatched-pins to measure anyway",
+			strings.Join(unmatched, ", "))
 	}
 	for _, n := range unmatched {
 		fmt.Fprintf(os.Stderr, "::warning::pin %q matched no benchmark in scope — it is NOT being applied\n", n)
