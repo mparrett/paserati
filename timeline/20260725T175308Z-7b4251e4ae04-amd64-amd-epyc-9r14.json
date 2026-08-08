@@ -1,40 +1,6 @@
 {
-  "version": 2,
   "machines": {
     "amd64/AMD EPYC 9R14": {
-      "captured_at": "2026-08-07T04:18:35Z",
-      "captured_at_sha": "7b4251e4ae04",
-      "machine": {
-        "os": "linux",
-        "arch": "amd64",
-        "num_cpu": 8,
-        "cpu_model": "AMD EPYC 9R14",
-        "go_version": "go1.26.0"
-      },
-      "method": {
-        "reducer": "min",
-        "count": 3,
-        "benchtime": "1s",
-        "pins": {
-          "BenchmarkAdd": "64x",
-          "BenchmarkArith": "32x",
-          "BenchmarkFactorial": "32x",
-          "BenchmarkGetOwn": "10000000x",
-          "BenchmarkIsObject": "10000000x",
-          "BenchmarkMatrixMult": "32x",
-          "BenchmarkOctaneCrypto": "1x",
-          "BenchmarkOctaneDeltaBlue": "1x",
-          "BenchmarkOctaneEarleyBoyer": "1x",
-          "BenchmarkOctaneNavierStokes": "1x",
-          "BenchmarkOctaneRayTrace": "1x",
-          "BenchmarkOctaneRichards": "1x",
-          "BenchmarkOctaneSplay": "1x",
-          "BenchmarkPrototypeCacheHitRate": "32x",
-          "BenchmarkPrototypeMethodAccess": "64x",
-          "BenchmarkSetIndex": "32x",
-          "BenchmarkToInteger": "10000000x"
-        }
-      },
       "anchor": {
         "name": "BenchmarkRatchetAnchor",
         "package": "github.com/nooga/paserati/pkg/vm",
@@ -4013,7 +3979,47 @@
             "rounds": 3
           }
         }
+      },
+      "captured_at": "2026-08-07T04:18:35Z",
+      "captured_at_sha": "7b4251e4ae04",
+      "machine": {
+        "os": "linux",
+        "arch": "amd64",
+        "num_cpu": 8,
+        "cpu_model": "AMD EPYC 9R14",
+        "go_version": "go1.26.0"
+      },
+      "method": {
+        "reducer": "min",
+        "count": 3,
+        "benchtime": "1s",
+        "pins": {
+          "BenchmarkAdd": "64x",
+          "BenchmarkArith": "32x",
+          "BenchmarkFactorial": "32x",
+          "BenchmarkGetOwn": "10000000x",
+          "BenchmarkIsObject": "10000000x",
+          "BenchmarkMatrixMult": "32x",
+          "BenchmarkOctaneCrypto": "1x",
+          "BenchmarkOctaneDeltaBlue": "1x",
+          "BenchmarkOctaneEarleyBoyer": "1x",
+          "BenchmarkOctaneNavierStokes": "1x",
+          "BenchmarkOctaneRayTrace": "1x",
+          "BenchmarkOctaneRichards": "1x",
+          "BenchmarkOctaneSplay": "1x",
+          "BenchmarkPrototypeCacheHitRate": "32x",
+          "BenchmarkPrototypeMethodAccess": "64x",
+          "BenchmarkSetIndex": "32x",
+          "BenchmarkToInteger": "10000000x"
+        }
+      },
+      "provenance": {
+        "captured_at_tree": "5ebf74a6eeaf24922a53d47361f977e052ab4bba",
+        "build_hash": "ec71a6293a5c13d1",
+        "patch_id": "f1f2b16bfc6148ce68af2569de28bad11b978e1a",
+        "build_manifest": "go+testdata@1"
       }
     }
-  }
+  },
+  "version": 2
 }

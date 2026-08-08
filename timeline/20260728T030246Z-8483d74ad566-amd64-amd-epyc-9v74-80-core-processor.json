@@ -1,21 +1,6 @@
 {
-  "version": 2,
   "machines": {
     "amd64/AMD EPYC 9V74 80-Core Processor": {
-      "captured_at": "2026-07-28T03:06:48Z",
-      "captured_at_sha": "8483d74ad566",
-      "machine": {
-        "os": "linux",
-        "arch": "amd64",
-        "num_cpu": 4,
-        "cpu_model": "AMD EPYC 9V74 80-Core Processor",
-        "go_version": "go1.26.0"
-      },
-      "method": {
-        "reducer": "min",
-        "count": 3,
-        "benchtime": "1s"
-      },
       "anchor": {
         "name": "BenchmarkRatchetAnchor",
         "package": "github.com/nooga/paserati/pkg/vm",
@@ -1341,12 +1326,33 @@
           "set_hash": "104d070df51bc77d"
         }
       },
+      "captured_at": "2026-07-28T03:06:48Z",
+      "captured_at_sha": "8483d74ad566",
       "commit": {
         "subject": "perf: simplify the macro chain — dead code, doubled derivations, stale comments",
         "committed_at": "2026-07-27T20:02:46-07:00",
         "files_changed": 4,
         "engine_files_changed": 0
+      },
+      "machine": {
+        "os": "linux",
+        "arch": "amd64",
+        "num_cpu": 4,
+        "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+        "go_version": "go1.26.0"
+      },
+      "method": {
+        "reducer": "min",
+        "count": 3,
+        "benchtime": "1s"
+      },
+      "provenance": {
+        "captured_at_tree": "5526b03d524189496ebd394db1712b56d65ccf4c",
+        "build_hash": "c35d6e172a1b9d73",
+        "patch_id": "5b73e267ff52b564af678eab0da2c2c630c8a7ab",
+        "build_manifest": "go+testdata@1"
       }
     }
-  }
+  },
+  "version": 2
 }

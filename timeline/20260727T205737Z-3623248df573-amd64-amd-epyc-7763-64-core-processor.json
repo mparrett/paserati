@@ -1,21 +1,6 @@
 {
-  "version": 2,
   "machines": {
     "amd64/AMD EPYC 7763 64-Core Processor": {
-      "captured_at": "2026-07-27T21:08:33Z",
-      "captured_at_sha": "3623248df573",
-      "machine": {
-        "os": "linux",
-        "arch": "amd64",
-        "num_cpu": 4,
-        "cpu_model": "AMD EPYC 7763 64-Core Processor",
-        "go_version": "go1.26.0"
-      },
-      "method": {
-        "reducer": "min",
-        "count": 3,
-        "benchtime": "1s"
-      },
       "anchor": {
         "name": "BenchmarkRatchetAnchor",
         "package": "github.com/nooga/paserati/pkg/vm",
@@ -1268,12 +1253,33 @@
           "set_hash": "ac611bcf30b917d8"
         }
       },
+      "captured_at": "2026-07-27T21:08:33Z",
+      "captured_at_sha": "3623248df573",
       "commit": {
         "subject": "perf-timeline: take the median of the macro reps, and keep all three",
         "committed_at": "2026-07-27T13:57:37-07:00",
         "files_changed": 4,
         "engine_files_changed": 0
+      },
+      "machine": {
+        "os": "linux",
+        "arch": "amd64",
+        "num_cpu": 4,
+        "cpu_model": "AMD EPYC 7763 64-Core Processor",
+        "go_version": "go1.26.0"
+      },
+      "method": {
+        "reducer": "min",
+        "count": 3,
+        "benchtime": "1s"
+      },
+      "provenance": {
+        "captured_at_tree": "b02bb8f477afc76808727a5e67dab9d818c8c215",
+        "build_hash": "c4297fbdcc1845dd",
+        "patch_id": "dae333d9e6db5e3ee8e020009b8e81a6681f6e11",
+        "build_manifest": "go+testdata@1"
       }
     }
-  }
+  },
+  "version": 2
 }

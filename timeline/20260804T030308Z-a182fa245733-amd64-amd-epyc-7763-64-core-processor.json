@@ -1,21 +1,6 @@
 {
-  "version": 2,
   "machines": {
     "amd64/AMD EPYC 7763 64-Core Processor": {
-      "captured_at": "2026-08-04T03:10:02Z",
-      "captured_at_sha": "a182fa245733",
-      "machine": {
-        "os": "linux",
-        "arch": "amd64",
-        "num_cpu": 4,
-        "cpu_model": "AMD EPYC 7763 64-Core Processor",
-        "go_version": "go1.26.0"
-      },
-      "method": {
-        "reducer": "min",
-        "count": 3,
-        "benchtime": "1s"
-      },
       "anchor": {
         "name": "BenchmarkRatchetAnchor",
         "package": "github.com/nooga/paserati/pkg/vm",
@@ -1341,12 +1326,33 @@
           "set_hash": "104d070df51bc77d"
         }
       },
+      "captured_at": "2026-08-04T03:10:02Z",
+      "captured_at_sha": "a182fa245733",
       "commit": {
         "subject": "perf-ci: the trigger allow-list was missing tests/**",
         "committed_at": "2026-08-03T20:03:08-07:00",
         "files_changed": 1,
         "engine_files_changed": 0
+      },
+      "machine": {
+        "os": "linux",
+        "arch": "amd64",
+        "num_cpu": 4,
+        "cpu_model": "AMD EPYC 7763 64-Core Processor",
+        "go_version": "go1.26.0"
+      },
+      "method": {
+        "reducer": "min",
+        "count": 3,
+        "benchtime": "1s"
+      },
+      "provenance": {
+        "captured_at_tree": "35211190c8328e05c91ba38bdef2b0d3ac9821de",
+        "build_hash": "86700f78ecff6f3a",
+        "patch_id": "44e67c161f344c80f8952a40b3552e929ecc5ffe",
+        "build_manifest": "go+testdata@1"
       }
     }
-  }
+  },
+  "version": 2
 }

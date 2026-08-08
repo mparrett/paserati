@@ -1,16 +1,6 @@
 {
-  "version": 2,
   "machines": {
     "amd64/AMD EPYC 7763 64-Core Processor": {
-      "captured_at": "2026-07-26T00:52:17Z",
-      "captured_at_sha": "2d3005b4a786",
-      "machine": {
-        "os": "linux",
-        "arch": "amd64",
-        "num_cpu": 4,
-        "cpu_model": "AMD EPYC 7763 64-Core Processor",
-        "go_version": "go1.26.0"
-      },
       "anchor": {
         "name": "BenchmarkRatchetAnchor",
         "package": "github.com/nooga/paserati/pkg/vm",
@@ -1249,7 +1239,22 @@
           ],
           "set_hash": "ac611bcf30b917d8"
         }
+      },
+      "captured_at": "2026-07-26T00:52:17Z",
+      "captured_at_sha": "2d3005b4a786",
+      "machine": {
+        "os": "linux",
+        "arch": "amd64",
+        "num_cpu": 4,
+        "cpu_model": "AMD EPYC 7763 64-Core Processor",
+        "go_version": "go1.26.0"
+      },
+      "provenance": {
+        "captured_at_tree": "7417a74531b09ebac6d2eea083e1abc32f9b1057",
+        "build_hash": "a8a7865c8bb4da63",
+        "build_manifest": "go+testdata@1"
       }
     }
-  }
+  },
+  "version": 2
 }
