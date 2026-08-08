@@ -66,6 +66,11 @@ type Method struct {
 	// name one value while several were used, and a later reader comparing two
 	// snapshots would see matching protocol strings for different protocols.
 	Pins map[string]string `json:"pins,omitempty"`
+	// Corpus is WHICH benchmarks were run, as Reducer and Benchtime are how they
+	// were run. Absent means the snapshot was measured with whatever benchmarks
+	// its own commit shipped, which is a different instrument per commit and so
+	// not comparable to a pinned one. See Corpus.
+	Corpus *Corpus `json:"corpus,omitempty"`
 }
 
 // Test262Stats is the conformance outcome of the Test262 run that produced a macro

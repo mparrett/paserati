@@ -110,6 +110,41 @@ done
 
 SHA="$(git rev-parse --short "$REF" 2>/dev/null)" || die "cannot resolve ref $REF"
 
+# The stamp. Written next to the overlay so the measuring run can record WHICH
+# benchmarks it ran, instead of the reader having to infer it from the shape of
+# the numbers after the fact — which is what happened on 2026-07-25, where a
+# missed overlay reached the timeline as a +253816% regression.
+#
+# files_hash digests the overlaid files as written, and perfdata.CorpusAt
+# re-computes it before believing the stamp. That is the part that matters:
+# `git checkout --force` between rounds discards the overlay but not this
+# untracked file, so a stamp that is merely present proves nothing. One that
+# still matches the tree does.
+STAMP=".bench-corpus-stamp.json"
+
+write_stamp() {
+  python3 - "$1/$STAMP" "$VERSION" "$REF" "$SHA" "$1" "${FILES[@]}" <<'PY'
+import hashlib, json, os, sys
+out, version, ref, sha, root = sys.argv[1:6]
+files = sys.argv[6:]
+
+h = hashlib.sha256()
+for f in sorted(files):
+    b = open(os.path.join(root, f), "rb").read()
+    # Length-prefixed, matching perfdata.HashFiles: without it two different
+    # splits of the same bytes across files would collide.
+    h.update(f.encode() + b"\x00" + str(len(b)).encode() + b"\x00" + b)
+
+json.dump({
+    "version": version,
+    "ref": ref,
+    "sha": sha,
+    "files_hash": h.hexdigest()[:16],
+    "files": files,
+}, open(out, "w"), indent=2)
+PY
+}
+
 if [ -n "$INTO" ]; then
   [ -d "$INTO" ] || die "no such worktree: $INTO"
   for f in "${FILES[@]}"; do
@@ -121,6 +156,11 @@ if [ -n "$INTO" ]; then
     git show "$REF:$f" > "$INTO/$f" 2>/dev/null \
       || die "$f is absent from $REF — the corpus config names a file its own ref does not have"
   done
+  if [ "$DRY" -eq 1 ]; then
+    printf '  would write %s\n' "$STAMP"
+  else
+    write_stamp "$INTO"
+  fi
   note "corpus $VERSION from $SHA: ${#FILES[@]} file(s) -> $INTO"
 fi
 

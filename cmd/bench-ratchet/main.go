@@ -905,8 +905,10 @@ func buildCurrentBaseline(results []Result, anchor Result, reducerName string) B
 		Provenance: perfdata.ProvenanceAt(".", "HEAD"),
 		Machine:    m,
 		// Count/Benchtime are filled in by main from the flags actually passed;
-		// this function only knows how it reduced.
-		Method: perfdata.Method{Reducer: reducerName},
+		// this function only knows how it reduced. Corpus is read from the tree
+		// that was just measured, for the same reason Provenance is: it is a
+		// property of what ran, not of what the caller meant to run.
+		Method: perfdata.Method{Reducer: reducerName, Corpus: perfdata.CorpusAt(".")},
 		Anchor: AnchorRecord{
 			Name:       anchor.Name,
 			Package:    anchor.Package,

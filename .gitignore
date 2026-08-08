@@ -59,6 +59,9 @@ quickjs-bench/
 benchmarks/
 # bench-ratchet raw captures (the committed artifact is docs/perf/baseline.json only)
 docs/perf/.runs/
+# Written by scripts/bench-corpus.sh into whichever worktree it overlays. Usually
+# a throwaway session worktree, but the script does not require one.
+.bench-corpus-stamp.json
 stvm*.js
 paserati-v8bench-prof
 /paserati-testtsc

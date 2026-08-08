@@ -563,8 +563,25 @@ function titleFor(s) {
   const t262Reducer = snaps.map(s => s.benchmarks?.[T262_TOTAL]?.method?.reducer || null);
   const reducerChangedAt = j => j > 0 && !!t262Reducer[j] && !!t262Reducer[j - 1] && t262Reducer[j] !== t262Reducer[j - 1];
 
-  // Both are "the number either side of this step does not mean the same thing", so
-  // both get the same mark; the flagged-changes table says which one it was.
+  // WHICH benchmarks ran, as the two above are how they were reduced and over what.
+  // Every benchmark on the page is affected, not just test262's, so this one is not
+  // gated on mode.
+  //
+  // The step it exists to catch is not subtle and not hypothetical: where the pinned
+  // overlay is missed, the commit's own bench_test.go runs instead, and an unsized
+  // workload against a sized one lands three orders of magnitude out. On 3167412e
+  // that reached this table as +253816% attributed to a compiler commit, and again
+  // as −100% on the next point when the corpus came back. Absent on both sides is
+  // "unpinned throughout", which is the pre-2026-08 corpus and not a step.
+  const corpusHash = snaps.map(s => s.method?.corpus?.files_hash || null);
+  const corpusChangedAt = j => j > 0 && corpusHash[j] !== corpusHash[j - 1];
+
+  // Deliberately NOT folded in with the two above. Those mark the Test262 line, and
+  // the corpus does not reach it: bench-corpus.json overlays bench_test.go and the
+  // Octane fixtures, while test262.total comes from the conformance driver. A △ on
+  // the Test262 series for a corpus change would point at the one series the change
+  // cannot have moved. It is surfaced in the flagged-changes table instead, which is
+  // per-mode and so can say it about the modes it is true of.
   const breakAt = j => setChangedAt(j) || reducerChangedAt(j);
   const anyBreak = labels.some((_, j) => breakAt(j));
 
@@ -840,7 +857,7 @@ function titleFor(s) {
     Object.keys(s.benchmarks || {}).filter(n => !n.startsWith("test262")).length);
 
   return { labels, snaps, datasetsFor, aggCount, anyBreak, setChangedAt, reducerChangedAt,
-           meanFor, benchCount, familyCount: microFamilies.length,
+           corpusChangedAt, meanFor, benchCount, familyCount: microFamilies.length,
            contributionsAt, scopeOf, yRangeFor };
   }
 
@@ -1057,6 +1074,18 @@ function titleFor(s) {
       if (view.benchCount[j] !== view.benchCount[j - 1]) {
         tags.push(["warn", `suite changed ${view.benchCount[j - 1]}→${view.benchCount[j]}`]);
       }
+      // A corpus change is not a large delta, it is an absent one: the two points
+      // were produced by different instruments, so their ratio is not a measurement
+      // of anything. Suppressing the number rather than printing it is the whole
+      // point — a step this size otherwise sorts to the top of the table and reads
+      // as the largest finding on the page.
+      let invalid = false;
+      if (mode !== "Test262" && view.corpusChangedAt(j)) {
+        const was = snaps[j - 1].method?.corpus?.version || "unpinned";
+        const now = snaps[j].method?.corpus?.version || "unpinned";
+        tags.push(["warn", `benchmark corpus changed ${was}→${now} — not comparable`]);
+        pinned = true; invalid = true;
+      }
       if (mode === "Test262" && view.setChangedAt(j)) { tags.push(["warn", "test set changed"]); pinned = true; }
       // A reducer change moves every following point relative to every earlier one,
       // independently of the engine: min sits at the fast edge of the reps, median
@@ -1087,7 +1116,11 @@ function titleFor(s) {
       // while the useful answer is BenchmarkIsObject at -90%, the exact thing the
       // commit rewrote. Reporting only the first buries the cause; only the second
       // would imply one case carried a move it did not.
-      const contrib = view.contributionsAt(mode, j);
+      // Skipped when the comparison is invalid: per-benchmark attribution of a
+      // number that means nothing is still nothing, and "biggest mover
+      // StringPrototypeMethod +357148%" names a real benchmark for a move it did
+      // not make.
+      const contrib = invalid ? null : view.contributionsAt(mode, j);
       if (contrib && contrib.items.length > 1) {
         const top = contrib.items[0];
         const share = Math.abs(top.pp) / Math.abs(contrib.total || 1);
@@ -1108,7 +1141,7 @@ function titleFor(s) {
       }
 
       if (Math.abs(delta) < FLAG_THRESHOLD && !tags.length) continue;
-      rows.push({ j, delta, tags, pinned });
+      rows.push({ j, delta, tags, pinned, invalid });
     }
 
     if (!rows.length) {
@@ -1116,7 +1149,10 @@ function titleFor(s) {
       return;
     }
     el.hidden = false;
-    rows.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
+    // Rows whose delta is not a measurement rank as zero rather than as their
+    // magnitude — they are kept by the pin below, not by being large.
+    const rank = r => r.invalid ? 0 : Math.abs(r.delta);
+    rows.sort((x, y) => rank(y) - rank(x));
     // Ranking by size would drop exactly the rows that must not be dropped. A test
     // set or reducer change matters BECAUSE a reader would otherwise compare across
     // it, and such a step is usually small — the reducer change of 2026-07-27 moved
@@ -1125,7 +1161,7 @@ function titleFor(s) {
     const pinnedRows = rows.filter(r => r.pinned);
     const shown = [...pinnedRows,
                    ...rows.filter(r => !r.pinned).slice(0, Math.max(0, FLAG_LIMIT - pinnedRows.length))]
-      .sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
+      .sort((x, y) => rank(y) - rank(x));
 
     // Say what was dropped rather than silently truncating — a short table would
     // otherwise read as "this is everything".
@@ -1134,7 +1170,7 @@ function titleFor(s) {
         ? `· ${shown.length} of ${rows.length}, largest first`
         : `· ${rows.length} in this view`;
 
-    body.innerHTML = shown.map(({ j, delta, tags }) => {
+    body.innerHTML = shown.map(({ j, delta, tags, invalid }) => {
       const s = snaps[j];
       const sha = (s.captured_at_sha || "").slice(0, 8);
       const m = stampParts(s);
@@ -1160,7 +1196,7 @@ function titleFor(s) {
       return `<tr>
         <td class="sha">${link}${subj}</td>
         <td class="when">${when}</td>
-        <td class="num ${cls}">${sign}${pct}%</td>
+        <td class="num ${invalid ? "" : cls}">${invalid ? "n/a" : `${sign}${pct}%`}</td>
         <td>${tagHTML || `<span class="tag">${direction} — nothing else the page can rule in</span>`}</td>
       </tr>`;
     }).join("");
