@@ -40,14 +40,49 @@ def rmean(v):
     return sum(v) / len(v)
 
 
-# Commit order comes from the snapshot filenames' timestamp prefix.
+# Commit order is TOPOLOGICAL along origin/main, not the filename's timestamp.
+#
+# The timestamp prefix is the committer date, and a bulk rebase stamped most of
+# this corpus with a single one -- so sorting by it puts commits in essentially
+# arbitrary order, and a page that reads left-to-right as "history" is then
+# showing something else. Author date is no better: the rebase preserved it but
+# REORDERED the commits, so it disagrees with topology too.
+#
+# Commits a rebase abandoned are not on any line and are excluded from the
+# ordered chain rather than being given a false position. They remain measured,
+# and endpoint comparisons against them stay valid; what they cannot support is
+# a "change over history" reading.
 stamps = {}
 for f in glob.glob(os.path.join(SRC, 'snapshots', '*.json')):
     base = os.path.basename(f)[:-5]
     m = re.search(r'([0-9a-f]{12})', base)
     if m:
         stamps[m.group(1)] = base.split('-')[0]
-order = sorted(stamps, key=lambda s: stamps[s])
+
+def _topo_order(shas):
+    try:
+        line = subprocess.run(['git', '-C', REPO, 'rev-list', '--reverse', '--topo-order',
+                               'origin/main'], capture_output=True, text=True, check=True).stdout.split()
+    except Exception:
+        return sorted(shas, key=lambda s: stamps[s]), []
+    pos = {sha: i for i, sha in enumerate(line)}
+    placed, orphaned = [], []
+    for s in shas:
+        full = subprocess.run(['git', '-C', REPO, 'rev-parse', s],
+                              capture_output=True, text=True).stdout.strip()
+        if full in pos:
+            placed.append((pos[full], s))
+        elif subprocess.run(['git', '-C', REPO, 'merge-base', '--is-ancestor', 'origin/main', full],
+                            capture_output=True).returncode == 0:
+            placed.append((len(line), s))          # descends from main, not merged yet
+        else:
+            orphaned.append(s)
+    return [s for _, s in sorted(placed)], orphaned
+
+order, orphaned = _topo_order(list(stamps))
+if orphaned:
+    print(f'  excluded from the chain (rebase-orphaned, off any line): '
+          f'{", ".join(o[:8] for o in orphaned)}', file=sys.stderr)
 ref = order[0]
 
 subjects = {}
