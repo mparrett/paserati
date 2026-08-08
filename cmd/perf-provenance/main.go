@@ -116,8 +116,17 @@ func run(dir, repo string, write, showGroups bool) error {
 		}
 		gs := make([]group, 0, len(byBuild))
 		for h, s := range byBuild {
+			// One commit measured on two machine tiers is two snapshots but
+			// one commit; counting files here would overstate how much the
+			// corpus actually shares a build.
 			sort.Strings(s)
-			gs = append(gs, group{h, s})
+			uniq := s[:0]
+			for i, sha := range s {
+				if i == 0 || sha != s[i-1] {
+					uniq = append(uniq, sha)
+				}
+			}
+			gs = append(gs, group{h, uniq})
 		}
 		sort.Slice(gs, func(i, j int) bool { return len(gs[i].shas) > len(gs[j].shas) })
 		fmt.Println("\nbuild groups — commits within one group MUST measure identically:")
