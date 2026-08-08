@@ -899,7 +899,11 @@ func buildCurrentBaseline(results []Result, anchor Result, reducerName string) B
 		Version:       schemaVersion,
 		CapturedAt:    time.Now().UTC().Format(time.RFC3339),
 		CapturedAtSHA: gitShortSHA(),
-		Machine:       m,
+		// Records what code this measured, not just where HEAD was standing.
+		// A SHA dangles the moment history is rewritten; a build hash keeps
+		// pointing at the program that produced these numbers.
+		Provenance: perfdata.ProvenanceAt(".", "HEAD"),
+		Machine:    m,
 		// Count/Benchtime are filled in by main from the flags actually passed;
 		// this function only knows how it reduced.
 		Method: perfdata.Method{Reducer: reducerName},

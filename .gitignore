@@ -75,3 +75,4 @@ CLAUDE.md
 # directory in project-docs, not this working dir.
 perf-session-collected/
 bisect-collected/
+perf-provenance

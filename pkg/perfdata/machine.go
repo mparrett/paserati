@@ -27,6 +27,7 @@ import (
 type MachineBaseline struct {
 	CapturedAt    string                    `json:"captured_at"`
 	CapturedAtSHA string                    `json:"captured_at_sha"`
+	Provenance    Provenance                `json:"provenance,omitempty"`
 	Machine       Machine                   `json:"machine"`
 	Anchor        Anchor                    `json:"anchor"`
 	Benchmarks    map[string]BenchmarkEntry `json:"benchmarks"`

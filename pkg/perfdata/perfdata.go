@@ -6,10 +6,38 @@ type Baseline struct {
 	Version       int                       `json:"version"`
 	CapturedAt    string                    `json:"captured_at"`
 	CapturedAtSHA string                    `json:"captured_at_sha"`
+	Provenance    Provenance                `json:"provenance,omitempty"`
 	Machine       Machine                   `json:"machine"`
 	Method        Method                    `json:"method,omitempty"`
 	Anchor        Anchor                    `json:"anchor"`
 	Benchmarks    map[string]BenchmarkEntry `json:"benchmarks"`
+}
+
+// Provenance identifies the CODE a snapshot measured, as opposed to the commit
+// it was taken at.
+//
+// captured_at_sha alone is a dangling reference the moment history is rewritten:
+// 14 of the 86 snapshots in this corpus point at commits no longer on main, and
+// 11 of those have no counterpart there by patch-id, tree or subject, because
+// they were dropped rather than replayed. Nothing can relink those.
+//
+// BuildHash is the field that makes the loss survivable. It digests only the
+// inputs that reach the binary, so a snapshot transfers to any commit that
+// builds the same thing — and two commits sharing one BuildHash MUST produce
+// the same measurement, which turns the corpus into its own noise floor.
+// Measured 2026-08-07: the 86 snapshots span just 32 distinct builds.
+//
+// PatchID is a lineage hint for the rebase-and-replay case only. It is not an
+// identity: a small mechanical patch can collide, so it must never be used to
+// decide that two measurements are interchangeable. BuildHash decides that.
+type Provenance struct {
+	CapturedAtTree string `json:"captured_at_tree,omitempty"`
+	BuildHash      string `json:"build_hash,omitempty"`
+	PatchID        string `json:"patch_id,omitempty"`
+	// BuildManifest records WHICH paths the BuildHash covered. Without it a
+	// later manifest change would silently make old and new hashes
+	// incomparable while both still look like build hashes.
+	BuildManifest string `json:"build_manifest,omitempty"`
 }
 
 // Method records HOW a snapshot was measured, so a later reader can tell a
