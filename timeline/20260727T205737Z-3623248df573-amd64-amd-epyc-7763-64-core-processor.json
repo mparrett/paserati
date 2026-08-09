@@ -1222,10 +1222,10 @@
           ]
         },
         "test262.total": {
-          "ns_per_op": 3013492.199407872,
+          "ns_per_op": 3004512.504602677,
           "allocs_per_op": 0,
           "bytes_per_op": 0,
-          "ratio_to_anchor": 2419179.6037045787,
+          "ratio_to_anchor": 2406819.738485386,
           "method": {
             "reducer": "median",
             "count": 3,
@@ -1237,39 +1237,39 @@
             "failed": 7085,
             "timeouts": 12,
             "skipped": 0,
-            "duration_ns": 163405922170
+            "duration_ns": 162573099498
           },
           "samples": [
             {
               "iterations": 40194,
-              "ns_per_op": 3045806.731850525,
-              "ratio_to_anchor": 2445121.1534467274,
-              "captured_at": "2026-08-09T00:29:19Z",
-              "anchor_ns_per_op": 1.245667
+              "ns_per_op": 3004512.504602677,
+              "ratio_to_anchor": 2406819.738485386,
+              "captured_at": "2026-08-09T00:39:14Z",
+              "anchor_ns_per_op": 1.248333
             },
             {
               "iterations": 40194,
-              "ns_per_op": 3013492.199407872,
-              "ratio_to_anchor": 2419179.6037045787,
-              "captured_at": "2026-08-09T00:32:04Z",
-              "anchor_ns_per_op": 1.245667
+              "ns_per_op": 2929440.3053689604,
+              "ratio_to_anchor": 2346681.7791157975,
+              "captured_at": "2026-08-09T00:41:55Z",
+              "anchor_ns_per_op": 1.248333
             },
             {
               "iterations": 40194,
-              "ns_per_op": 3009246.2329700952,
-              "ratio_to_anchor": 2415771.0150225502,
-              "captured_at": "2026-08-09T00:34:50Z",
-              "anchor_ns_per_op": 1.245667
+              "ns_per_op": 3007408.5157237398,
+              "ratio_to_anchor": 2409139.6412045024,
+              "captured_at": "2026-08-09T00:44:40Z",
+              "anchor_ns_per_op": 1.248333
             }
           ],
           "set_hash": "ac611bcf30b917d8",
-          "anchor_ns_per_op": 1.245667
+          "anchor_ns_per_op": 1.248333
         },
         "test262.built-ins": {
-          "ns_per_op": 3215503.515908555,
+          "ns_per_op": 3186753.980320528,
           "allocs_per_op": 0,
           "bytes_per_op": 0,
-          "ratio_to_anchor": 2581350.8071648,
+          "ratio_to_anchor": 2552807.6084830957,
           "method": {
             "reducer": "median",
             "count": 3,
@@ -1278,34 +1278,34 @@
           "samples": [
             {
               "iterations": 16972,
-              "ns_per_op": 3243071.2713292483,
-              "ratio_to_anchor": 2603481.7261188165,
-              "captured_at": "2026-08-09T00:29:19Z",
-              "anchor_ns_per_op": 1.245667
+              "ns_per_op": 3186753.980320528,
+              "ratio_to_anchor": 2552807.6084830957,
+              "captured_at": "2026-08-09T00:39:14Z",
+              "anchor_ns_per_op": 1.248333
             },
             {
               "iterations": 16972,
-              "ns_per_op": 3197917.621022861,
-              "ratio_to_anchor": 2567233.1538226996,
-              "captured_at": "2026-08-09T00:32:04Z",
-              "anchor_ns_per_op": 1.245667
+              "ns_per_op": 3176843.53482206,
+              "ratio_to_anchor": 2544868.664708904,
+              "captured_at": "2026-08-09T00:41:55Z",
+              "anchor_ns_per_op": 1.248333
             },
             {
               "iterations": 16972,
-              "ns_per_op": 3215503.515908555,
-              "ratio_to_anchor": 2581350.8071648,
-              "captured_at": "2026-08-09T00:34:50Z",
-              "anchor_ns_per_op": 1.245667
+              "ns_per_op": 3191043.1492458167,
+              "ratio_to_anchor": 2556243.5257626106,
+              "captured_at": "2026-08-09T00:44:40Z",
+              "anchor_ns_per_op": 1.248333
             }
           ],
           "set_hash": "9ba5490d5d773280",
-          "anchor_ns_per_op": 1.245667
+          "anchor_ns_per_op": 1.248333
         },
         "test262.language": {
-          "ns_per_op": 2878703.281328051,
+          "ns_per_op": 2871319.7423133235,
           "allocs_per_op": 0,
           "bytes_per_op": 0,
-          "ratio_to_anchor": 2310973.383197958,
+          "ratio_to_anchor": 2300123.238201124,
           "method": {
             "reducer": "median",
             "count": 3,
@@ -1314,28 +1314,28 @@
           "samples": [
             {
               "iterations": 23222,
-              "ns_per_op": 2901634.23318405,
-              "ratio_to_anchor": 2329381.956160073,
-              "captured_at": "2026-08-09T00:29:19Z",
-              "anchor_ns_per_op": 1.245667
+              "ns_per_op": 2871319.7423133235,
+              "ratio_to_anchor": 2300123.238201124,
+              "captured_at": "2026-08-09T00:39:14Z",
+              "anchor_ns_per_op": 1.248333
             },
             {
               "iterations": 23222,
-              "ns_per_op": 2878703.281328051,
-              "ratio_to_anchor": 2310973.383197958,
-              "captured_at": "2026-08-09T00:32:04Z",
-              "anchor_ns_per_op": 1.245667
+              "ns_per_op": 2748623.5105072777,
+              "ratio_to_anchor": 2201835.1757962643,
+              "captured_at": "2026-08-09T00:41:55Z",
+              "anchor_ns_per_op": 1.248333
             },
             {
               "iterations": 23222,
-              "ns_per_op": 2858501.309792438,
-              "ratio_to_anchor": 2294755.588606295,
-              "captured_at": "2026-08-09T00:34:50Z",
-              "anchor_ns_per_op": 1.245667
+              "ns_per_op": 2873197.551976574,
+              "ratio_to_anchor": 2301627.4920045966,
+              "captured_at": "2026-08-09T00:44:40Z",
+              "anchor_ns_per_op": 1.248333
             }
           ],
           "set_hash": "104d070df51bc77d",
-          "anchor_ns_per_op": 1.245667
+          "anchor_ns_per_op": 1.248333
         }
       },
       "captured_at": "2026-07-27T21:08:33Z",
