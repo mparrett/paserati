@@ -518,6 +518,42 @@ function titleFor(s) {
   const baselineCpu = baseline.machine?.cpu_model || "?";
   // Nested map rather than a joined string key: CPU model strings and benchmark
   // names both contain spaces and punctuation, so any delimiter is a guess.
+  // Which point a tier is referenced to. "The first one" is the obvious rule and
+  // the wrong one, twice over:
+  //
+  //   Wrong SET. test262.language's first 7763 point is 2026-06-27, on set
+  //     d4e3920f; every point after it is 104d070d. The metric is a mean over the
+  //     passing set, so dividing the whole line by a point averaged over a
+  //     different set folds that set change into the level of every later point.
+  //     The page already marks the boundary — and then normalized across it.
+  //   Wrong REDUCTION. The oldest snapshots predate min-of-3 (9da9524b) and carry
+  //     one rep. A single-shot reference imports its full runner noise into every
+  //     point measured against it, permanently and invisibly.
+  //
+  // So: reference to the modal set — the one most of the tier's points are on,
+  // which is the set the trend is actually about — and within it prefer a point
+  // that was reduced over reps. Each preference degrades to the old behaviour when
+  // nothing qualifies, and micro benchmarks (no set_hash at all) only ever see the
+  // reps preference.
+  function pickRef(cpu, n) {
+    const cands = snaps.filter(s => cpuOf(s) === cpu && s.benchmarks?.[n]?.ratio_to_anchor > 0);
+    if (!cands.length) return 0;
+
+    // Modal set_hash. Absent counts as its own group, so an all-absent benchmark
+    // yields one group and this step is a no-op.
+    const tally = new Map();
+    for (const s of cands) {
+      const k = s.benchmarks[n].set_hash || "";
+      tally.set(k, (tally.get(k) || 0) + 1);
+    }
+    let modal = "", best = -1;
+    for (const [k, c] of tally) if (c > best) { modal = k; best = c; }
+
+    const inModal = cands.filter(s => (s.benchmarks[n].set_hash || "") === modal);
+    const reduced = inModal.filter(s => (s.benchmarks[n].samples?.length || 1) > 1);
+    return (reduced[0] || inModal[0]).benchmarks[n].ratio_to_anchor;
+  }
+
   const ref = new Map();                                   // cpu -> (name -> ratio)
   for (const cpu of shownCpus) {
     const perName = new Map();
@@ -526,8 +562,7 @@ function titleFor(s) {
       // ratio carries that tier's anchor error like any other snapshot.
       const b = cpu === baselineCpu ? baseline.benchmarks?.[n]?.ratio_to_anchor : 0;
       if (b > 0) { perName.set(n, b); continue; }
-      const first = snaps.find(s => cpuOf(s) === cpu && s.benchmarks?.[n]?.ratio_to_anchor > 0);
-      perName.set(n, first ? first.benchmarks[n].ratio_to_anchor : 0);
+      perName.set(n, pickRef(cpu, n));
     }
     ref.set(cpu, perName);
   }
