@@ -26,12 +26,16 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Commit SHA to backfill the test262 macro into (must already have a snapshot)'
+        description: 'Commit SHA(s) to backfill into — space, comma or newline separated. Each must already have a snapshot. Targets already carrying the metric, or with no snapshot on the runner this run draws, are skipped rather than failed.'
         required: true
       only_tiers:
-        description: 'Optional: comma-separated CPU-model substrings (e.g. "7763"). Abort in seconds unless this runner matches one. Empty = accept any tier.'
+        description: 'Optional: comma-separated CPU-model substrings (e.g. "7763"). Abort in seconds unless this runner matches one. Empty = accept any tier — with a target list, usually what you want.'
         required: false
         default: ''
+      max_targets:
+        description: 'Cap targets measured in one run (default 6). The macro is ~4 min each and the job holds the perf-data writer lock throughout; deferred targets are named in the log.'
+        required: false
+        default: '6'
 
 permissions:
   contents: write
@@ -40,8 +44,9 @@ concurrency:
   # Share the perf-data writer lock with the timeline so snapshots don't collide.
   # NOTE: this serializes writers but does NOT queue them — GitHub keeps one
   # pending run per group, so a second dispatch evicts the first's pending run.
-  # Dispatch one target at a time and wait. See scripts/perf-dispatch.sh on the
-  # `tools/perf-runbook` branch — it is not on main.
+  # Dispatch ONCE with every target you want; do not fire one run per target.
+  # That is what the `ref` list is for, and firing three at once on 2026-08-09
+  # evicted the middle one's pending run exactly as described here.
   group: perf-timeline-main
   cancel-in-progress: false
 
@@ -51,7 +56,10 @@ env:
 jobs:
   backfill:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # Was 40 for a single target. A capped batch of 6 is ~25 min of macro plus
+    # setup and per-target rebuilds; 180 leaves room without letting a wedged run
+    # hold the perf-data writer lock indefinitely.
+    timeout-minutes: 180
     steps:
       # Which CPU tier this dispatch drew is not decided until the inject step
       # runs `perf-migrate -print-key` — roughly nine minutes in, after the macro.
@@ -101,46 +109,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/perf-writer-queue-check.sh "${{ github.repository }}"
 
-      # Fail here, with the reason, rather than halfway through a 40-minute job.
-      # Orphan fork-CI commits are not reachable from any remote ref, so
-      # checkout@v4 never fetched them and `git checkout` dies with an opaque
-      # "unable to read tree <sha>". 14 of the 47 existing snapshots sit on such
-      # commits. The fix is a temporary `backfill/*` ref; say so.
-      - name: Preflight — target must be reachable
-        env:
-          TARGET_REF: ${{ github.event.inputs.ref }}
-        run: |
-          set -euo pipefail
-          if git rev-parse --verify -q "${TARGET_REF}^{commit}" >/dev/null; then
-            echo "target ${TARGET_REF} is present locally"
-            exit 0
-          fi
-          echo "::group::fetching ${TARGET_REF} explicitly"
-          git fetch --no-tags origin "$TARGET_REF" 2>&1 || true
-          echo "::endgroup::"
-          if git rev-parse --verify -q 'FETCH_HEAD^{commit}' >/dev/null; then
-            echo "target ${TARGET_REF} fetched"
-            exit 0
-          fi
-          cat >&2 <<MSG
-          ::error::target ${TARGET_REF} is not reachable from any ref on origin.
 
-          The commit exists in someone's local clone but nothing on the remote
-          points at it, so the runner cannot fetch it. Publish a temporary ref
-          first, then re-dispatch:
-
-              git push origin ${TARGET_REF}:refs/heads/backfill/${TARGET_REF}
-
-          Delete it only after the snapshot and the page have been verified.
-          MSG
-          exit 1
-
-      - name: Check out target ref
-        env:
-          TARGET_REF: ${{ github.event.inputs.ref }}
-        run: |
-          set -euo pipefail
-          git checkout --force "$TARGET_REF" 2>/dev/null || git checkout --force FETCH_HEAD
+      # ---- shared setup -------------------------------------------------
+      # Everything here is per-RUN, not per-target: the corpus, the toolchain and
+      # the tool binaries are the same for every commit measured in this job.
+      # Hoisting them above the loop is most of why batching pays — the marginal
+      # cost of a second target is its macro, not another cold setup.
 
       - name: Cache Test262 corpus
         uses: actions/cache@v4
@@ -155,6 +129,10 @@ jobs:
 
       # The tool half of the tool/engine split. Built from the workflow's own
       # commit, where its dependencies are consistent by construction.
+      #
+      # Binaries only. Installing the driver into the target tree is per-target
+      # and lives in the loop, because `git checkout --force` between targets
+      # discards it.
       - name: Build macro tooling from this workflow's commit
         id: tools
         run: |
@@ -163,18 +141,6 @@ jobs:
           rm -rf "$tool"
           git worktree add --detach "$tool" "${{ github.sha }}" >/dev/null
           ( cd "$tool" && go build -o "${RUNNER_TEMP}/bench-test262" ./cmd/bench-test262 )
-          # The driver is a shell script with no build graph, so copying it into the
-          # target tree is safe in a way that copying Go source is not — it shells
-          # out to two binaries whose provenance we now control explicitly.
-          #
-          # mkdir first: targets old enough to need this workflow can predate the
-          # scripts/ directory entirely. ccf2da20f14f (2026-06-27) has no scripts/
-          # at all, so the copy failed on the destination rather than the source —
-          # a distinction the error message ("No such file or directory") does not
-          # make, and which cost a run to see.
-          mkdir -p ./scripts
-          cp "$tool/scripts/macro-test262.sh" ./scripts/macro-test262.sh
-          chmod +x ./scripts/macro-test262.sh
           echo "bench=${RUNNER_TEMP}/bench-test262" >> "$GITHUB_OUTPUT"
           # The reducer runs FROM the tool worktree rather than being copied in: it
           # only post-processes the driver's output, so nothing about it belongs to
@@ -183,147 +149,108 @@ jobs:
           chmod +x "$tool/scripts/macro-test262-reduce.sh"
           echo "reduce=$tool/scripts/macro-test262-reduce.sh" >> "$GITHUB_OUTPUT"
 
-      # An old engine's -json output has to be readable by today's post-processor.
-      # It normally is (Path/Passed/TimedOut/Duration are long-standing fields),
-      # but "normally" is how the ratio bug survived a month. Prove it on one cheap
-      # directory before spending 30 minutes on the full corpus: a schema drift
-      # would otherwise surface as a plausible-looking number, not as an error.
-      - name: Preflight — target engine speaks the expected JSON
-        run: |
-          set -euo pipefail
-          ./setup-test262.sh
-          go build -o ./paserati-test262 ./cmd/paserati-test262
-          ./paserati-test262 -path ./test262 -timeout 1s -subpath 'built-ins/Boolean/**' -json \
-            > "${RUNNER_TEMP}/probe.json" 2>/dev/null || true
-          # Field names are the JSON TAGS (lowercase), not the Go identifiers.
-          # pkg/test262.Result tags them path/passed/failed/timedOut/skipped/duration,
-          # and has done unchanged since well before the oldest backfill target.
-          # Probing for .Passed/.Duration instead — the Go field names, which is what
-          # cmd/bench-test262 reads because encoding/json maps them — reports every
-          # engine as mute: 51 results, 0 passed, 0 with a duration. That looked
-          # exactly like the era incompatibility this step exists to catch, and would
-          # have condemned every historical commit as un-backfillable on the strength
-          # of a capital letter.
-          n="$(jq '.results | length' "${RUNNER_TEMP}/probe.json" 2>/dev/null || echo 0)"
-          [ "${n:-0}" -gt 0 ] || { echo "::error::target engine produced no parseable -json results" >&2; exit 1; }
-          passed="$(jq '[.results[] | select(.passed == true)] | length' "${RUNNER_TEMP}/probe.json")"
-          timed="$(jq '[.results[] | select(has("timedOut"))] | length' "${RUNNER_TEMP}/probe.json")"
-          dur="$(jq '[.results[] | select((.duration // 0) > 0)] | length' "${RUNNER_TEMP}/probe.json")"
-          echo "probe: ${n} results, ${passed} passed, ${dur} with a duration, ${timed} carry timedOut"
-          if [ "$passed" -eq 0 ] || [ "$dur" -eq 0 ]; then
-            # Print a record before dying. Whether the cause is a real schema change
-            # or a wrong path in this probe, the sample answers it in one glance —
-            # which the counts alone conspicuously did not.
-            echo "sample result: $(jq -c '.results[0]' "${RUNNER_TEMP}/probe.json")" >&2
-            [ "$passed" -gt 0 ] || { echo "::error::probe produced no passing tests; the metric would be empty" >&2; exit 1; }
-            echo "::error::probe results carry no duration; the metric would be zero" >&2; exit 1
-          fi
-          if [ "$timed" -eq 0 ]; then
-            echo "::warning::this engine's results have no timedOut field — timed-out tests cannot be excluded from the sum"
-          fi
-
-      - name: Measure macro + fresh anchor, inject into existing snapshot
+      # Which targets is THIS runner good for? Answered once, before any
+      # measuring, against the authoritative machine key — the same function
+      # bench-ratchet writes with, from the tool worktree, because deriving it in
+      # shell would be a second implementation of "which machine is this".
+      #
+      # A run that draws a tier is no longer worth one target. It is worth every
+      # target that needs that tier, which is the whole point of the list input.
+      - name: Select the targets this runner can measure
+        id: select
         env:
-          BENCH_TEST262_BIN: ${{ steps.tools.outputs.bench }}
+          TARGET_REFS: ${{ github.event.inputs.ref }}
+          MAX_TARGETS: ${{ github.event.inputs.max_targets }}
         run: |
           set -euo pipefail
-          short_sha="$(git rev-parse --short=12 HEAD)"
-
-          # Fresh anchor on THIS runner, in the same run as the macro. It is NOT the
-          # anchor stored on the target's snapshot — that one calibrated a different
-          # run on a different host — so the reducer records it alongside the
-          # measurement as anchor_ns_per_op rather than leaving it implicit.
-          anchor_ns="$(go test -run '^$' -bench '^BenchmarkRatchetAnchor$' -count 3 ./pkg/vm 2>/dev/null \
-            | awk '/BenchmarkRatchetAnchor/ { sum += $3; n++ } END { if (n) printf "%.6f", sum/n }')"
-          [ -n "$anchor_ns" ] || { echo "failed to measure anchor" >&2; exit 1; }
-
-          # The SAME reducer the forward timeline runs, so a backfilled point and a
-          # forward point on one series cannot have been reduced differently. See its
-          # header for the reducer choice and the guards.
-          #
-          # MACRO_RECORD_ANCHOR=1 is the one difference: this macro is measured in a
-          # different run from the profile's micro benchmarks, so it cannot be
-          # normalized against the profile's anchor and carries its own divisor
-          # instead. perf-fixratio -verify reads that field and holds each entry to
-          # the anchor it was actually measured against, which is what makes the
-          # off-run measurement checkable rather than merely defensible.
-          entries="${RUNNER_TEMP}/t262.entries.json"
-          MACRO_RECORD_ANCHOR=1 "${{ steps.tools.outputs.reduce }}" \
-            "$anchor_ns" "$entries" >/dev/null
-          echo "target ${short_sha}: $(jq -c 'map_values({ns_per_op, ratio_to_anchor, set_hash})' "$entries")"
-
           remote="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
           wt="${RUNNER_TEMP}/perf-data"
+          rm -rf "$wt"
           git clone --depth 1 --branch perf-data "$remote" "$wt"
-          # Which machine is this? Asked of the same function bench-ratchet writes
-          # with, from the tool worktree — deriving it in shell would be a second
-          # implementation of "which machine is this", and one character of drift
-          # picks the wrong profile without saying so.
+
           this_key="$( cd "${RUNNER_TEMP}/tooling" && go run ./cmd/perf-migrate -print-key )"
           echo "this runner is ${this_key}"
+          echo "key=${this_key}" >> "$GITHUB_OUTPUT"
 
-          # Find the snapshot for THIS RUNNER'S TIER, not an arbitrary one.
-          #
-          # A commit holds one FILE per tier under v2 — ccf2da20f14f has four — so
-          # `find | head -1` selected a machine at random and then refused because
-          # it wasn't ours, while the file we should have written sat beside it.
-          # That would have failed nearly every dispatch on any commit measured on
-          # more than one tier, and read as the off-tier lottery rather than as a
-          # bug. Match the file to the runner instead.
-          #
-          # Ratios normalize within a CPU model, so writing this runner's number
-          # into another tier's profile merges two things the format exists to keep
-          # apart; when no file matches, the honest move is to re-dispatch.
-          snap=""; seen=""
-          while IFS= read -r f; do
-            [ -n "$f" ] || continue
-            if jq -e '.machines' "$f" >/dev/null 2>&1; then
-              fk="$(jq -r '.machines | keys[0]' "$f")"
-            else
-              fk="$(jq -r '.machine.arch + "/" + .machine.cpu_model' "$f")"
-            fi
-            seen="${seen}${seen:+, }${fk}"
-            if [ "$fk" = "$this_key" ]; then snap="$f"; break; fi
-          done < <(find "$wt/timeline" \( -name "*-${short_sha}.json" -o -name "*-${short_sha}-*.json" \) | sort)
+          # Commas and newlines are both natural ways to paste a list into a
+          # dispatch box; accept either, plus plain spaces.
+          refs="$(printf '%s' "$TARGET_REFS" | tr ',\n\r\t' '    ')"
+          # shellcheck disable=SC2086  # deliberate word-splitting of the ref list
+          set -- $refs
+          [ "$#" -gt 0 ] || { echo "::error::no target refs given" >&2; exit 1; }
 
-          if [ -z "$seen" ]; then
-            echo "::error::no snapshot at all for ${short_sha} — run the timeline first" >&2
+          python3 "${RUNNER_TEMP}/tooling/scripts/perf-backfill-select.py" \
+            --timeline "$wt/timeline" --key "$this_key" \
+            --limit "${MAX_TARGETS:-6}" "$@" > "${RUNNER_TEMP}/targets.txt"
+
+          n="$(grep -c . "${RUNNER_TEMP}/targets.txt" || true)"
+          echo "count=${n:-0}" >> "$GITHUB_OUTPUT"
+          echo "selected ${n:-0} target(s) for ${this_key}"
+
+      # Nothing to do is a SUCCESS. Once a tier is full every further dispatch
+      # that draws it has nothing to measure, and painting those runs red is the
+      # noise this change exists to remove — four of eight runs on 2026-08-09
+      # were red for exactly this reason and every one of them was working
+      # correctly.
+      - name: Nothing to measure on this tier
+        if: steps.select.outputs.count == '0'
+        run: |
+          echo "No target needs a point on ${{ steps.select.outputs.key }}."
+          echo "Either they already carry the metric, or their snapshots are on other tiers."
+          echo "Re-dispatch to draw a different runner."
+
+      # ---- per-target loop ----------------------------------------------
+      # One step rather than the previous six, because the sequence has to repeat
+      # and GitHub has no step-level loop. The trade is step granularity in the
+      # UI for a run that uses the tier it won; ::group:: markers keep each
+      # target foldable in the log.
+      #
+      # Each target pushes its own commit. A batch that times out or is cancelled
+      # then keeps everything it finished, and re-dispatching skips those targets
+      # because the selector sees the metric already present.
+      - name: Measure and inject each target
+        if: steps.select.outputs.count != '0'
+        env:
+          BENCH_TEST262_BIN: ${{ steps.tools.outputs.bench }}
+          THIS_KEY: ${{ steps.select.outputs.key }}
+          TOOL_WT: ${{ runner.temp }}/tooling
+          PERF_DATA_WT: ${{ runner.temp }}/perf-data
+          REDUCE_SH: ${{ steps.tools.outputs.reduce }}
+        run: |
+          set -euo pipefail
+          export PERF_DATA_REMOTE="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          git -C "$PERF_DATA_WT" config user.name "github-actions[bot]"
+          git -C "$PERF_DATA_WT" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Each target runs as a CHILD PROCESS, not a function or subshell.
+          # bash suppresses `set -e` for any compound command in an AND-OR list,
+          # so `( set -e; body ) || rc=$?` runs straight past its own failures —
+          # one target's broken build would silently corrupt the next target's
+          # measurement instead of skipping it. A child keeps its own -e.
+          #
+          # Read the list on fd 3: the body runs git, go and jq, and anything in
+          # there reading stdin would eat the rest of the list.
+          pushed=0; nochange=0; failed=""
+          while IFS= read -r target <&3; do
+            [ -n "$target" ] || continue
+            echo "::group::${target}"
+            rc=0
+            bash "${TOOL_WT}/scripts/perf-backfill-one.sh" "$target" || rc=$?
+            case "$rc" in
+              0) pushed=$(( pushed + 1 )) ;;
+              3) nochange=$(( nochange + 1 )) ;;
+              *) failed="${failed}${failed:+, }${target}" ;;
+            esac
+            echo "::endgroup::"
+          done 3< "${RUNNER_TEMP}/targets.txt"
+
+          echo "pushed ${pushed}, unchanged ${nochange}, failed $(printf '%s' "$failed" | awk -F', ' '{print ($0==""?0:NF)}')"
+          [ -z "$failed" ] || echo "::warning::failed targets: ${failed}"
+
+          # A batch succeeds if anything landed. Individual failures are reported
+          # above and must not condemn the targets that worked — re-dispatching
+          # skips what is already done, so a partial batch is progress.
+          if [ "$pushed" -eq 0 ] && [ "$nochange" -eq 0 ]; then
+            echo "::error::no target was measured; see the per-target errors above" >&2
             exit 1
           fi
-          if [ -z "$snap" ]; then
-            echo "::error::no snapshot for ${short_sha} on this runner's tier (${this_key})." >&2
-            echo "Tiers present: ${seen}" >&2
-            echo "Off-tier dispatch (~27%). Re-dispatch; do not merge across tiers." >&2
-            exit 1
-          fi
-          echo "target snapshot: $(basename "$snap")"
-
-          if jq -e '.machines' "$snap" >/dev/null 2>&1; then
-            # shellcheck disable=SC2016  # $k is jq's parameter, bound by --arg below
-            target='.machines[$k].benchmarks'
-          else
-            target='.benchmarks'
-          fi
-
-          # The entries arrive already stamped with anchor_ns_per_op (see the reducer
-          # call above); this step only merges them in. Merge rather than assign: it
-          # is one entry per series now, and an assignment to a fixed key would drop
-          # the per-suite records on the floor.
-          jq --arg k "$this_key" --slurpfile e "$entries" \
-             "${target} += \$e[0]" "$snap" > "$snap.tmp"
-          mv "$snap.tmp" "$snap"
-
-          # Same gate the forward timeline publishes behind, run from the workflow's
-          # commit for the same reason: the target tree predates the tool.
-          tool="${RUNNER_TEMP}/tooling"
-          ( cd "$tool" && go run ./cmd/perf-fixratio -dir "$wt/timeline" -verify -v )
-
-          git -C "$wt" config user.name "github-actions[bot]"
-          git -C "$wt" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C "$wt" add timeline
-          if git -C "$wt" diff --cached --quiet; then
-            echo "nothing changed — entry already present and identical"
-            exit 0
-          fi
-          git -C "$wt" commit -m "perf: backfill test262 macro into $(basename "$snap")"
-          git -C "$wt" push "$remote" HEAD:perf-data
