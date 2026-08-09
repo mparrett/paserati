@@ -518,53 +518,51 @@ function titleFor(s) {
   const baselineCpu = baseline.machine?.cpu_model || "?";
   // Nested map rather than a joined string key: CPU model strings and benchmark
   // names both contain spaces and punctuation, so any delimiter is a guess.
-  // Which point a tier is referenced to. "The first one" is the obvious rule and
-  // the wrong one, twice over:
+  // Which point a series is referenced to — per TIER and per TEST SET.
   //
-  //   Wrong SET. test262.language's first 7763 point is 2026-06-27, on set
-  //     d4e3920f; every point after it is 104d070d. The metric is a mean over the
-  //     passing set, so dividing the whole line by a point averaged over a
-  //     different set folds that set change into the level of every later point.
-  //     The page already marks the boundary — and then normalized across it.
-  //   Wrong REDUCTION. The oldest snapshots predate min-of-3 (9da9524b) and carry
-  //     one rep. A single-shot reference imports its full runner noise into every
-  //     point measured against it, permanently and invisibly.
+  // The tier half is the anchor's business (see above). The set half is #26's
+  // option 1 applied to the reference rather than to the metric: test262.total is
+  // a mean over the passing set, so two points averaged over different sets are
+  // not the same quantity, and a ratio between them is not a measurement. The
+  // page marked that boundary with a triangle and then normalized straight across
+  // it — every 7763 test262.language point was divided by the 2026-06-27 point on
+  // set d4e3920f while sitting on 104d070d itself.
   //
-  // So: reference to the modal set — the one most of the tier's points are on,
-  // which is the set the trend is actually about — and within it prefer a point
-  // that was reduced over reps. Each preference degrades to the old behaviour when
-  // nothing qualifies, and micro benchmarks (no set_hash at all) only ever see the
-  // reps preference.
-  function pickRef(cpu, n) {
-    const cands = snaps.filter(s => cpuOf(s) === cpu && s.benchmarks?.[n]?.ratio_to_anchor > 0);
-    if (!cands.length) return 0;
+  // Referencing each SET to its own first point makes every set a self-contained
+  // 1.0-centred trend, so no ratio is ever taken across a boundary. It costs
+  // nothing real, for the same reason the per-tier reference did: cross-set LEVELS
+  // were never meaningful, only shapes. Micro benchmarks carry no set_hash, fall
+  // into a single "" group, and are unaffected.
+  //
+  // Within a set, prefer a point reduced over reps. The oldest snapshots predate
+  // min-of-3 (9da9524b) and carry one; a single-shot reference imports its full
+  // runner noise into every point measured against it, permanently and invisibly.
+  const setOf = (s, n) => s.benchmarks?.[n]?.set_hash || "";
 
-    // Modal set_hash. Absent counts as its own group, so an all-absent benchmark
-    // yields one group and this step is a no-op.
-    const tally = new Map();
-    for (const s of cands) {
-      const k = s.benchmarks[n].set_hash || "";
-      tally.set(k, (tally.get(k) || 0) + 1);
+  const refCache = new Map();                    // cpu -> name -> set -> ratio
+  function refFor(cpu, n, set) {
+    let byName = refCache.get(cpu);
+    if (!byName) { byName = new Map(); refCache.set(cpu, byName); }
+    let bySet = byName.get(n);
+    if (!bySet) { bySet = new Map(); byName.set(n, bySet); }
+    if (bySet.has(set)) return bySet.get(set);
+
+    // The committed baseline is only a valid reference for its own tier AND its
+    // own set — its ratio carries that tier's anchor error like any other
+    // snapshot, and its set is just whichever one it was captured on.
+    let v = 0;
+    const b = baseline.benchmarks?.[n];
+    if (cpu === baselineCpu && b?.ratio_to_anchor > 0 && (b.set_hash || "") === set) {
+      v = b.ratio_to_anchor;
+    } else {
+      const cands = snaps.filter(s =>
+        cpuOf(s) === cpu && s.benchmarks?.[n]?.ratio_to_anchor > 0 && setOf(s, n) === set);
+      const reduced = cands.filter(s => (s.benchmarks[n].samples?.length || 1) > 1);
+      const pick = reduced[0] || cands[0];
+      v = pick ? pick.benchmarks[n].ratio_to_anchor : 0;
     }
-    let modal = "", best = -1;
-    for (const [k, c] of tally) if (c > best) { modal = k; best = c; }
-
-    const inModal = cands.filter(s => (s.benchmarks[n].set_hash || "") === modal);
-    const reduced = inModal.filter(s => (s.benchmarks[n].samples?.length || 1) > 1);
-    return (reduced[0] || inModal[0]).benchmarks[n].ratio_to_anchor;
-  }
-
-  const ref = new Map();                                   // cpu -> (name -> ratio)
-  for (const cpu of shownCpus) {
-    const perName = new Map();
-    for (const n of allNames) {
-      // The committed baseline is only a valid reference for its own tier — its
-      // ratio carries that tier's anchor error like any other snapshot.
-      const b = cpu === baselineCpu ? baseline.benchmarks?.[n]?.ratio_to_anchor : 0;
-      if (b > 0) { perName.set(n, b); continue; }
-      perName.set(n, pickRef(cpu, n));
-    }
-    ref.set(cpu, perName);
+    bySet.set(set, v);
+    return v;
   }
 
   const names = [...allNames].sort();
@@ -573,7 +571,7 @@ function titleFor(s) {
     benchName: n,                             // full key, so the tooltip can find ns_per_op
     data: snaps.map(s => {
       const r = s.benchmarks?.[n]?.ratio_to_anchor;
-      const base = ref.get(cpuOf(s))?.get(n);
+      const base = refFor(cpuOf(s), n, setOf(s, n));
       return (r && base) ? r / base : null;
     }),
     borderColor: SERIES[i % SERIES.length],
@@ -690,7 +688,7 @@ function titleFor(s) {
   function sampleBand(name) {
     const lo = [], hi = [];
     for (const s of snaps) {
-      const base = ref.get(cpuOf(s))?.get(name);
+      const base = refFor(cpuOf(s), name, setOf(s, name));
       const vs = (s.benchmarks?.[name]?.samples || [])
         .map(x => x.ratio_to_anchor).filter(v => v != null);
       if (!base || vs.length < 2) { lo.push(null); hi.push(null); continue; }
@@ -841,15 +839,24 @@ function titleFor(s) {
     const meanDS = { label: mode === MICRO ? "mean" : mode + " mean", data: mean,
       borderColor: "#ece0c8", backgroundColor: "#ece0c8", borderWidth: 2.5,
       pointRadius: 2.5, pointHoverRadius: 4, tension: .25 };
-    // On the Test262 tab, dash and triangle any span into a point where the number
-    // changes MEANING — the contributing test set changed, or the reducer did — so
-    // it reads differently from a real engine move. (Amber, matching the baseline
-    // guide's "watch this" hue.) The tooltip names which of the two it was.
+    // On the Test262 tab, CUT the line where the number changes MEANING — the
+    // contributing test set changed, or the reducer did.
+    //
+    // This used to draw the span amber and dashed, which is #26's option 3 done
+    // halfway: it says "careful here" while still drawing the one thing that
+    // invites the reading it warns against. A connected line is a claim that its
+    // two ends are commensurable, and across a set change they are not — the
+    // metric is a mean over the passing set, so the points either side are
+    // averages of different populations. #26 asked for "never connect the line
+    // across a set_hash change"; this is that, literally.
+    //
+    // The triangles stay, and each segment is now referenced to its own set (see
+    // refFor), so what remains on screen is a series of self-contained trends
+    // with visible joins rather than one line with caveats attached.
     if (mode === "Test262" && anyBreak) {
       const amber = "#d08a3c";
       meanDS.segment = {
-        borderColor: c => breakAt(c.p1DataIndex) ? amber : undefined,
-        borderDash:  c => breakAt(c.p1DataIndex) ? [4, 3] : undefined,
+        borderColor: c => breakAt(c.p1DataIndex) ? "transparent" : undefined,
       };
       const marks = labels.map((_, j) => breakAt(j));
       meanDS.pointStyle           = marks.map(m => m ? "triangle" : "circle");
@@ -947,9 +954,9 @@ function titleFor(s) {
             afterLabel: c => {
               if (c.dataset.label !== "Test262 mean") return "";
               if (view.setChangedAt(c.dataIndex))
-                return "△ test set changed here — slope isn't a pure engine delta";
+                return "△ test set changed here — the line is cut because the points either side are means over different sets";
               if (view.reducerChangedAt(c.dataIndex))
-                return "△ macro reducer changed here — slope isn't a pure engine delta";
+                return "△ macro reducer changed here — the line is cut because the points either side were reduced differently";
               return "";
             },
           },
@@ -1066,7 +1073,7 @@ function titleFor(s) {
     } else {
       countEl.textContent = `mean of ${agg} benchmark${agg === 1 ? "" : "s"} · ${view.snaps.length} snapshots`;
     }
-    if (mode === "Test262" && view.anyBreak) countEl.textContent += " · △ = test set or reducer changed";
+    if (mode === "Test262" && view.anyBreak) countEl.textContent += " · △ = test set or reducer changed; the line is cut there and each segment is referenced to its own set";
     renderFlags(mode);
   }
 
