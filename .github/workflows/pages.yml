@@ -12,8 +12,14 @@ on:
       - 'docs/perf/index.html'
       - '.github/workflows/pages.yml'
   # Redeploy after each snapshot so the page reflects new timeline points.
+  #
+  # The backfill writes timeline points too, and was missing here: three
+  # test262.language points landed on perf-data on 2026-08-09 and the published
+  # page kept showing the old series until someone dispatched this by hand. The
+  # page is built from a checkout of perf-data, so a write nobody redeploys is a
+  # write nobody sees.
   workflow_run:
-    workflows: ["Perf Timeline"]
+    workflows: ["Perf Timeline", "Perf Test262 Backfill"]
     types: [completed]
   workflow_dispatch:
 
