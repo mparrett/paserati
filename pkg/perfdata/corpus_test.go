@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -128,6 +129,13 @@ func TestHashFilesIgnoresListOrderAndSeesContent(t *testing.T) {
 // stop verifying and every snapshot would quietly record no corpus, which is the
 // failure this is supposed to detect. Pin them against each other.
 func TestShellStampAgreesWithHashFiles(t *testing.T) {
+	// bench-corpus.sh is a shell script and the stamp it writes is only ever
+	// produced on the Linux session boxes and CI runners that measure. Windows
+	// cannot exec it at all ("%1 is not a valid Win32 application"), so there is
+	// no agreement to check there — skip rather than fail the matrix.
+	if runtime.GOOS == "windows" {
+		t.Skip("bench-corpus.sh is not executable on windows")
+	}
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 not available")
 	}
