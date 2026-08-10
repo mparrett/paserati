@@ -4017,6 +4017,122 @@
             "reducer": "median-of-round-medians",
             "rounds": 3
           }
+        },
+        "test262.total": {
+          "ns_per_op": 2039673.7870328904,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "ratio_to_anchor": 1881040.0375464829,
+          "method": {
+            "reducer": "median",
+            "count": 3,
+            "per_test_timeout": "1.2s"
+          },
+          "stats": {
+            "total": 47291,
+            "passed": 40194,
+            "failed": 7084,
+            "timeouts": 13,
+            "skipped": 0,
+            "duration_ns": 116443396718
+          },
+          "samples": [
+            {
+              "iterations": 40194,
+              "ns_per_op": 2052272.5174901728,
+              "ratio_to_anchor": 1892658.9133505784,
+              "captured_at": "2026-08-09T22:50:52Z",
+              "anchor_ns_per_op": 1.084333
+            },
+            {
+              "iterations": 40194,
+              "ns_per_op": 2039673.7870328904,
+              "ratio_to_anchor": 1881040.0375464829,
+              "captured_at": "2026-08-09T22:52:50Z",
+              "anchor_ns_per_op": 1.084333
+            },
+            {
+              "iterations": 40194,
+              "ns_per_op": 2024306.2283922974,
+              "ratio_to_anchor": 1866867.6766199104,
+              "captured_at": "2026-08-09T22:54:47Z",
+              "anchor_ns_per_op": 1.084333
+            }
+          ],
+          "set_hash": "ac611bcf30b917d8",
+          "anchor_ns_per_op": 1.084333
+        },
+        "test262.built-ins": {
+          "ns_per_op": 2233072.915390054,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "ratio_to_anchor": 2059397.7268883768,
+          "method": {
+            "reducer": "median",
+            "count": 3,
+            "per_test_timeout": "1.2s"
+          },
+          "samples": [
+            {
+              "iterations": 16972,
+              "ns_per_op": 2234213.3171694553,
+              "ratio_to_anchor": 2060449.4349701202,
+              "captured_at": "2026-08-09T22:50:52Z",
+              "anchor_ns_per_op": 1.084333
+            },
+            {
+              "iterations": 16972,
+              "ns_per_op": 2233072.915390054,
+              "ratio_to_anchor": 2059397.7268883768,
+              "captured_at": "2026-08-09T22:52:50Z",
+              "anchor_ns_per_op": 1.084333
+            },
+            {
+              "iterations": 16972,
+              "ns_per_op": 2210349.9459698326,
+              "ratio_to_anchor": 2038442.0154784855,
+              "captured_at": "2026-08-09T22:54:47Z",
+              "anchor_ns_per_op": 1.084333
+            }
+          ],
+          "set_hash": "9ba5490d5d773280",
+          "anchor_ns_per_op": 1.084333
+        },
+        "test262.language": {
+          "ns_per_op": 1898326.3575919387,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "ratio_to_anchor": 1750685.7741966154,
+          "method": {
+            "reducer": "median",
+            "count": 3,
+            "per_test_timeout": "1.2s"
+          },
+          "samples": [
+            {
+              "iterations": 23222,
+              "ns_per_op": 1919299.506890018,
+              "ratio_to_anchor": 1770027.7561321273,
+              "captured_at": "2026-08-09T22:50:52Z",
+              "anchor_ns_per_op": 1.084333
+            },
+            {
+              "iterations": 23222,
+              "ns_per_op": 1898326.3575919387,
+              "ratio_to_anchor": 1750685.7741966154,
+              "captured_at": "2026-08-09T22:52:50Z",
+              "anchor_ns_per_op": 1.084333
+            },
+            {
+              "iterations": 23222,
+              "ns_per_op": 1888334.5646800448,
+              "ratio_to_anchor": 1741471.0837722772,
+              "captured_at": "2026-08-09T22:54:47Z",
+              "anchor_ns_per_op": 1.084333
+            }
+          ],
+          "set_hash": "104d070df51bc77d",
+          "anchor_ns_per_op": 1.084333
         }
       }
     }

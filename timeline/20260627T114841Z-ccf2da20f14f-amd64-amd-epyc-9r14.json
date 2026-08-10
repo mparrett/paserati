@@ -3978,6 +3978,122 @@
             "reducer": "median-of-round-medians",
             "rounds": 3
           }
+        },
+        "test262.total": {
+          "ns_per_op": 2050891.2863406492,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "ratio_to_anchor": 1891385.1061810802,
+          "method": {
+            "reducer": "median",
+            "count": 3,
+            "per_test_timeout": "1.2s"
+          },
+          "stats": {
+            "total": 47291,
+            "passed": 40141,
+            "failed": 7138,
+            "timeouts": 12,
+            "skipped": 0,
+            "duration_ns": 117143661222
+          },
+          "samples": [
+            {
+              "iterations": 40141,
+              "ns_per_op": 2050891.2863406492,
+              "ratio_to_anchor": 1891385.1061810802,
+              "captured_at": "2026-08-10T00:09:32Z",
+              "anchor_ns_per_op": 1.084333
+            },
+            {
+              "iterations": 40141,
+              "ns_per_op": 2040844.605291348,
+              "ratio_to_anchor": 1882119.796493649,
+              "captured_at": "2026-08-10T00:11:31Z",
+              "anchor_ns_per_op": 1.084333
+            },
+            {
+              "iterations": 40141,
+              "ns_per_op": 2054587.5390747616,
+              "ratio_to_anchor": 1894793.8862644238,
+              "captured_at": "2026-08-10T00:13:30Z",
+              "anchor_ns_per_op": 1.084333
+            }
+          ],
+          "set_hash": "9812300bd970d4b1",
+          "anchor_ns_per_op": 1.084333
+        },
+        "test262.built-ins": {
+          "ns_per_op": 2259433.1420993693,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "ratio_to_anchor": 2083707.8112529723,
+          "method": {
+            "reducer": "median",
+            "count": 3,
+            "per_test_timeout": "1.2s"
+          },
+          "samples": [
+            {
+              "iterations": 16967,
+              "ns_per_op": 2259433.1420993693,
+              "ratio_to_anchor": 2083707.8112529723,
+              "captured_at": "2026-08-10T00:09:32Z",
+              "anchor_ns_per_op": 1.084333
+            },
+            {
+              "iterations": 16967,
+              "ns_per_op": 2255788.013378912,
+              "ratio_to_anchor": 2080346.179060226,
+              "captured_at": "2026-08-10T00:11:31Z",
+              "anchor_ns_per_op": 1.084333
+            },
+            {
+              "iterations": 16967,
+              "ns_per_op": 2268860.5138209467,
+              "ratio_to_anchor": 2092401.9778250286,
+              "captured_at": "2026-08-10T00:13:30Z",
+              "anchor_ns_per_op": 1.084333
+            }
+          ],
+          "set_hash": "5dd4f9d9bfb1d0a8",
+          "anchor_ns_per_op": 1.084333
+        },
+        "test262.language": {
+          "ns_per_op": 1897706.1391214293,
+          "allocs_per_op": 0,
+          "bytes_per_op": 0,
+          "ratio_to_anchor": 1750113.7926461976,
+          "method": {
+            "reducer": "median",
+            "count": 3,
+            "per_test_timeout": "1.2s"
+          },
+          "samples": [
+            {
+              "iterations": 23174,
+              "ns_per_op": 1898205.9637093295,
+              "ratio_to_anchor": 1750574.7438372986,
+              "captured_at": "2026-08-10T00:09:32Z",
+              "anchor_ns_per_op": 1.084333
+            },
+            {
+              "iterations": 23174,
+              "ns_per_op": 1883472.3430568741,
+              "ratio_to_anchor": 1736987.0169559298,
+              "captured_at": "2026-08-10T00:11:31Z",
+              "anchor_ns_per_op": 1.084333
+            },
+            {
+              "iterations": 23174,
+              "ns_per_op": 1897706.1391214293,
+              "ratio_to_anchor": 1750113.7926461976,
+              "captured_at": "2026-08-10T00:13:30Z",
+              "anchor_ns_per_op": 1.084333
+            }
+          ],
+          "set_hash": "d4e3920f686991f6",
+          "anchor_ns_per_op": 1.084333
         }
       },
       "captured_at": "2026-08-07T03:59:52Z",
