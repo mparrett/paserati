@@ -537,7 +537,38 @@ function titleFor(s) {
   // Within a set, prefer a point reduced over reps. The oldest snapshots predate
   // min-of-3 (9da9524b) and carry one; a single-shot reference imports its full
   // runner noise into every point measured against it, permanently and invisibly.
-  const setOf = (s, n) => s.benchmarks?.[n]?.set_hash || "";
+  // A MICRO benchmark carries no set_hash — that field belongs to test262, whose
+  // metric is a mean over a drifting set. But the micro suite drifts too, and far
+  // more violently: the corpus went 30 -> 35 -> 42 benchmarks, and v4 SIZED the
+  // PrototypeMethodAccess workloads. On the 8370C tier, whose only two points
+  // straddle that change, Baseline/StringPrototypeMethod reads 1,988,557 ns then
+  // 544.9 ns — 3600x, entirely instrument, with the anchors agreeing to 0.2% so
+  // it is provably the same hardware. Referenced to the tier's first point that
+  // is one line falling to zero and reading as a spectacular win.
+  //
+  // The membership of the micro suite is the instrument's identity, and it is
+  // already in every snapshot. Hashing the names gives micros the same per-set
+  // treatment test262 gets, retroactively, with no re-measurement.
+  //
+  // NOT a substitute for method.corpus. A resize that keeps every name — exactly
+  // what v3 -> v4 did to the prototype family — is invisible here and only the
+  // stamped files_hash catches it. This makes the seams the page CAN see stop
+  // lying; the stamp is what makes the rest checkable.
+  const microSetCache = new WeakMap();
+  function microSetOf(s) {
+    let h = microSetCache.get(s);
+    if (h !== undefined) return h;
+    const names = Object.keys(s.benchmarks || {}).filter(n => !n.startsWith("test262")).sort();
+    // Cheap non-cryptographic digest: this only has to distinguish suites, and
+    // the page has no crypto dependency.
+    let acc = 5381;
+    for (const ch of names.join("\n")) acc = ((acc * 33) ^ ch.charCodeAt(0)) >>> 0;
+    h = "micro:" + acc.toString(36) + ":" + names.length;
+    microSetCache.set(s, h);
+    return h;
+  }
+  const setOf = (s, n) =>
+    n.startsWith("test262") ? (s.benchmarks?.[n]?.set_hash || "") : microSetOf(s);
 
   const refCache = new Map();                    // cpu -> name -> set -> ratio
   function refFor(cpu, n, set) {
@@ -606,6 +637,10 @@ function titleFor(s) {
   // that reached this table as +253816% attributed to a compiler commit, and again
   // as −100% on the next point when the corpus came back. Absent on both sides is
   // "unpinned throughout", which is the pre-2026-08 corpus and not a step.
+  // Same argument as corpusChangedAt, from data every snapshot already carries.
+  const microHash = snaps.map(s => microSetOf(s));
+  const microSetChangedAt = j => j > 0 && microHash[j] !== microHash[j - 1];
+
   const corpusHash = snaps.map(s => s.method?.corpus?.files_hash || null);
   const corpusChangedAt = j => j > 0 && corpusHash[j] !== corpusHash[j - 1];
 
@@ -899,7 +934,7 @@ function titleFor(s) {
     Object.keys(s.benchmarks || {}).filter(n => !n.startsWith("test262")).length);
 
   return { labels, snaps, datasetsFor, aggCount, anyBreak, setChangedAt, reducerChangedAt,
-           corpusChangedAt, meanFor, benchCount, familyCount: microFamilies.length,
+           corpusChangedAt, microSetChangedAt, meanFor, benchCount, familyCount: microFamilies.length,
            contributionsAt, scopeOf, yRangeFor };
   }
 
@@ -1110,18 +1145,26 @@ function titleFor(s) {
       const tags = [];
       // Steps where the number changes MEANING rather than value. They are kept in
       // the table regardless of how they rank by size — see the slice below.
-      let pinned = false;
+      let pinned = false, invalidMicro = false;
       const prevCpu = snaps[j - 1].machine?.cpu_model, curCpu = snaps[j].machine?.cpu_model;
       if (prevCpu && curCpu && prevCpu !== curCpu) tags.push(["warn", "different machine"]);
       if (view.benchCount[j] !== view.benchCount[j - 1]) {
         tags.push(["warn", `suite changed ${view.benchCount[j - 1]}→${view.benchCount[j]}`]);
+      }
+      // The micro suite's membership changed, so the two points were produced by
+      // different instruments and their ratio is not a measurement. Same
+      // treatment as a corpus change, and separate from the count tag above
+      // because a suite can be swapped without changing size.
+      if (mode !== "Test262" && view.microSetChangedAt(j)) {
+        tags.push(["warn", "micro suite changed — not comparable"]);
+        pinned = true; invalidMicro = true;
       }
       // A corpus change is not a large delta, it is an absent one: the two points
       // were produced by different instruments, so their ratio is not a measurement
       // of anything. Suppressing the number rather than printing it is the whole
       // point — a step this size otherwise sorts to the top of the table and reads
       // as the largest finding on the page.
-      let invalid = false;
+      let invalid = invalidMicro;
       if (mode !== "Test262" && view.corpusChangedAt(j)) {
         const was = snaps[j - 1].method?.corpus?.version || "unpinned";
         const now = snaps[j].method?.corpus?.version || "unpinned";
