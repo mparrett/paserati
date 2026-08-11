@@ -608,6 +608,19 @@ function titleFor(s) {
     borderColor: SERIES[i % SERIES.length],
     backgroundColor: SERIES[i % SERIES.length],
     borderWidth: 1.5, pointRadius: 2, pointHoverRadius: 4, spanGaps: true, tension: .25,
+    // Cut where THIS benchmark's instrument changed. The aggregate views cut on a
+    // per-mode predicate, but the breakdown draws every series raw, and without
+    // this each line connects the old corpus era to a self-referenced 1.0 in the
+    // new one — the same false recovery the mean showed on the 7763 tier, once
+    // per benchmark. setOf already resolves either identity: a test262 entry's
+    // set_hash, or the micro suite's membership.
+    segment: {
+      borderColor: c => {
+        const j = c.p1DataIndex;
+        return (j > 0 && setOf(snaps[j], n) !== setOf(snaps[j - 1], n))
+          ? "transparent" : undefined;
+      },
+    },
   }));
 
   // test262.total is a MEAN over the passing set, whose membership drifts as
