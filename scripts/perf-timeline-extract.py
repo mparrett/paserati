@@ -36,7 +36,7 @@ Macro rows are included. They are reduced by the macro's own median-of-3 and
 carry 3 samples rather than 3x3, so each sample is its own round — which is what
 median-of-3 means.
 """
-import json, os, subprocess, sys, statistics as st
+import collections, hashlib, json, os, subprocess, sys, statistics as st
 from collections import defaultdict
 
 PERF_DATA = sys.argv[1] if len(sys.argv) > 1 else 'origin/perf-data'
@@ -90,6 +90,12 @@ def rounds_of(entry):
     return [by_t[t] for t in sorted(by_t)]
 
 
+def micro_ident(prof):
+    """The micro suite's membership, which is the instrument's identity."""
+    names = sorted(k for k in prof.get('benchmarks', {}) if not k.startswith('test262'))
+    return 'micro:' + hashlib.sha256('\n'.join(names).encode()).hexdigest()[:8]
+
+
 def anchor_rounds(prof):
     """Per-round anchor mins, grouped the same way as a benchmark's samples."""
     a = prof.get('anchor') or {}
@@ -138,10 +144,32 @@ for short in sorted(names):
         # — which was the second wrong turn here, because a round's samples do
         # not reliably carry a shared captured_at.
         judged = e.get('ns_per_op') if PKG[short] == 'vm' else e.get('ratio_to_anchor')
-        per[c] = (mins, means, e.get('ns_per_op'), judged)
+        # What instrument produced this cell. For the macro that is the passing
+        # set it averaged over; for a micro benchmark it is the suite membership.
+        ident = e.get('set_hash') or micro_ident(prof)
+        per[c] = (mins, means, e.get('ns_per_op'), judged, ident)
     if ref not in per:
         continue
-    bmin, bmean, bns, bjudged = per[ref]
+    # Base on the row's OWN instrument, not blindly on the ref commit.
+    #
+    # test262.total's ref-commit measurement sits on set 9812300b while the other
+    # 20 commits sit on ac611bcf: basing on the ref would make 20 of 21 macro
+    # cells a comparison of means over different passing sets, which is the
+    # confound issue #26 exists for, not a speed reading. Base each row on the
+    # first commit carrying its MODAL instrument, and omit cells measured on any
+    # other — the renderer already draws a missing cell as empty.
+    #
+    # For a row with one instrument throughout — every micro benchmark on this
+    # tier — the modal instrument is the only one and the base is the ref, so
+    # this changes nothing.
+    idents = collections.Counter(per[c][4] for c in order if c in per)
+    modal = idents.most_common(1)[0][0]
+    base_c = next((c for c in order if c in per and per[c][4] == modal), None)
+    if base_c is None:
+        continue
+    row['base'] = base_c
+    row['instrument'] = modal
+    bmin, bmean, bns, bjudged, _ = per[base_c]
     # The min-delta is computed from ns_per_op, not from the reconstructed
     # rounds. perf-session-extract.py defines it as
     # median(mins[c]) / median(mins[ref]), and ns_per_op IS median(mins) — the
@@ -155,7 +183,9 @@ for short in sorted(names):
     for c in order:
         if c not in per:
             continue
-        mins, means, nsop, judged = per[c]
+        mins, means, nsop, judged, ident = per[c]
+        if ident != modal:
+            continue
         if not judged or not base['judged']:
             continue
         row['deltas'][c] = [round((judged / base['judged'] - 1) * 100, 3),
