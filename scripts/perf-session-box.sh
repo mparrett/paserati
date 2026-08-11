@@ -151,12 +151,32 @@ EOF
 down)
   IID="$(cat "$STATE/iid" 2>/dev/null || true)"
   SG="$(cat "$STATE/sgid" 2>/dev/null || true)"
+  # Does AWS still know this instance? A terminated one ages out of the API
+  # entirely, and the state file outlives it — `up` then refuses with "iid exists
+  # — tear the old box down first", so `down` is exactly what you reach for, and
+  # it used to take TEN MINUTES to do nothing: terminate-instances fails with
+  # InvalidInstanceID.NotFound, and `wait instance-terminated` then retries that
+  # same NotFound 40 times at 15s before giving up. Piped through tail it prints
+  # nothing for the whole ten minutes, so it reads as a hang rather than as a
+  # bounded retry. Ask first; skip both calls when there is nothing to terminate.
+  # Checked by OUTPUT, not by exit status: describe-instances on an id AWS has
+  # forgotten returns SUCCESS with an empty result, so `if ! aws ...` never fires
+  # and the ten minutes happen anyway. Verified against the real vanished id
+  # before trusting it.
+  if [ -n "$IID" ]; then
+    alive="$(aws ec2 describe-instances --region "$REGION" --instance-ids "$IID" \
+      --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null || true)"
+    if [ -z "${alive//[[:space:]]/}" ]; then
+      note "instance $IID no longer exists in $REGION — clearing stale state"
+      IID=""
+    fi
+  fi
   if [ -n "$IID" ]; then
     aws ec2 terminate-instances --region "$REGION" --instance-ids "$IID" \
       --query 'TerminatingInstances[0].[InstanceId,CurrentState.Name]' --output text
     aws ec2 wait instance-terminated --region "$REGION" --instance-ids "$IID" && note "terminated"
   else
-    note "no instance id in $STATE — going straight to verification"
+    note "no live instance to terminate — going straight to verification"
   fi
   [ -n "$SG" ] && aws ec2 delete-security-group --region "$REGION" --group-id "$SG" 2>&1 | tail -1
   aws ec2 delete-key-pair --region "$REGION" --key-name "$NAME" >/dev/null 2>&1

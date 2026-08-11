@@ -655,7 +655,24 @@ function titleFor(s) {
   const microSetChangedAt = j => j > 0 && microHash[j] !== microHash[j - 1];
 
   const corpusHash = snaps.map(s => s.method?.corpus?.files_hash || null);
-  const corpusChangedAt = j => j > 0 && corpusHash[j] !== corpusHash[j - 1];
+  // BOTH sides must be known, matching setChangedAt and reducerChangedAt and the
+  // rule stated at the top of this file. This originally compared the raw values,
+  // so an absent stamp counted as a value and any legacy point beside a stamped
+  // one read as a corpus change. That is a false positive, not a conservative
+  // one: no CI snapshot carries a stamp today, because perf-timeline.yml does not
+  // run bench-corpus.sh, so the first stamped point would have been flagged
+  // against every unstamped neighbour it happened to sit next to — including
+  // neighbours measured with the very same corpus.
+  //
+  // Absent means UNKNOWN, and unknown-versus-known is not a known change. The
+  // case this weakens — an overlay that silently did not happen, which leaves no
+  // stamp at all — is covered by microSetChangedAt, since a missed overlay
+  // changes the suite's membership (35 benchmarks against 42) and that is
+  // computed from the benchmark names every snapshot already carries. What the
+  // stamp uniquely catches is a resize that keeps every name, and that is only
+  // decidable when both sides recorded one.
+  const corpusChangedAt = j => j > 0 && !!corpusHash[j] && !!corpusHash[j - 1]
+                                     && corpusHash[j] !== corpusHash[j - 1];
 
   // Deliberately NOT folded in with the two above. Those mark the Test262 line, and
   // the corpus does not reach it: bench-corpus.json overlays bench_test.go and the
