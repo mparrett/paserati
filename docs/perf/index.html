@@ -659,10 +659,11 @@ function titleFor(s) {
   // rule stated at the top of this file. This originally compared the raw values,
   // so an absent stamp counted as a value and any legacy point beside a stamped
   // one read as a corpus change. That is a false positive, not a conservative
-  // one: no CI snapshot carries a stamp today, because perf-timeline.yml does not
-  // run bench-corpus.sh, so the first stamped point would have been flagged
-  // against every unstamped neighbour it happened to sit next to — including
-  // neighbours measured with the very same corpus.
+  // one, and the boundary it invents is exactly where the corpus did NOT change:
+  // perf-timeline.yml overlays the pinned corpus as of 2026-08-11 and every
+  // snapshot before that carries no stamp, so a raw comparison would flag the
+  // changeover point — where the same corpus was measured on both sides, since
+  // the overlay was a no-op against main's own benchmarks that day.
   //
   // Absent means UNKNOWN, and unknown-versus-known is not a known change. The
   // case this weakens — an overlay that silently did not happen, which leaves no

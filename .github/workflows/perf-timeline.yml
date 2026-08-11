@@ -3,7 +3,9 @@ name: Perf Timeline
 # Records one immutable benchmark snapshot per commit on the dedicated, unprotected
 # `perf-data` branch (NOT main — keeps main clean and dodges branch protection).
 # The "Are we fast yet?" page (pages.yml) reads these at deploy time. Each snapshot
-# is anchor-normalized, so the trend is meaningful across varying CI runners.
+# is anchor-normalized, so the trend is meaningful across varying CI runners, and
+# measured with the pinned corpus rather than the benchmarks the commit shipped
+# with, so the instrument stays constant while the engine varies.
 on:
   push:
     branches: [main]
@@ -26,16 +28,23 @@ on:
       - 'cmd/**'
       - 'go.mod'
       - 'go.sum'
-      # tests/** defines 15 of the 35 measured benchmarks — bench_test.go,
-      # benchmark_prototype_test.go, and the .ts workloads they run —
-      # because bench-ratchet's default scope is pkg/vm AND ./tests. Without
-      # this, changing what BenchmarkArith runs produces no point at all, and
-      # the engine key (which hashes pkg/ alone) would additionally read such a
-      # commit as the SAME engine and group two different workloads as one.
-      # No commit has yet changed these files without also touching pkg/ or
-      # cmd/, so this has cost nothing so far. The prototype-benchmark fix is a
-      # tests/-only commit by construction, which is what makes it due now.
+      # tests/** used to define 15 of the measured benchmarks outright —
+      # bench_test.go, benchmark_prototype_test.go and the .ts workloads they
+      # run — because bench-ratchet's default scope is pkg/vm AND ./tests.
+      # It no longer does: "Overlay the pinned benchmark corpus" below replaces
+      # every file bench-corpus.json names before anything is measured, so a
+      # commit that edits one of them changes the tree and not the instrument.
+      # It stays on the list because the overlay covers only the named files
+      # while `go test ./tests` compiles the whole package: every other
+      # _test.go there still comes from the target tree, and one of them
+      # failing to build is the difference between a snapshot and no snapshot.
       - 'tests/**'
+      # The pinned corpus IS the instrument, so bumping its version or moving
+      # its ref changes what every later point measures. That has to produce a
+      # snapshot of its own: without one, the first point on the new corpus is
+      # whichever engine commit happens to land next, and the seam gets
+      # attributed to that commit instead of to the instrument.
+      - 'docs/perf/bench-corpus.json'
   # Manual backfill: dispatch once per historical commit to fill the timeline.
   # Snapshot identity is derived from the checked-out HEAD (sha + commit time),
   # so the rest of the job is commit-agnostic.
@@ -130,6 +139,56 @@ jobs:
           # A short SHA is read by actions/checkout as a branch name and fails;
           # resolve any committish locally instead.
           git checkout --force "$TARGET_REF"
+
+      # The instrument, pinned. Until now this lane took the engine and its
+      # benchmarks from the same tree, so a commit touching a benchmark file
+      # changed what was measured at the same moment as what was being measured.
+      # Every such commit is a seam: the page can only mark it (setChangedAt,
+      # microSetChangedAt) and refuse the comparison across it. Pinning stops
+      # making them. perf-session.sh has measured this way since the corpus
+      # existed; CI is the lane that never did.
+      #
+      # Script and config come from THIS WORKFLOW's commit, like the reducer and
+      # the ratio verifier. A backfill target predates both, and taking the
+      # config from the target tree would pin each commit to its own idea of the
+      # corpus — which is the thing being removed.
+      #
+      # Strict on purpose. A missed overlay is not a degraded measurement, it is
+      # a wrong one attributed to the engine: on 2026-07-25 one reached the
+      # timeline as a +253816% regression. Failing here costs a single snapshot.
+      - name: Overlay the pinned benchmark corpus
+        run: |
+          set -euo pipefail
+          tool="${RUNNER_TEMP}/corpus-src"
+          rm -rf "$tool"
+          git worktree add --detach "$tool" "${{ github.sha }}" >/dev/null
+          cfg="$tool/docs/perf/bench-corpus.json"
+
+          # The config names a ref, and a fresh clone has it only as a
+          # remote-tracking branch: `git show perf/bench-corpus-v2:file` fails
+          # on a runner even though origin/perf/bench-corpus-v2 is sitting right
+          # there. Make the name resolve locally rather than passing --ref with
+          # the sha we found. Both overlay the same bytes, but --ref is recorded
+          # verbatim in the stamp, so it would put a 40-character sha where a
+          # session run puts `perf/bench-corpus-v2` — the same corpus with two
+          # different-looking provenance records, for no gain. files_hash is
+          # what the page compares; ref is what a person reads.
+          ref="$(jq -r '.ref' "$cfg")"
+          if ! git rev-parse --verify -q "${ref}^{commit}" >/dev/null; then
+            sha="$(git rev-parse --verify -q "origin/${ref}^{commit}" || true)"
+            if [ -z "$sha" ]; then
+              git fetch --no-tags origin "$ref" 2>/dev/null || true
+              sha="$(git rev-parse --verify -q 'FETCH_HEAD^{commit}' || true)"
+            fi
+            if [ -z "$sha" ]; then
+              echo "::error::corpus ref ${ref} (docs/perf/bench-corpus.json) is not reachable from any ref on origin" >&2
+              exit 1
+            fi
+            git branch --no-track "$ref" "$sha"
+          fi
+
+          bash "$tool/scripts/bench-corpus.sh" \
+            --config "$cfg" --into "$GITHUB_WORKSPACE"
 
       # Corpus for the Test262 macro series (see "Add Test262 macro" below).
       # Keyed on the checked-out ref's .test262-rev; setup-test262.sh re-pins as needed.
@@ -229,6 +288,24 @@ jobs:
             exit 1
           else
             echo "::warning::no method provenance: ${short_sha} predates the field. Expected for a backfill."
+          fi
+
+          # An overlay is only worth anything if it reached the measurement.
+          # CorpusAt returns nil for a stamp that no longer describes the tree,
+          # so an absent method.corpus here means the run measured the target's
+          # own benchmarks — the silent case the overlay exists to prevent, and
+          # one that is indistinguishable from an engine change once published.
+          #
+          # Warned rather than fatal on a dispatch, for the same reason as the
+          # method check above: a backfill runs the TARGET's bench-ratchet, and
+          # one predating CorpusAt cannot record what it was handed.
+          if jq -e '.method.corpus.files_hash' "${out}" >/dev/null 2>&1; then
+            echo "corpus: $(jq -c '.method.corpus' "${out}")"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            echo "::error::snapshot records no corpus — the overlay did not reach the measurement" >&2
+            exit 1
+          else
+            echo "::warning::no corpus stamp: ${short_sha}'s bench-ratchet predates CorpusAt. Expected for a backfill."
           fi
 
           echo "name=${name}" >> "$GITHUB_OUTPUT"
