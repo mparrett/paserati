@@ -888,12 +888,21 @@ function titleFor(s) {
     // The triangles stay, and each segment is now referenced to its own set (see
     // refFor), so what remains on screen is a series of self-contained trends
     // with visible joins rather than one line with caveats attached.
-    if (mode === "Test262" && anyBreak) {
+    // The micro tabs need the same cut, for the same reason. Their boundary is a
+    // change of micro suite rather than of test set: referencing each corpus era
+    // to its own first point is only half the repair, because a line drawn from
+    // the old era to a self-referenced new one climbs to exactly 1.0 and reads as
+    // "regressed back to baseline". The first 42-benchmark point on the 7763 tier
+    // did precisely that. It is not a regression; it is one reading from a new
+    // instrument, and it should start a segment rather than continue one.
+    const cutAt = j => (mode === "Test262" ? breakAt(j) : microSetChangedAt(j));
+    const anyCut = labels.some((_, j) => cutAt(j));
+    if (anyCut) {
       const amber = "#d08a3c";
       meanDS.segment = {
-        borderColor: c => breakAt(c.p1DataIndex) ? "transparent" : undefined,
+        borderColor: c => cutAt(c.p1DataIndex) ? "transparent" : undefined,
       };
-      const marks = labels.map((_, j) => breakAt(j));
+      const marks = labels.map((_, j) => cutAt(j));
       meanDS.pointStyle           = marks.map(m => m ? "triangle" : "circle");
       meanDS.pointRadius          = marks.map(m => m ? 5 : 2.5);
       meanDS.pointBackgroundColor = marks.map(m => m ? amber : "#ece0c8");
