@@ -184,6 +184,18 @@ type StreamRecord struct {
 	AllocsPerOp int64   `json:"allocs_per_op"`
 	SetHash     string  `json:"set_hash,omitempty"` // identity of the aggregated set; see BenchmarkEntry.SetHash
 	CapturedAt  string  `json:"captured_at"`
+
+	// The reference set the aggregation was RESTRICTED to, where one was pinned.
+	// Both are omitted for an unrestricted run, so every existing record and
+	// consumer is unaffected.
+	//
+	// RefsetHash names the intended set; SetHash names the set actually summed.
+	// They are equal on a healthy run and diverge exactly when a member stopped
+	// passing, which is the one failure a pinned set can suffer. RefsetSize is
+	// what makes the divergence quantitative rather than merely visible:
+	// RefsetSize - Iterations is the number of members that dropped out.
+	RefsetHash string `json:"refset_hash,omitempty"`
+	RefsetSize int64  `json:"refset_size,omitempty"`
 }
 
 // Sample returns the record's benchmark measurement without identity fields.

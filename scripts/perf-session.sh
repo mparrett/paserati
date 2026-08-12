@@ -274,7 +274,12 @@ for r in $(seq 1 "$ROUNDS"); do
       # turns one borderline test into a failed session. Every CI workflow pins
       # 1.2s; match it, both for determinism and so a session's numbers sit on
       # the same footing as the corpus.
+      # The reference set comes from the TOOL worktree, matching perf-timeline.yml.
+      # A session measuring a different set from CI is the divergence pinning
+      # exists to remove, and it would be invisible: both would report a
+      # test262.total, just over different tests.
       ( cd "$TARGWT" && PER_TEST_TIMEOUT="${PER_TEST_TIMEOUT:-1.2s}" MACRO_COUNT="$COUNT" \
+          TEST262_REFSET="$TOOLWT/docs/perf/test262-refset.txt" \
           "$reduce_sh" "$anchor_ns" "$ents" >/dev/null ) \
         || die "macro failed at $short (round $r)"
       jq --slurpfile e "$ents" '.benchmarks += $e[0]' "$out" > "$out.tmp" && mv "$out.tmp" "$out"

@@ -30,6 +30,12 @@
 #                     "built-ins language" — the JS-execution core; intl402,
 #                     staging and annexB are skipped). Accepts deeper paths too,
 #                     e.g. "built-ins/Math" for a quick local run.
+#   TEST262_REFSET    pinned reference set to restrict the sum to
+#                     (docs/perf/test262-refset.txt). Unset means the old
+#                     behaviour: sum over whatever passed. Like BENCH_TEST262_BIN
+#                     this belongs to the TOOL side, not the tree being measured
+#                     — a set that came from the target commit would vary with it,
+#                     which is the drift being removed.
 #   BENCH_TEST262_BIN pre-built bench-test262 to use instead of building one from
 #                     this tree. bench-test262 is a pure post-processor — it reads
 #                     the runner's -json output and emits StreamRecords, never
@@ -48,6 +54,13 @@ shard_dir="${records_out%.jsonl}.shards"
 
 timeout="${PER_TEST_TIMEOUT:-0.2s}"
 chapters="${TEST262_CHAPTERS:-built-ins language}"
+
+# The runner's timezone is an input to the measurement, so pin it. Two Date
+# setFullYear tests pass under UTC and fail under a west-of-UTC offset, measured
+# 2026-08-11 — enough to move the passing set and, with a pinned reference set, to
+# report a shortfall that is really a property of the box. CI runners are already
+# UTC, so this changes nothing there and makes a local or EC2 run match them.
+export TZ=UTC
 
 # bench-test262 -out appends; clear stale output so reruns don't accumulate.
 rm -f "$records_out" "$merged"
@@ -103,7 +116,15 @@ jq -s '{
   results: (map(.results) | add // [])
 }' "$shard_dir"/*.json > "$merged"
 
-"$bench_bin" -in "$merged" -out "$records_out"
+refset_args=()
+if [ -n "${TEST262_REFSET:-}" ]; then
+  [ -f "$TEST262_REFSET" ] || { echo "macro-test262: TEST262_REFSET=$TEST262_REFSET does not exist" >&2; exit 1; }
+  refset_args=(-refset "$TEST262_REFSET")
+fi
+# ${a[@]+"${a[@]}"} rather than "${a[@]}": under `set -u` the bash 3.2 that ships
+# on macOS treats an empty array expansion as an unbound variable and dies. Same
+# reason bench-corpus.sh avoids mapfile.
+"$bench_bin" -in "$merged" ${refset_args[@]+"${refset_args[@]}"} -out "$records_out"
 jq --arg t "$timeout" '.stats + { PerTestTimeout: $t }' "$merged" > "$stats_out"
 
 echo "macro-test262: wrote $records_out and $stats_out"

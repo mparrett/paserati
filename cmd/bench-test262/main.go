@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ func main() {
 		inPath    = flag.String("in", "", "paserati-test262 -json input (default: stdin)")
 		outPath   = flag.String("out", "", "append StreamRecord JSONL here (default: stdout)")
 		timestamp = flag.String("timestamp", "", "RFC3339 capture time (default: now, UTC)")
+		refPath   = flag.String("refset", "", "restrict the sum to this pinned reference set (docs/perf/test262-refset.txt)")
 	)
 	flag.Parse()
 
@@ -52,8 +54,103 @@ func main() {
 		capturedAt = time.Now().UTC().Format(time.RFC3339)
 	}
 
-	records := buildRecords(out, capturedAt)
+	var ref *refset
+	if *refPath != "" {
+		ref = readRefset(*refPath)
+	}
+
+	records := buildRecords(out, capturedAt, ref)
 	writeRecords(records, *outPath)
+}
+
+// refset is a pinned set of test paths the sum is restricted to. Nil means an
+// unrestricted run, which is what every caller did before the set was pinned.
+type refset struct {
+	members map[string]bool
+	hash    string // digest of the whole set, by the same function as setHash
+
+	// Per-top-level-suite view. A suite record has to describe its OWN share of
+	// the pinned set: sizing test262.built-ins against all 40,141 would make the
+	// shortfall arithmetic report every language test as a missing member.
+	suiteHash map[string]string
+	suiteSize map[string]int64
+}
+
+// readRefset loads the pinned set and verifies it against its own header.
+//
+// The verification is the point, and it is the same argument the corpus stamp
+// makes: a file that merely EXISTS proves nothing, because the failure mode is a
+// set that was edited — a member deleted to "fix" a regression, a merge that
+// dropped a chunk — and a silently smaller reference set moves test262.total
+// exactly the way a real speedup does. Recomputing the digest turns that into a
+// refusal. The header is also the only place a reader can see the intended size
+// without counting 40,000 lines.
+func readRefset(path string) *refset {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		die("open -refset: %v", err)
+	}
+	var (
+		paths     []string
+		wantHash  string
+		wantCount = -1
+	)
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "#") {
+			field := strings.TrimSpace(strings.TrimPrefix(line, "#"))
+			switch {
+			case strings.HasPrefix(field, "set_hash:"):
+				wantHash = strings.TrimSpace(strings.TrimPrefix(field, "set_hash:"))
+			case strings.HasPrefix(field, "count:"):
+				n, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(field, "count:")))
+				if err != nil {
+					die("-refset %s: unreadable count header: %v", path, err)
+				}
+				wantCount = n
+			}
+			continue
+		}
+		paths = append(paths, line)
+	}
+	if len(paths) == 0 {
+		die("-refset %s: no test paths", path)
+	}
+
+	members := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		if members[p] {
+			// A duplicate would inflate the header count while leaving the digest
+			// (taken over the deduplicated, sorted set) unchanged, so the two
+			// checks below could both pass on a file that is not what it claims.
+			die("-refset %s: duplicate path %s", path, p)
+		}
+		members[p] = true
+	}
+	if wantCount >= 0 && wantCount != len(paths) {
+		die("-refset %s: header says count %d, file has %d", path, wantCount, len(paths))
+	}
+	got := setHash(paths)
+	if wantHash != "" && wantHash != got {
+		die("-refset %s: header says set_hash %s, contents hash to %s — the file was edited without updating its own digest", path, wantHash, got)
+	}
+
+	bySuite := map[string][]string{}
+	for _, p := range paths {
+		s := topLevelSuite(p)
+		bySuite[s] = append(bySuite[s], p)
+	}
+	suiteHash := make(map[string]string, len(bySuite))
+	suiteSize := make(map[string]int64, len(bySuite))
+	for s, ps := range bySuite {
+		suiteHash[s] = setHash(ps)
+		suiteSize[s] = int64(len(ps))
+	}
+
+	return &refset{members: members, hash: got, suiteHash: suiteHash, suiteSize: suiteSize}
 }
 
 // buildRecords sums per-test durations over the passing, non-timed-out set,
@@ -64,7 +161,14 @@ func main() {
 // a downstream consumer can tell whether two totals cover the same workload:
 // equal counts alone don't guarantee it (a test flipping pass->timeout while
 // another flips the other way keeps the count but changes the set and the sum).
-func buildRecords(out test262.Output, capturedAt string) []perfdata.StreamRecord {
+//
+// With a refset the contributing set is the pinned one instead of "whatever
+// passed", which is what makes the series a per-test-speed signal rather than a
+// mixture of speed and conformance. Note what does NOT change: a member is still
+// dropped if it failed or timed out. Pinning the set cannot make a test that did
+// not run contribute a duration, so the refset is the ceiling on membership and
+// never the floor.
+func buildRecords(out test262.Output, capturedAt string, ref *refset) []perfdata.StreamRecord {
 	type acc struct {
 		sumNS float64
 		paths []string // contributing test paths — hashed into the record's SetHash
@@ -74,6 +178,9 @@ func buildRecords(out test262.Output, capturedAt string) []perfdata.StreamRecord
 
 	for _, r := range out.Results {
 		if !r.Passed || r.TimedOut {
+			continue
+		}
+		if ref != nil && !ref.members[r.Path] {
 			continue
 		}
 		ns := float64(r.Duration) // time.Duration marshals as int64 nanoseconds
@@ -91,7 +198,7 @@ func buildRecords(out test262.Output, capturedAt string) []perfdata.StreamRecord
 	}
 
 	rec := func(name string, a *acc) perfdata.StreamRecord {
-		return perfdata.StreamRecord{
+		r := perfdata.StreamRecord{
 			Package:    "test262",
 			Name:       name,
 			Iterations: int64(len(a.paths)), // tests contributing to the sum
@@ -99,6 +206,14 @@ func buildRecords(out test262.Output, capturedAt string) []perfdata.StreamRecord
 			SetHash:    setHash(a.paths),    // identity of that contributing set
 			CapturedAt: capturedAt,
 		}
+		if ref != nil {
+			if name == "total" {
+				r.RefsetHash, r.RefsetSize = ref.hash, int64(len(ref.members))
+			} else {
+				r.RefsetHash, r.RefsetSize = ref.suiteHash[name], ref.suiteSize[name]
+			}
+		}
+		return r
 	}
 
 	records := []perfdata.StreamRecord{rec("total", total)}

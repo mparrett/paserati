@@ -112,7 +112,8 @@ for rep in $(seq 1 "$count"); do
        per_test_timeout: ($s[0].PerTestTimeout // ""),
        series: (map({
          key: ("test262." + .name),
-         value: { ns: .ns_per_op, passed: .iterations, set_hash: (.set_hash // "") }
+         value: { ns: .ns_per_op, passed: .iterations, set_hash: (.set_hash // ""),
+                  refset_hash: (.refset_hash // ""), refset_size: (.refset_size // 0) }
        }) | from_entries)
      }' "${work}/t262.jsonl" >> "$reps"
   echo "  macro rep ${rep}/${count}: $(jq -c '{stats: .stats, series: (.series | map_values(.passed))}' <<<"$(tail -n 1 "$reps")")" >&2
@@ -206,6 +207,13 @@ entry="$(jq -s --argjson a "$anchor_ns" --argjson stamp "${MACRO_RECORD_ANCHOR:-
           captured_at: .captured_at
         })) }
     + (if $obs[0].set_hash == "" then {} else { set_hash: $obs[0].set_hash } end)
+    # The set the run was RESTRICTED to, where one was pinned. Constant across
+    # reps by construction (one file, one invocation), so it is taken from the
+    # first rather than checked. What it buys a later reader is the shortfall:
+    # refset_size - iterations names how many pinned tests stopped passing, which
+    # set_hash can only say happened, not by how much.
+    + (if $obs[0].refset_hash == "" then {}
+       else { refset_hash: $obs[0].refset_hash, refset_size: $obs[0].refset_size } end)
     + (if $stamp == 1 then { anchor_ns_per_op: $a } else {} end)
     | if $stamp == 1 then .samples |= map(. + { anchor_ns_per_op: $a }) else . end;
 
@@ -218,6 +226,8 @@ entry="$(jq -s --argjson a "$anchor_ns" --argjson stamp "${MACRO_RECORD_ANCHOR:-
                  mean: (.series[$name].ns / .series[$name].passed),
                  passed: .series[$name].passed,
                  set_hash: .series[$name].set_hash,
+                 refset_hash: .series[$name].refset_hash,
+                 refset_size: .series[$name].refset_size,
                  captured_at: .captured_at,
                  stats: .stats
                }];
@@ -238,6 +248,17 @@ jq -r 'to_entries[] |
        "(set \(.value.set_hash // "none"), \(.value.samples | length) reps " +
        "\(.value.samples | map(.ns_per_op) | min) .. \(.value.samples | map(.ns_per_op) | max)), " +
        "ratio \(.value.ratio_to_anchor)"' <<<"$entry" >&2
+# A pinned member that stopped passing is the one way the reference set degrades,
+# and it is invisible in the numbers above: the mean stays a mean, just over fewer
+# tests. Say it in words. Not fatal — the shortfall is recorded on the entry and
+# the changed set_hash already stops the page comparing across it, so a snapshot
+# that reports the problem beats no snapshot at all.
+jq -r 'to_entries[] | select(.value.refset_size > 0) |
+       select(.value.refset_size > .value.samples[0].iterations) |
+       "::warning::\(.key): \(.value.refset_size - .value.samples[0].iterations) of " +
+       "\(.value.refset_size) pinned tests did not pass — this point is not comparable " +
+       "to a full one (set \(.value.set_hash // "none") vs refset \(.value.refset_hash))"' \
+  <<<"$entry" >&2
 jq -r '.["test262.total"] | select(.stats) |
        "conformance: \(.stats.passed)/\(.stats.total) passing " +
        "(\((.stats.passed / .stats.total * 10000 | round) / 100)%), " +
