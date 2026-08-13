@@ -139,11 +139,19 @@ for b in "${BENCHES[@]}"; do
   # its next neighbour within tolerance. Agreement with the NEXT point, not the
   # previous: a pin wants to sit at the start of a plateau, not at the end of a
   # slope that happens to have flattened for one step.
-  suggest=""; evaluable=0
+  # candidates: what the SWEEP offered — an N at or above the floor with a
+  # successor to compare against. evaluable: how many of those actually had two
+  # measurements. The two differ exactly when the benchmark produced no numbers,
+  # and that is a different problem with a different fix, so they are counted
+  # apart rather than collapsed into one "nothing to report".
+  suggest=""; evaluable=0; candidates=0
   for i in "${!NS[@]}"; do
     [ "${NS[$i]}" -ge "$FLOOR" ] || continue
-    a="${vals[$i]}"; nxt=$((i + 1))
-    [ -n "$a" ] && [ "$nxt" -lt "${#NS[@]}" ] || continue
+    nxt=$((i + 1))
+    [ "$nxt" -lt "${#NS[@]}" ] || continue
+    candidates=$((candidates + 1))
+    a="${vals[$i]}"
+    [ -n "$a" ] || continue
     bb="${vals[$nxt]}"
     [ -n "$bb" ] || continue
     evaluable=$((evaluable + 1))
@@ -161,9 +169,18 @@ for b in "${BENCHES[@]}"; do
   # against, so the largest N swept is never one.
   if [ -n "$suggest" ]; then
     printf '%-46s → pin at -benchtime %sx\n' "" "$suggest"
+  elif [ "$candidates" -eq 0 ]; then
+    # The sweep could not look: it never reached the floor with room for a
+    # successor. Quote --max-n as it actually is, because the old wording said
+    # "raise --max-n above 40" while --max-n sat at its 256 default — advice that
+    # cannot help, attached to the one branch a reader is most likely to act on.
+    printf '%-46s → NOT EVALUATED: no swept N >= %s has a successor (--max-n is %s); raise --max-n above %s\n' \
+      "" "$FLOOR" "$MAXN" "$FLOOR"
   elif [ "$evaluable" -eq 0 ]; then
-    printf '%-46s → NOT EVALUATED: no N >= %s has a successor in this sweep; raise --max-n above %s\n' \
-      "" "$FLOOR" "$((FLOOR * 2))"
+    # The sweep looked and the benchmark said nothing. Raising --max-n is the
+    # wrong fix here and the old message recommended it anyway.
+    printf '%-46s → NOT EVALUATED: %d candidate N checked, none produced a pair of measurements — %s reported no ns/op there; check it builds and runs\n' \
+      "" "$candidates" "$b"
   else
     printf '%-46s → NO FLAT REGION within %d%% up to N=%s (%d candidate(s) checked); do not pin from this run\n' \
       "" "$TOL" "$MAXN" "$evaluable"
