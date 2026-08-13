@@ -208,7 +208,11 @@
       the comparison unsafe. <b>“led by”</b> is weighted by the mean's own weights;
       <b>“biggest mover”</b> is the largest single change, unweighted. A broad move on
       a commit that changed no engine files is the signature of a measurement artifact,
-      not a finding.</p>
+      not a finding. The <b>measured floor</b> is how far this tab's mean drifts between
+      snapshots that share a build hash — different commits compiling to the same
+      program, so their true difference is zero and the gap is apparatus. A step
+      smaller than that is not distinguishable from having measured the same code
+      twice.</p>
   </section>
 
   <footer>Source: <code>baseline.json</code> + <code>timeline/*.json</code>.
@@ -970,11 +974,62 @@ function titleFor(s) {
   function meanFor(mode) {
     return bandFor(mode).mean;
   }
+
+  // The measured noise floor: how far apart this mode's mean lands on snapshots
+  // that MUST be identical.
+  //
+  // Every other uncertainty on this page is estimated from within one snapshot —
+  // the reps a reducer kept, the spread of a mean's members. Neither sees the term
+  // that actually dominates here, which is everything that differs between two
+  // measurement sessions on one machine: a different runner instance of the same
+  // tier, a different day, a different neighbour on the host. Snapshots sharing a
+  // build hash isolate exactly that, because their true difference is zero by
+  // construction — same sources, same go.mod, same benchmark scripts, so any gap
+  // between them is apparatus and nothing else.
+  //
+  // Computed on the mode's MEAN rather than per benchmark, because that is the
+  // statistic the flagged-changes table compares. A per-benchmark floor answers a
+  // different question and would not be comparable to the deltas shown.
+  //
+  // Two commits, not two measurements of one: a group needs distinct shas, since
+  // re-measuring a single commit omits whatever varies with the commit itself.
+  //
+  // Reported as median and max because they disagree enough to matter — on this
+  // corpus the per-benchmark median is often under 1% while the worst group is
+  // tens of percent, and quoting either alone misleads in one direction.
+  function sameBuildFloor(mode) {
+    const mean = bandFor(mode).mean;
+    const groups = new Map();
+    snaps.forEach((s, j) => {
+      const b = s.provenance?.build_hash;
+      const m = mean[j];
+      if (!b || m == null || !isFinite(m) || m <= 0) return;
+      const key = b + "\u0000" + (s.machine_key || "");
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ sha: s.captured_at_sha || s.file, m });
+    });
+    const spreads = [];
+    for (const vals of groups.values()) {
+      if (new Set(vals.map(v => v.sha)).size < 2) continue;
+      const ms = vals.map(v => v.m);
+      const lo = Math.min(...ms), hi = Math.max(...ms);
+      if (lo > 0) spreads.push((hi - lo) / lo);
+    }
+    if (!spreads.length) return null;
+    spreads.sort((a, b) => a - b);
+    const mid = spreads.length >> 1;
+    return {
+      median: spreads.length % 2 ? spreads[mid] : (spreads[mid - 1] + spreads[mid]) / 2,
+      max: spreads[spreads.length - 1],
+      n: spreads.length,
+    };
+  }
   const benchCount = snaps.map(s =>
     Object.keys(s.benchmarks || {}).filter(n => !n.startsWith("test262")).length);
 
   return { labels, snaps, datasetsFor, aggCount, anyBreak, setChangedAt, reducerChangedAt,
-           corpusChangedAt, microSetChangedAt, meanFor, benchCount, familyCount: microFamilies.length,
+           corpusChangedAt, microSetChangedAt, meanFor, sameBuildFloor, benchCount,
+           familyCount: microFamilies.length,
            contributionsAt, scopeOf, yRangeFor };
   }
 
@@ -1163,6 +1218,12 @@ function titleFor(s) {
   // two of the biggest on this corpus (976a3faa, c989b254) move ~24% on commits
   // that touch no engine code at all — so a table that quietly replaced the chart
   // would be mostly artifacts presented as findings.
+  // Kept fixed rather than driven from the measured floor below. The floor varies
+  // by mode and by how much same-build evidence a view happens to hold, so keying
+  // admission to it would change WHICH rows exist as the corpus grows — including
+  // dropping rows that were there yesterday. The floor instead LABELS rows, which
+  // is the useful half: the reader sees the move and sees that it is not
+  // distinguishable, rather than the page deciding that for them.
   const FLAG_THRESHOLD = 0.05;   // 5% point-to-point
   const FLAG_LIMIT = 12;
   const REPO_URL = "https://github.com/mparrett/paserati";
@@ -1172,6 +1233,7 @@ function titleFor(s) {
     const body = el.querySelector("tbody");
     const mean = view.meanFor(mode);
     const snaps = view.snaps;
+    const floor = view.sameBuildFloor(mode);
 
     const rows = [];
     for (let j = 1; j < snaps.length; j++) {
@@ -1265,6 +1327,16 @@ function titleFor(s) {
         if (!contrib.exact) tags.push(["warn", "attribution partial — membership changed"]);
       }
 
+      // A move smaller than the apparatus has ever managed on two identical builds
+      // is not a finding, whatever its size. Said against the median rather than
+      // the worst group: the worst is one pathological pair and would excuse
+      // almost everything, while the median is what this pipeline does routinely.
+      // Not applied to an already-invalid row, which has a stronger reason to
+      // distrust it and does not need a second one.
+      if (floor && !invalid && Math.abs(delta) < floor.median) {
+        tags.push(["warn", `inside the measured floor (±${(floor.median * 100).toFixed(1)}%)`]);
+      }
+
       if (Math.abs(delta) < FLAG_THRESHOLD && !tags.length) continue;
       rows.push({ j, delta, tags, pinned, invalid });
     }
@@ -1290,10 +1362,20 @@ function titleFor(s) {
 
     // Say what was dropped rather than silently truncating — a short table would
     // otherwise read as "this is everything".
+    // The floor travels with the count, because it is the scale the counts should
+    // be read at: "9 changes" means something different when the apparatus itself
+    // moves 3% between identical builds than when it moves 0.4%. Both statistics
+    // are shown — quoting the median alone invites treating anything above it as
+    // real, and the worst group says how bad this pipeline gets on a bad day.
     document.getElementById("flagsub").textContent =
-      rows.length > shown.length
+      (rows.length > shown.length
         ? `· ${shown.length} of ${rows.length}, largest first`
-        : `· ${rows.length} in this view`;
+        : `· ${rows.length} in this view`) +
+      (floor
+        ? ` · measured floor ±${(floor.median * 100).toFixed(1)}% typical, ` +
+          `±${(floor.max * 100).toFixed(1)}% worst, over ${floor.n} same-build ` +
+          `${floor.n === 1 ? "pair" : "pairs"}`
+        : "");
 
     body.innerHTML = shown.map(({ j, delta, tags, invalid }) => {
       const s = snaps[j];
