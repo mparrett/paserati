@@ -212,7 +212,9 @@
       snapshots that share a build hash — different commits compiling to the same
       program, so their true difference is zero and the gap is apparatus. A step
       smaller than that is not distinguishable from having measured the same code
-      twice.</p>
+      twice. It is always measured on single snapshots, so under
+      <b>Engine runs</b> — where each point is the median of several — it is an
+      upper bound rather than that point's own uncertainty.</p>
   </section>
 
   <footer>Source: <code>baseline.json</code> + <code>timeline/*.json</code>.
@@ -1034,6 +1036,14 @@ function titleFor(s) {
   }
 
   let view = buildView(modalCpu ? allSnaps.filter(s => cpuOf(s) === modalCpu) : allSnaps);
+  // The view the noise floor is measured on, which is NOT always the view being
+  // drawn. Engine-run grouping collapses exactly the snapshots the floor is
+  // computed from — same build, same machine, merged into one point — so reading
+  // the floor off the drawn points left one pair on the default view and quoted a
+  // median over a single observation. Measured on the ungrouped points instead.
+  // Equal to `view` whenever nothing was collapsed, so the common case costs
+  // nothing.
+  let floorView = view;
 
   const ink = "#a3906c", grid = "#2a2114";
   const chart = new Chart(document.getElementById("chart"), {
@@ -1233,7 +1243,11 @@ function titleFor(s) {
     const body = el.querySelector("tbody");
     const mean = view.meanFor(mode);
     const snaps = view.snaps;
-    const floor = view.sameBuildFloor(mode);
+    // Enough pairs to have a median worth quoting. At n=1 the median IS the single
+    // observation and equals the max, which reads as a precise measurement of the
+    // apparatus and is one draw from it.
+    const floorRaw = floorView.sameBuildFloor(mode);
+    const floor = floorRaw && floorRaw.n >= 3 ? floorRaw : null;
 
     const rows = [];
     for (let j = 1; j < snaps.length; j++) {
@@ -1373,9 +1387,13 @@ function titleFor(s) {
         : `· ${rows.length} in this view`) +
       (floor
         ? ` · measured floor ±${(floor.median * 100).toFixed(1)}% typical, ` +
-          `±${(floor.max * 100).toFixed(1)}% worst, over ${floor.n} same-build ` +
-          `${floor.n === 1 ? "pair" : "pairs"}`
-        : "");
+          `±${(floor.max * 100).toFixed(1)}% worst, over ${floor.n} same-build pairs`
+        // Say that the evidence is thin rather than omitting the line, which would
+        // read as "no floor" when it means "not enough identical builds yet".
+        : floorRaw
+          ? ` · floor not yet measurable — ${floorRaw.n} same-build ` +
+            `${floorRaw.n === 1 ? "pair" : "pairs"}`
+          : "");
 
     body.innerHTML = shown.map(({ j, delta, tags, invalid }) => {
       const s = snaps[j];
@@ -1447,6 +1465,7 @@ function titleFor(s) {
     const points = grouping === "engine" ? collapseRuns(subset) : subset;
     collapsedFrom = subset.length;
     view = buildView(points);
+    floorView = points === subset ? view : buildView(subset);
     chart.data.labels = view.labels;
     for (const c of cpuChoices) {
       const on = c === cpuSel;
