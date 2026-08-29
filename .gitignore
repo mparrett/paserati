@@ -79,3 +79,7 @@ CLAUDE.md
 perf-session-collected/
 bisect-collected/
 /perf-provenance
+
+# Collected perf-session output, archived to project-docs evidence/2026-08-29-local-artifact-sweep.
+ww2-collected/
+min-reduced.json
