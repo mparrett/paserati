@@ -85,10 +85,43 @@ up)
         --query 'Vpcs[0].VpcId' --output text)"
   note "region $REGION  type $ITYPE  vpc $VPC  ssh from ${MYIP}/32"
 
-  aws ec2 create-key-pair --region "$REGION" --key-name "$NAME" \
-    --query 'KeyMaterial' --output text > "$STATE/key.pem" 2>/dev/null \
-    && chmod 600 "$STATE/key.pem" && note "keypair $NAME created" \
-    || note "keypair $NAME already exists — reusing $STATE/key.pem"
+  # The local key file and the AWS-side key pair are two halves of one thing, and
+  # AWS returns the private half exactly once — at creation. So the failure to
+  # design against is holding one half without the other.
+  #
+  # This was `create-key-pair ... > "$STATE/key.pem" || note "reusing"`. The
+  # redirect truncates the local key BEFORE the command's exit status is known, so
+  # when the AWS-side pair already existed the create failed and the only copy of
+  # the private key was destroyed in the same breath. The launch then succeeded in
+  # every visible way — instance running, user-data complete — and refused every
+  # ssh, which is a slow and expensive thing to diagnose. Write to a temp file and
+  # move it into place only after the key material is in hand and looks real.
+  key_ok() { [ -s "$1" ] && grep -q 'BEGIN.*PRIVATE KEY' "$1"; }
+
+  if aws ec2 describe-key-pairs --region "$REGION" --key-names "$NAME" >/dev/null 2>&1; then
+    if key_ok "$STATE/key.pem"; then
+      note "keypair $NAME exists — reusing $STATE/key.pem"
+    else
+      # We hold the AWS half and not the usable local half, and AWS cannot reissue
+      # it. A new pair is the only way forward. Safe because boxes here are
+      # ephemeral — but note it would orphan a box still running under the old
+      # key, which is why `down` is the documented way to end a session.
+      note "keypair $NAME exists but $STATE/key.pem is missing or unusable — recreating"
+      aws ec2 delete-key-pair --region "$REGION" --key-name "$NAME" >/dev/null \
+        || die "cannot delete stale keypair $NAME"
+    fi
+  fi
+
+  if ! key_ok "$STATE/key.pem"; then
+    tmpkey="$STATE/key.pem.new"
+    aws ec2 create-key-pair --region "$REGION" --key-name "$NAME" \
+      --query 'KeyMaterial' --output text > "$tmpkey" 2>/dev/null \
+      || { rm -f "$tmpkey"; die "cannot create keypair $NAME"; }
+    key_ok "$tmpkey" || { rm -f "$tmpkey"; die "create-key-pair returned no usable key material"; }
+    chmod 600 "$tmpkey"
+    mv "$tmpkey" "$STATE/key.pem"
+    note "keypair $NAME created"
+  fi
 
   SG="$(aws ec2 create-security-group --region "$REGION" --group-name "$NAME" \
         --description "paserati perf session" --vpc-id "$VPC" \
