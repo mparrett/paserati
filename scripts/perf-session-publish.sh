@@ -132,7 +132,34 @@ note "committed $(git -C "$wt" rev-parse --short HEAD) on a detached perf-data"
 
 if [ "$DO_PUSH" -eq 1 ]; then
   git -C "$wt" push "$REMOTE" HEAD:perf-data
-  note "pushed to ${REMOTE}/perf-data"
+
+  # A write nobody redeploys is a write nobody sees. pages.yml builds the page
+  # from a checkout of perf-data, and it wakes on exactly three things: a push to
+  # main touching the page itself, a workflow_run of the two workflows that write
+  # timeline points, and a manual dispatch. A session publish is none of them —
+  # it is this script pushing straight to perf-data — so without the dispatch
+  # below the snapshots land in the corpus and the published page keeps serving
+  # the previous series indefinitely.
+  #
+  # The backfill hit this same gap on 2026-08-09 (three points invisible until
+  # someone dispatched by hand) and was fixed by adding it to workflow_run. That
+  # route is not open here, and `on.push` cannot express "main with these paths OR
+  # perf-data with any path", so ask for the deploy explicitly.
+  #
+  # Never fatal: the snapshots are already pushed and correct at this point, and
+  # a page that lags is a smaller problem than a publish that reports failure
+  # after having succeeded.
+  slug="$(git remote get-url "$REMOTE" 2>/dev/null \
+          | sed -E 's#(git@|https://)github\.com[:/]##; s#\.git$##')"
+  if ! command -v gh >/dev/null; then
+    note "pushed to ${REMOTE}/perf-data"
+    note "gh not on PATH — the page will not refresh until: gh workflow run 'Perf Page'"
+  elif gh workflow run "Perf Page" --repo "$slug" >/dev/null 2>&1; then
+    note "pushed to ${REMOTE}/perf-data; requested a Perf Page deploy"
+  else
+    note "pushed to ${REMOTE}/perf-data"
+    note "could not dispatch Perf Page — run: gh workflow run 'Perf Page' --repo ${slug}"
+  fi
 else
   note "NOT pushed. To publish:  git -C <worktree> push ${REMOTE} HEAD:perf-data"
   note "worktree is temporary — re-run with --push instead."
