@@ -445,7 +445,7 @@ func (p *PromiseInitializer) InitRuntime(ctx *RuntimeContext) error {
 
 		// Use the species constructor to create the result promise
 		if constructor.IsCallable() {
-			return vmInstance.Call(constructor, vm.Undefined, []vm.Value{executor})
+			return vmInstance.Construct(constructor, []vm.Value{executor})
 		}
 		return vmInstance.NewPromiseFromExecutor(executor)
 	}))
@@ -566,7 +566,7 @@ func (p *PromiseInitializer) InitRuntime(ctx *RuntimeContext) error {
 
 		// Use the species constructor to create the result promise
 		if constructor.IsCallable() {
-			return vmInstance.Call(constructor, vm.Undefined, []vm.Value{executor})
+			return vmInstance.Construct(constructor, []vm.Value{executor})
 		}
 		return vmInstance.NewPromiseFromExecutor(executor)
 	}))
@@ -713,7 +713,7 @@ func (p *PromiseInitializer) InitRuntime(ctx *RuntimeContext) error {
 
 		// Use the species constructor to create the result promise
 		if constructor.IsCallable() {
-			return vmInstance.Call(constructor, vm.Undefined, []vm.Value{executor})
+			return vmInstance.Construct(constructor, []vm.Value{executor})
 		}
 		return vmInstance.NewPromiseFromExecutor(executor)
 	}))
@@ -880,7 +880,7 @@ func (p *PromiseInitializer) InitRuntime(ctx *RuntimeContext) error {
 
 		// Use the species constructor to create the result promise
 		if constructor.IsCallable() {
-			return vmInstance.Call(constructor, vm.Undefined, []vm.Value{executor})
+			return vmInstance.Construct(constructor, []vm.Value{executor})
 		}
 		return vmInstance.NewPromiseFromExecutor(executor)
 	}))
@@ -930,7 +930,7 @@ func (p *PromiseInitializer) InitRuntime(ctx *RuntimeContext) error {
 		thisVal := vmInstance.GetThis()
 		constructor := getSpeciesConstructor(thisVal)
 		if constructor.IsCallable() {
-			return vmInstance.Call(constructor, vm.Undefined, []vm.Value{executor})
+			return vmInstance.Construct(constructor, []vm.Value{executor})
 		}
 		return vmInstance.NewPromiseFromExecutor(executor)
 	}))
