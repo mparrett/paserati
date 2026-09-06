@@ -1433,6 +1433,11 @@ func (c *Compiler) freeScopeRegisters(st *SymbolTable) {
 	if st == nil {
 		return
 	}
+	// Iterate in a fixed order. st.store is a map, so ranging it directly frees
+	// registers in Go's randomized map order; Free pushes onto a LIFO free list,
+	// so the next allocation pops whichever register happened to land last. That
+	// made one binary compile one input two different ways (nooga#50).
+	freeable := make([]Register, 0, len(st.store))
 	for _, sym := range st.store {
 		if sym.IsGlobal || sym.IsSpilled || sym.IsCallerLocal || sym.IsNamespaceProperty {
 			continue
@@ -1440,14 +1445,18 @@ func (c *Compiler) freeScopeRegisters(st *SymbolTable) {
 		if sym.Register == nilRegister {
 			continue
 		}
+		freeable = append(freeable, sym.Register)
+	}
+	sort.Slice(freeable, func(i, j int) bool { return freeable[i] < freeable[j] })
+	for _, reg := range freeable {
 		// Captured-by-reference registers must outlive the scope: an upvalue
 		// references the slot for the rest of the enclosing function.
-		if c.regAlloc.IsCaptured(sym.Register) {
+		if c.regAlloc.IsCaptured(reg) {
 			continue
 		}
 		// Drop the blanket pin applied at declaration, then reclaim the register.
-		c.regAlloc.Unpin(sym.Register)
-		c.regAlloc.Free(sym.Register)
+		c.regAlloc.Unpin(reg)
+		c.regAlloc.Free(reg)
 	}
 }
 
