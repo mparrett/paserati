@@ -13,7 +13,6 @@ import (
 	"runtime/pprof"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/nooga/paserati/pkg/builtins"
@@ -550,14 +549,6 @@ func runSingleTest(testFile string, verbose bool, timeout time.Duration, testDir
 	// Create fresh Paserati instance for each test with the test file's directory as base
 	paserati := createTest262PaseratiForTest(testFile)
 
-	// Use sync.Once to ensure cleanup only happens once (either from goroutine or timeout handler)
-	var cleanupOnce sync.Once
-	cleanup := func() {
-		cleanupOnce.Do(func() {
-			paserati.Cleanup()
-		})
-	}
-
 	// IMPORTANT: This goroutine can leak if paserati.RunString gets stuck in an infinite loop.
 	// Since paserati.RunString doesn't support context cancellation, we cannot interrupt it.
 	// This is a known limitation that needs to be fixed in the VM/parser/checker to support
@@ -569,8 +560,10 @@ func runSingleTest(testFile string, verbose bool, timeout time.Duration, testDir
 				debug.PrintStack()
 				resultChan <- testResult{passed: false, err: fmt.Errorf("test panicked: %v", r)}
 			}
-			// Clean up to release memory (only if not already cleaned up by timeout)
-			cleanup()
+			// Clean up to release memory. This is the only place Cleanup runs: the
+			// timeout path below must not call it while this goroutine may still be
+			// using the compiler and heap allocator it nils out.
+			paserati.Cleanup()
 		}()
 
 		// Execute the test with harness includes (if any)
@@ -799,16 +792,14 @@ func runSingleTest(testFile string, verbose bool, timeout time.Duration, testDir
 		// Context timeout - cancel VM execution to stop the goroutine
 		paserati.CancelVM()
 
-		// Give the goroutine time to respond to cancellation and exit gracefully
-		// Use a select with a short timeout to see if it finishes
+		// Give the goroutine time to respond to cancellation and exit gracefully.
+		// If it is still running, leave cleanup to its deferred call: nilling the
+		// Paserati fields under a goroutine that is mid-compile made CompileProgram
+		// dereference a nil heapAlloc and report a compiler panic, and it releases
+		// nothing the goroutine's own stack still references.
 		select {
 		case <-resultChan:
-			// Goroutine finished after cancellation, cleanup already happened in defer
 		case <-time.After(50 * time.Millisecond):
-			// Goroutine didn't finish in time - it's likely stuck
-			// Call cleanup anyway to release what we can
-			// The sync.Once ensures this is safe even if goroutine eventually finishes
-			cleanup()
 		}
 
 		return false, fmt.Errorf("test timed out after %v", timeout)
