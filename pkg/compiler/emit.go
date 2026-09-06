@@ -943,122 +943,56 @@ func (c *Compiler) emitIteratorCleanupAbruptIfNotDone(iteratorReg Register, done
 	c.emitByte(byte(doneReg))
 }
 
-// emitTDZError emits code to throw a ReferenceError for accessing a variable
-// before it is initialized (Temporal Dead Zone violation in default parameters)
-func (c *Compiler) emitTDZError(hint Register, varName string, line int) {
-	// Allocate registers for function and result
-	funcReg := c.regAlloc.Alloc()
+// emitThrowNewError emits `throw new <ctorName>(msg)` for a global error
+// constructor. OpCall reads its argument from funcReg+1, so the callee and the
+// argument are allocated as one contiguous pair: writing to funcReg+1 without
+// reserving it left the frame one register short (the VM then indexed past the
+// register file) and could alias whatever local happened to live there.
+func (c *Compiler) emitThrowNewError(ctorName, msg string, line int) {
+	funcReg := c.regAlloc.AllocContiguous(2)
+	argReg := funcReg + 1
 	resultReg := c.regAlloc.Alloc()
 
-	// Load ReferenceError constructor
-	refErrorGlobalIdx := c.GetOrAssignGlobalIndex("ReferenceError")
-	c.emitGetGlobal(funcReg, refErrorGlobalIdx, line)
+	ctorGlobalIdx := c.GetOrAssignGlobalIndex(ctorName)
+	c.emitGetGlobal(funcReg, ctorGlobalIdx, line)
 
-	// Load error message - OpCall expects args at funcReg+1, so load directly there
-	msg := fmt.Sprintf("Cannot access '%s' before initialization", varName)
 	msgConstIdx := c.chunk.AddConstant(vm.String(msg))
-	argReg := funcReg + 1
 	c.emitLoadConstant(argReg, msgConstIdx, line)
 
-	// Call ReferenceError constructor
 	c.emitCall(resultReg, funcReg, 1, line)
 
-	// Throw the error
 	c.emitOpCode(vm.OpThrow, line)
 	c.emitByte(byte(resultReg))
 
-	// Free temporary registers
-	c.regAlloc.Free(funcReg)
 	c.regAlloc.Free(resultReg)
+	c.regAlloc.Free(argReg)
+	c.regAlloc.Free(funcReg)
+}
+
+// emitTDZError emits code to throw a ReferenceError for accessing a variable
+// before it is initialized (Temporal Dead Zone violation in default parameters)
+func (c *Compiler) emitTDZError(hint Register, varName string, line int) {
+	c.emitThrowNewError("ReferenceError", fmt.Sprintf("Cannot access '%s' before initialization", varName), line)
 }
 
 // emitStrictUnresolvableReferenceError emits code to throw a ReferenceError for assigning
 // to an undeclared variable in strict mode.
 // ECMAScript spec: In strict mode, assignment to undeclared variable is a ReferenceError.
 func (c *Compiler) emitStrictUnresolvableReferenceError(varName string, line int) {
-	// Allocate registers for function and result
-	funcReg := c.regAlloc.Alloc()
-	resultReg := c.regAlloc.Alloc()
-
-	// Load ReferenceError constructor
-	refErrorGlobalIdx := c.GetOrAssignGlobalIndex("ReferenceError")
-	c.emitGetGlobal(funcReg, refErrorGlobalIdx, line)
-
-	// Load error message - OpCall expects args at funcReg+1, so load directly there
-	msg := fmt.Sprintf("%s is not defined", varName)
-	msgConstIdx := c.chunk.AddConstant(vm.String(msg))
-	argReg := funcReg + 1
-	c.emitLoadConstant(argReg, msgConstIdx, line)
-
-	// Call ReferenceError constructor
-	c.emitCall(resultReg, funcReg, 1, line)
-
-	// Throw the error
-	c.emitOpCode(vm.OpThrow, line)
-	c.emitByte(byte(resultReg))
-
-	// Free temporary registers
-	c.regAlloc.Free(funcReg)
-	c.regAlloc.Free(resultReg)
+	c.emitThrowNewError("ReferenceError", fmt.Sprintf("%s is not defined", varName), line)
 }
 
 // emitStrictUndeclaredAssignmentError emits code to throw a ReferenceError for assigning to
 // an undeclared variable in strict mode.
 // ECMAScript spec 8.7.2: In strict mode, assignment to unresolvable reference throws ReferenceError.
 func (c *Compiler) emitStrictUndeclaredAssignmentError(varName string, line int) {
-	// Allocate registers for function and result
-	funcReg := c.regAlloc.Alloc()
-	resultReg := c.regAlloc.Alloc()
-
-	// Load ReferenceError constructor
-	refErrorGlobalIdx := c.GetOrAssignGlobalIndex("ReferenceError")
-	c.emitGetGlobal(funcReg, refErrorGlobalIdx, line)
-
-	// Load error message - OpCall expects args at funcReg+1, so load directly there
-	msg := fmt.Sprintf("%s is not defined", varName)
-	msgConstIdx := c.chunk.AddConstant(vm.String(msg))
-	argReg := funcReg + 1
-	c.emitLoadConstant(argReg, msgConstIdx, line)
-
-	// Call ReferenceError constructor
-	c.emitCall(resultReg, funcReg, 1, line)
-
-	// Throw the error
-	c.emitOpCode(vm.OpThrow, line)
-	c.emitByte(byte(resultReg))
-
-	// Free temporary registers
-	c.regAlloc.Free(funcReg)
-	c.regAlloc.Free(resultReg)
+	c.emitThrowNewError("ReferenceError", fmt.Sprintf("%s is not defined", varName), line)
 }
 
 // emitConstAssignmentError emits code to throw a TypeError for assigning to a const variable.
 // ECMAScript spec: Assignment to const is a TypeError.
 func (c *Compiler) emitConstAssignmentError(varName string, line int) {
-	// Allocate registers for function and result
-	funcReg := c.regAlloc.Alloc()
-	resultReg := c.regAlloc.Alloc()
-
-	// Load TypeError constructor
-	typeErrorGlobalIdx := c.GetOrAssignGlobalIndex("TypeError")
-	c.emitGetGlobal(funcReg, typeErrorGlobalIdx, line)
-
-	// Load error message - OpCall expects args at funcReg+1, so load directly there
-	msg := fmt.Sprintf("Assignment to constant variable '%s'", varName)
-	msgConstIdx := c.chunk.AddConstant(vm.String(msg))
-	argReg := funcReg + 1
-	c.emitLoadConstant(argReg, msgConstIdx, line)
-
-	// Call TypeError constructor
-	c.emitCall(resultReg, funcReg, 1, line)
-
-	// Throw the error
-	c.emitOpCode(vm.OpThrow, line)
-	c.emitByte(byte(resultReg))
-
-	// Free temporary registers
-	c.regAlloc.Free(funcReg)
-	c.regAlloc.Free(resultReg)
+	c.emitThrowNewError("TypeError", fmt.Sprintf("Assignment to constant variable '%s'", varName), line)
 }
 
 // emitMakeRegExp emits OpMakeRegExp to create a new RegExp object from pattern and flags constants.
