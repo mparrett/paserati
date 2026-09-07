@@ -108,7 +108,13 @@ for f in "${FILES[@]}"; do
   esac
 done
 
-SHA="$(git rev-parse --short "$REF" 2>/dev/null)" || die "cannot resolve ref $REF"
+# A fresh clone on a perf box has the corpus ref only as a remote-tracking
+# branch, so fall back to origin/<ref> before giving up; the stamp keeps the
+# ref name and git show uses the SHA (2026-09-07: the first
+# session on a new box died here at round 1, after 60 minutes of calibration).
+SHA="$(git rev-parse --short "$REF" 2>/dev/null)" \
+  || SHA="$(git rev-parse --short "origin/$REF" 2>/dev/null)" \
+  || die "cannot resolve ref $REF (nor origin/$REF)"
 
 # The stamp. Written next to the overlay so the measuring run can record WHICH
 # benchmarks it ran, instead of the reader having to infer it from the shape of
@@ -153,7 +159,7 @@ if [ -n "$INTO" ]; then
       continue
     fi
     mkdir -p "$INTO/$(dirname "$f")"
-    git show "$REF:$f" > "$INTO/$f" 2>/dev/null \
+    git show "$SHA:$f" > "$INTO/$f" 2>/dev/null \
       || die "$f is absent from $REF — the corpus config names a file its own ref does not have"
   done
   if [ "$DRY" -eq 1 ]; then
