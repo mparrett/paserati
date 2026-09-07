@@ -110,6 +110,13 @@ up)
       aws ec2 delete-key-pair --region "$REGION" --key-name "$NAME" >/dev/null \
         || die "cannot delete stale keypair $NAME"
     fi
+  elif key_ok "$STATE/key.pem"; then
+    # The pair is gone from AWS (a previous `down` removed it) but the local
+    # file survived, and run-instances would fail on the missing pair. Set the
+    # file aside rather than deleting it, and let the create path below run.
+    stale="$STATE/key.pem.stale-$(date +%Y%m%d-%H%M%S)"
+    mv "$STATE/key.pem" "$stale"
+    note "keypair $NAME not in AWS — moved local $STATE/key.pem to $stale"
   fi
 
   if ! key_ok "$STATE/key.pem"; then
