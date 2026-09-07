@@ -21081,3 +21081,6 @@ func (vm *VM) ThrowRangeError(message string) {
 
 	vm.throwException(errorInstance)
 }
+
+// perf-session null control: comment-only edit on 67d90d68 so the binaries
+// differ in nothing but this line. Not for upstream.
