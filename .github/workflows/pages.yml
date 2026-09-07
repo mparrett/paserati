@@ -66,6 +66,17 @@ jobs:
             echo "perf-data branch does not exist yet; page will be empty."
           fi
 
+      - name: Fetch nooga's main so upstream commits rank too
+        run: |
+          set -euo pipefail
+          # Perf sessions measure commits on nooga's main that this fork's main
+          # never carries: the fork stays deliberately unsynced and engine work
+          # goes up as PRs. Ranked against HEAD alone those snapshots tombstone
+          # as "unreachable", which is how every EC2 session point after
+          # 2026-08-06 went missing from the page while sitting on perf-data.
+          git remote add upstream https://github.com/nooga/paserati.git
+          git fetch --no-tags upstream main:refs/remotes/upstream/main
+
       - name: Generate timeline manifest
         run: |
           set -euo pipefail
@@ -87,7 +98,9 @@ jobs:
           # reachable from HEAD but absent from first-parent history, so they would
           # all rank "unknown" and fall back to filename order — the exact tie this
           # step exists to break. --topo-order guarantees ancestors before descendants.
-          git rev-list --topo-order --reverse HEAD \
+          # Two heads: this branch and nooga's main. A commit on either gets a
+          # real rank; only commits on neither (dropped branch, force push) tombstone.
+          git rev-list --topo-order --reverse HEAD upstream/main \
             | awk '{ print substr($0, 1, 12), NR }' > /tmp/rank.txt
 
           # Filename is "<stamp>-<sha12>.json"; join on the sha. A snapshot whose
